@@ -10,13 +10,17 @@
     <script>
       // Force a one-time reload to clear cache
       (function() {
-        const VERSION = '1.0.7';
-        if (localStorage.getItem('app_version') !== VERSION) {
-          localStorage.setItem('app_version', VERSION);
-          // Add a timestamp to the URL to bypass proxy cache
-          const url = new URL(window.location.href);
-          url.searchParams.set('v', Date.now());
-          window.location.replace(url.toString());
+        try {
+          const VERSION = '1.0.7';
+          if (localStorage.getItem('app_version') !== VERSION) {
+            localStorage.setItem('app_version', VERSION);
+            // Add a timestamp to the URL to bypass proxy cache
+            const url = new URL(window.location.href);
+            url.searchParams.set('v', Date.now());
+            window.location.replace(url.toString());
+          }
+        } catch (e) {
+          console.warn('localStorage not available', e);
         }
       })();
     </script>

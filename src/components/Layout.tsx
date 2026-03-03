@@ -87,7 +87,11 @@ export default function Layout() {
               <span className="text-[10px] font-bold tracking-widest uppercase">Sistema v1.0.8</span>
               <button 
                 onClick={() => {
-                  localStorage.clear();
+                  try {
+                    localStorage.clear();
+                  } catch (e) {
+                    console.warn('localStorage not available', e);
+                  }
                   window.location.href = window.location.origin + '?force=' + Date.now();
                 }} 
                 className="text-[9px] hover:text-white transition-colors underline decoration-slate-700"

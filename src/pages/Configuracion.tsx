@@ -151,6 +151,21 @@ export default function Configuracion() {
                 </div>
               </div>
             </button>
+
+            <button 
+              onClick={() => window.open('/api/download-source', '_blank')}
+              className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-100">
+                  <Download className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Descargar Código Fuente</p>
+                  <p className="text-xs text-slate-500">Descargar el código de la aplicación</p>
+                </div>
+              </div>
+            </button>
           </div>
         </div>
       </div>

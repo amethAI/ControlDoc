@@ -9,6 +9,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import pptxgen from 'pptxgenjs';
 import cors from 'cors';
+import JSZip from 'jszip';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,12 +39,41 @@ async function startServer() {
   });
 
   // Download source code
-  app.get('/api/download-source', (req, res) => {
-    const zipPath = path.resolve('controldoc.zip');
-    if (fs.existsSync(zipPath)) {
-      res.download(zipPath, 'controldoc-source.zip');
-    } else {
-      res.status(404).send('Archivo no encontrado. Por favor, avísame para generarlo de nuevo.');
+  app.get('/api/download-source', async (req, res) => {
+    try {
+      const zip = new JSZip();
+      const rootPath = process.cwd();
+      
+      const addFolderToZip = (folderPath: string, zipFolder: JSZip) => {
+        const items = fs.readdirSync(folderPath);
+        for (const item of items) {
+          // Ignore heavy/unnecessary folders
+          if (['node_modules', 'dist', '.git', '.DS_Store', 'controldoc.zip', '.next'].includes(item)) continue;
+          
+          const fullPath = path.join(folderPath, item);
+          const stat = fs.statSync(fullPath);
+          
+          if (stat.isDirectory()) {
+            const newFolder = zipFolder.folder(item);
+            if (newFolder) {
+              addFolderToZip(fullPath, newFolder);
+            }
+          } else {
+            zipFolder.file(item, fs.readFileSync(fullPath));
+          }
+        }
+      };
+
+      addFolderToZip(rootPath, zip);
+      
+      const content = await zip.generateAsync({ type: 'nodebuffer' });
+      
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename=controldoc-source.zip');
+      res.send(content);
+    } catch (error) {
+      console.error('Error generating zip:', error);
+      res.status(500).send('Error al generar el archivo ZIP del código fuente.');
     }
   });
 
@@ -359,7 +389,8 @@ async function startServer() {
     });
   } else {
     // Serve static files from dist with short cache for assets but no cache for index.html
-    app.use(express.static(path.join(__dirname, 'dist'), {
+    const distPath = path.join(__dirname, '..', 'dist');
+    app.use(express.static(distPath, {
       maxAge: '1h',
       setHeaders: (res, path) => {
         if (path.endsWith('.html')) {
@@ -370,7 +401,7 @@ async function startServer() {
     
     // Catch-all route for SPA in production
     app.get('*', noCache, (req, res) => {
-      res.sendFile(path.join(__dirname, 'dist/index.html'));
+      res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 

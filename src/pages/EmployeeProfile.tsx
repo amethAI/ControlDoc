@@ -112,10 +112,8 @@ export default function EmployeeProfile() {
     setIsEditModalOpen(true);
   };
 
-  const getFileUrl = (url: string) => {
-    if (url.startsWith('/uploads/')) {
-      return (import.meta.env.VITE_API_URL || '') + url;
-    }
+  const getFileUrl = (url: string | undefined | null) => {
+    if (!url) return '';
     return url;
   };
 
