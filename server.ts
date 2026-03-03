@@ -68,8 +68,9 @@ async function startServer() {
       
       const content = await zip.generateAsync({ type: 'nodebuffer' });
       
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', 'attachment; filename=controldoc-source.zip');
+      res.setHeader('Content-Disposition', `attachment; filename=controldoc-source-${timestamp}.zip`);
       res.send(content);
     } catch (error) {
       console.error('Error generating zip:', error);
