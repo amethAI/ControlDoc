@@ -389,7 +389,11 @@ async function startServer() {
     });
   } else {
     // Serve static files from dist with short cache for assets but no cache for index.html
-    const distPath = path.join(process.cwd(), 'dist');
+    // En Render, cuando se ejecuta "node dist/server.js", __dirname es /opt/render/project/src/dist
+    // Por lo tanto, la carpeta de archivos estáticos (el build de Vite) está en __dirname
+    const distPath = __dirname;
+    console.log(`Serving static files from: ${distPath}`);
+    
     app.use(express.static(distPath, {
       maxAge: '1h',
       setHeaders: (res, path) => {
@@ -401,7 +405,9 @@ async function startServer() {
     
     // Catch-all route for SPA in production
     app.get('*', noCache, (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexPath = path.join(distPath, 'index.html');
+      console.log(`Serving index.html from: ${indexPath}`);
+      res.sendFile(indexPath);
     });
   }
 
