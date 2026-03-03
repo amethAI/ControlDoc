@@ -389,7 +389,7 @@ async function startServer() {
     });
   } else {
     // Serve static files from dist with short cache for assets but no cache for index.html
-    const distPath = path.join(__dirname, '..', 'dist');
+    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath, {
       maxAge: '1h',
       setHeaders: (res, path) => {
