@@ -68,6 +68,7 @@ export async function sendExpirationAlerts(isTest = false) {
     
     // Si tenemos credenciales reales configuradas
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      console.log('Usando credenciales reales para enviar correos...');
       transporter = nodemailer.createTransport({
         host: process.env.EMAIL_HOST || "smtp.office365.com",
         port: parseInt(process.env.EMAIL_PORT || "587"),
@@ -78,20 +79,31 @@ export async function sendExpirationAlerts(isTest = false) {
         },
         tls: {
           ciphers: 'SSLv3'
-        }
+        },
+        connectionTimeout: 10000, // 10 seconds
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
       });
     } else {
       // Si no hay credenciales, usamos Ethereal (simulador)
-      const testAccount = await nodemailer.createTestAccount();
-      transporter = nodemailer.createTransport({
-        host: "smtp.ethereal.email",
-        port: 587,
-        secure: false, 
-        auth: {
-          user: testAccount.user, 
-          pass: testAccount.pass, 
-        },
-      });
+      console.log('No hay credenciales reales. Creando cuenta de prueba en Ethereal...');
+      try {
+        const testAccount = await nodemailer.createTestAccount();
+        transporter = nodemailer.createTransport({
+          host: "smtp.ethereal.email",
+          port: 587,
+          secure: false, 
+          auth: {
+            user: testAccount.user, 
+            pass: testAccount.pass, 
+          },
+          connectionTimeout: 10000,
+        });
+        console.log('Cuenta de prueba creada con éxito.');
+      } catch (err) {
+        console.error('Error creando cuenta Ethereal:', err);
+        return { success: false, error: 'Error al conectar con el servidor de correos de prueba.' };
+      }
     }
 
     const previewUrls: string[] = [];
@@ -100,15 +112,29 @@ export async function sendExpirationAlerts(isTest = false) {
     // Enviar correos por club
     for (const clubId in alertsByClub) {
       const clubData = alertsByClub[clubId];
+      console.log(`Procesando club: ${clubData.club_name}`);
+
       
-      const { data: recipients } = await supabase
+      // Fetch club-specific recipients
+      const { data: clubRecipients } = await supabase
         .from('alert_recipients')
         .select('email')
         .eq('club_id', clubId);
         
-      if (!recipients || recipients.length === 0) continue;
+      // Fetch global recipients (e.g., supervisors/coordinators)
+      const { data: globalRecipients } = await supabase
+        .from('alert_recipients')
+        .select('email')
+        .eq('club_id', 'global');
+        
+      const allRecipients = [
+        ...(clubRecipients || []),
+        ...(globalRecipients || [])
+      ];
 
-      const toEmails = recipients.map(r => r.email).join(', ');
+      if (allRecipients.length === 0) continue;
+
+      const toEmails = Array.from(new Set(allRecipients.map(r => r.email))).join(', ');
 
       let htmlContent = `
         <div style="font-family: Arial, sans-serif; max-w: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
@@ -151,23 +177,29 @@ export async function sendExpirationAlerts(isTest = false) {
         </div>
       `;
 
-      const info = await transporter.sendMail({
-        from: process.env.EMAIL_FROM || (process.env.EMAIL_USER ? `"Sistema PSMT" <${process.env.EMAIL_USER}>` : '"Sistema PSMT" <alertas@psmt.com>'),
-        to: toEmails,
-        subject: `⚠️ Alerta de Vencimiento - ${clubData.club_name}`,
-        html: htmlContent,
-      });
-      
-      sentCount++;
+      console.log(`Enviando correo a: ${toEmails}`);
+      try {
+        const info = await transporter.sendMail({
+          from: process.env.EMAIL_FROM || (process.env.EMAIL_USER ? `"Sistema PSMT" <${process.env.EMAIL_USER}>` : '"Sistema PSMT" <alertas@psmt.com>'),
+          to: toEmails,
+          subject: `⚠️ Alerta de Vencimiento - ${clubData.club_name}`,
+          html: htmlContent,
+        });
+        console.log(`Correo enviado con éxito a ${toEmails}. MessageId: ${info.messageId}`);
+        
+        sentCount++;
 
-      if (!process.env.EMAIL_USER) {
-        const url = nodemailer.getTestMessageUrl(info);
-        if (url) previewUrls.push(url as string);
+        if (!process.env.EMAIL_USER) {
+          const url = nodemailer.getTestMessageUrl(info);
+          if (url) previewUrls.push(url as string);
+        }
+      } catch (sendErr) {
+        console.error(`Error al enviar correo a ${toEmails}:`, sendErr);
       }
     }
 
     if (sentCount === 0) {
-       return { success: false, error: 'No hay destinatarios configurados para los clubes con documentos por vencer.' };
+       return { success: false, error: 'No se pudo enviar ningún correo. Verifique la configuración de destinatarios y credenciales.' };
     }
 
     return { 

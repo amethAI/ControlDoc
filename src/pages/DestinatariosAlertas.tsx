@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Bell, Search } from 'lucide-react';
+import { ArrowLeft, Bell, Search, Shield } from 'lucide-react';
 import AlertRecipientsModal from '../components/AlertRecipientsModal';
 
 export default function DestinatariosAlertas() {
@@ -58,6 +58,42 @@ export default function DestinatariosAlertas() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
+            {/* Global Recipients Row */}
+            <tr className="bg-slate-50/50">
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="flex items-center">
+                  <div className="h-8 w-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center font-medium">
+                    <Shield className="h-4 w-4" />
+                  </div>
+                  <div className="ml-3">
+                    <div className="text-sm font-bold text-slate-900">Destinatarios Globales</div>
+                    <div className="text-xs text-slate-500">Reciben alertas de TODOS los clubes</div>
+                  </div>
+                </div>
+              </td>
+              <td className="px-6 py-4">
+                <div className="flex flex-wrap gap-2">
+                  {getEmailsForClub('global').length > 0 ? (
+                    getEmailsForClub('global').map(email => (
+                      <span key={email} className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                        {email}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-slate-400 italic">Sin configurar (Recomendado para Coordinación)</span>
+                  )}
+                </div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button 
+                  onClick={() => handleEdit({ id: 'global', name: 'Destinatarios Globales' })}
+                  className="text-amber-600 hover:text-amber-900 font-bold"
+                >
+                  Editar
+                </button>
+              </td>
+            </tr>
+
             {clubs.map((club) => {
               const emails = getEmailsForClub(club.id);
               return (

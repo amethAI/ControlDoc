@@ -78,7 +78,7 @@ export default function Configuracion() {
       });
       
       const data = await response.json();
-      if (response.ok) {
+      if (response.ok && data.success) {
         if (data.isRealEmail) {
           alert('Alertas enviadas con éxito a los correos configurados.');
         } else {
