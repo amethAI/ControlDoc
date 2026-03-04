@@ -748,6 +748,17 @@ router.post('/test-alert', async (req, res) => {
   }
 });
 
+// Alert routes
+router.post('/alerts/send', isAdmin, async (req, res) => {
+  try {
+    const result = await sendExpirationAlerts(true);
+    res.json(result);
+  } catch (error) {
+    console.error('Error sending alerts:', error);
+    res.status(500).json({ error: 'Error al enviar alertas' });
+  }
+});
+
 // Backup routes
 router.get('/backup/database', (req, res) => {
   res.status(400).json({ error: 'El respaldo de base de datos ya no está disponible con Supabase. Use el panel de Supabase para respaldos.' });

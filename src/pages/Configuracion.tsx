@@ -1,12 +1,13 @@
 import React, { useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Settings, Users, Bell, Shield, Database, Download, FileSpreadsheet, Upload } from 'lucide-react';
+import { Settings, Users, Bell, Shield, Database, Download, FileSpreadsheet, Upload, Send } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Configuracion() {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isSendingAlerts, setIsSendingAlerts] = useState(false);
 
   if (user?.role !== 'Administrador') {
     return (
@@ -59,6 +60,40 @@ export default function Configuracion() {
     } finally {
       setIsRestoring(false);
       e.target.value = '';
+    }
+  };
+
+  const handleTestAlerts = async () => {
+    if (!confirm('¿Deseas enviar una prueba de alertas ahora? Se enviarán correos a los destinatarios configurados.')) return;
+    
+    setIsSendingAlerts(true);
+    try {
+      const response = await fetch('/api/alerts/send', {
+        method: 'POST',
+        headers: {
+          'x-user-role': user?.role || '',
+          'x-user-id': user?.id || '',
+          'x-user-name': user?.name || ''
+        }
+      });
+      
+      const data = await response.json();
+      if (response.ok) {
+        if (data.isRealEmail) {
+          alert('Alertas enviadas con éxito a los correos configurados.');
+        } else {
+          alert('Prueba realizada con éxito (Simulación).');
+          if (data.previewUrls && data.previewUrls.length > 0) {
+            window.open(data.previewUrls[0], '_blank');
+          }
+        }
+      } else {
+        alert(data.error || 'Error al enviar alertas');
+      }
+    } catch (error) {
+      alert('Error de red al intentar enviar alertas');
+    } finally {
+      setIsSendingAlerts(false);
     }
   };
 
@@ -163,6 +198,26 @@ export default function Configuracion() {
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Descargar Código Fuente</p>
                   <p className="text-xs text-slate-500">Descargar el código de la aplicación</p>
+                </div>
+              </div>
+            </button>
+
+            <button 
+              onClick={handleTestAlerts}
+              disabled={isSendingAlerts}
+              className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-left group disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-rose-50 text-rose-600 rounded-lg group-hover:bg-rose-100">
+                  {isSendingAlerts ? (
+                    <div className="animate-spin h-5 w-5 border-2 border-rose-600 border-t-transparent rounded-full" />
+                  ) : (
+                    <Send className="h-5 w-5" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Probar Envío de Alertas</p>
+                  <p className="text-xs text-slate-500">Enviar correos de prueba ahora</p>
                 </div>
               </div>
             </button>

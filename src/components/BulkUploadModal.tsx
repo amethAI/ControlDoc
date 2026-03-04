@@ -45,14 +45,34 @@ export default function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUplo
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const newFiles = Array.from(e.target.files).map(file => ({
-        id: Math.random().toString(36).substr(2, 9),
-        file,
-        employeeId: '',
-        documentTypeId: '',
-        expiryDate: '',
-        status: 'pending' as const
-      }));
+      const newFiles = Array.from(e.target.files).map(file => {
+        // Auto-detect employee and doc type from filename
+        const fileName = file.name.toLowerCase();
+        let matchedEmployeeId = '';
+        let matchedDocTypeId = '';
+
+        // Try to match employee name
+        const foundEmployee = employees.find(emp => 
+          fileName.includes(emp.full_name.toLowerCase()) ||
+          emp.full_name.toLowerCase().split(' ').every(part => fileName.includes(part))
+        );
+        if (foundEmployee) matchedEmployeeId = foundEmployee.id;
+
+        // Try to match document type
+        const foundDocType = docTypes.find(type => 
+          fileName.includes(type.name.toLowerCase())
+        );
+        if (foundDocType) matchedDocTypeId = foundDocType.id;
+
+        return {
+          id: Math.random().toString(36).substr(2, 9),
+          file,
+          employeeId: matchedEmployeeId,
+          documentTypeId: matchedDocTypeId,
+          expiryDate: '',
+          status: 'pending' as const
+        };
+      });
       setUploadItems(prev => [...prev, ...newFiles]);
     }
   };
@@ -171,6 +191,47 @@ export default function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUplo
                     id="bulk-file-upload-more"
                   />
                 </label>
+              </div>
+
+              <div className="flex flex-wrap gap-4 items-center justify-between bg-blue-50/50 p-4 rounded-xl border border-blue-100 mb-4">
+                <div className="flex items-center gap-2 text-blue-700">
+                  <AlertCircle className="h-5 w-5" />
+                  <span className="text-sm font-medium">Acciones Rápidas:</span>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <select
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      setUploadItems(prev => prev.map(item => ({ ...item, employeeId: e.target.value })));
+                      e.target.value = '';
+                    }}
+                    className="text-xs border border-blue-200 rounded-lg px-2 py-1 bg-white focus:ring-blue-500"
+                  >
+                    <option value="">Asignar mismo Empleado a todos...</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.full_name}</option>
+                    ))}
+                  </select>
+                  <select
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      setUploadItems(prev => prev.map(item => ({ ...item, documentTypeId: e.target.value })));
+                      e.target.value = '';
+                    }}
+                    className="text-xs border border-blue-200 rounded-lg px-2 py-1 bg-white focus:ring-blue-500"
+                  >
+                    <option value="">Asignar mismo Tipo a todos...</option>
+                    {docTypes.map(type => (
+                      <option key={type.id} value={type.id}>{type.name}</option>
+                    ))}
+                  </select>
+                  <button 
+                    onClick={() => setUploadItems([])}
+                    className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1"
+                  >
+                    Limpiar lista
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4">

@@ -3,8 +3,16 @@ import nodemailer from 'nodemailer';
 
 export async function sendExpirationAlerts(isTest = false) {
   try {
+    // Umbral de días (por ahora 30, idealmente vendría de una tabla de settings)
+    const thresholdDays = 30;
+    const today = new Date();
+    const thresholdDate = new Date();
+    thresholdDate.setDate(today.getDate() + thresholdDays);
+    
+    const thresholdStr = thresholdDate.toISOString().split('T')[0];
+
     // Buscar documentos que vencen pronto (o ya vencieron)
-    const { data: expiringDocs, error } = await supabase
+    let query = supabase
       .from('employee_documents')
       .select(`
         *,
@@ -14,10 +22,23 @@ export async function sendExpirationAlerts(isTest = false) {
       .not('expiry_date', 'is', null)
       .eq('is_current', 1);
 
+    // Si no es una prueba, filtramos por fecha. 
+    // Si es prueba, traemos algunos para verificar el formato del correo.
+    if (!isTest) {
+      query = query.lte('expiry_date', thresholdStr);
+    } else {
+      // En prueba traemos los que vencen en los próximos 90 días para asegurar que haya datos
+      const testThreshold = new Date();
+      testThreshold.setDate(today.getDate() + 90);
+      query = query.lte('expiry_date', testThreshold.toISOString().split('T')[0]);
+    }
+
+    const { data: expiringDocs, error } = await query;
+
     if (error) throw error;
 
     if (!expiringDocs || expiringDocs.length === 0) {
-      return { success: false, error: 'No hay documentos con fecha de vencimiento configurada para probar.' };
+      return { success: false, error: isTest ? 'No hay documentos próximos a vencer para generar una prueba.' : 'No hay alertas pendientes hoy.' };
     }
 
     // We need to fetch clubs separately to get their names
