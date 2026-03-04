@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, UserPlus } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface ReactivateEmployeeModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export default function ReactivateEmployeeModal({
   employeeId, 
   employeeName 
 }: ReactivateEmployeeModalProps) {
+  const { user } = useAuth();
   const [newStartDate, setNewStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,7 +32,12 @@ export default function ReactivateEmployeeModal({
     try {
       const res = await fetch(`/api/employees/${employeeId}/reactivate`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || '',
+          'x-user-id': user?.id || '',
+          'x-user-name': user?.name || ''
+        },
         body: JSON.stringify({
           contract_start: newStartDate
         })

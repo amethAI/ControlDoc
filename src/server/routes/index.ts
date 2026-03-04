@@ -3,6 +3,7 @@ import { supabase } from '../db.js';
 import { sendExpirationAlerts } from '../services/alertService.js';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 
 const router = Router();
 
@@ -14,6 +15,55 @@ const isAdmin = (req: any, res: any, next: any) => {
   }
   next();
 };
+
+// Helper to log audit actions
+const logAudit = async (
+  userId: string,
+  userName: string,
+  actionType: string,
+  actionDescription: string,
+  entityType: string,
+  entityId: string | null,
+  entityName: string | null,
+  clubId: string | null,
+  req: any
+) => {
+  try {
+    const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    await supabase.from('audit_logs').insert({
+      id: crypto.randomUUID(),
+      user_id: userId || null,
+      user_name: userName || 'Sistema',
+      action_type: actionType,
+      action_description: actionDescription,
+      entity_type: entityType,
+      entity_id: entityId,
+      entity_name: entityName,
+      club_id: clubId,
+      ip_address: ipAddress
+    });
+  } catch (err) {
+    console.error('Error logging audit action:', err);
+  }
+};
+
+
+// Get audit logs
+router.get('/audit-logs', isAdmin, async (req, res) => {
+  try {
+    const { data: logs, error } = await supabase
+      .from('audit_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+    res.json(logs);
+  } catch (error) {
+    console.error('Error fetching audit logs:', error);
+    res.status(500).json({ error: 'Failed to fetch audit logs' });
+  }
+});
 
 // Simple mock auth
 router.post('/auth/login', async (req, res) => {
@@ -102,6 +152,16 @@ router.post('/clubs', isAdmin, async (req, res) => {
       throw error;
     }
     
+    // Log audit
+    const userId = req.headers['x-user-id'] as string;
+    const userName = req.headers['x-user-name'] as string;
+    await logAudit(
+      userId, userName,
+      'Creación de club',
+      `Club creado: ${name}`,
+      'Club', id, name, id, req
+    );
+    
     res.status(201).json(newClub);
   } catch (error: any) {
     console.error('Error creating club:', error);
@@ -148,6 +208,16 @@ router.post('/employees', isAdmin, async (req, res) => {
       }
       throw error;
     }
+    
+    // Log audit
+    const userId = req.headers['x-user-id'] as string;
+    const userName = req.headers['x-user-name'] as string;
+    await logAudit(
+      userId, userName,
+      'Creación de empleado',
+      `Empleado creado: ${full_name} (${cedula})`,
+      'Empleado', id, full_name, club_id, req
+    );
     
     res.status(201).json(newEmployee);
   } catch (error: any) {
@@ -209,6 +279,16 @@ router.post('/documents', isAdmin, async (req, res) => {
       
     if (error) throw error;
     
+    // Log audit
+    const userId = req.headers['x-user-id'] as string;
+    const userName = req.headers['x-user-name'] as string;
+    await logAudit(
+      userId, userName,
+      'Carga de documento',
+      `Documento subido: ${file_name}`,
+      'Documento', id, file_name, null, req
+    );
+    
     res.status(201).json(newDoc);
   } catch (error) {
     console.error('Error creating document:', error);
@@ -253,6 +333,17 @@ router.patch('/employees/:id/terminate', async (req, res) => {
       .single();
       
     if (error) throw error;
+    
+    // Log audit
+    const userId = req.headers['x-user-id'] as string;
+    const userName = req.headers['x-user-name'] as string;
+    await logAudit(
+      userId, userName,
+      'Baja de empleado',
+      `Empleado dado de baja: ID ${req.params.id}`,
+      'Empleado', req.params.id, null, updatedEmployee.club_id, req
+    );
+
     res.json(updatedEmployee);
   } catch (error) {
     console.error('Error terminating employee:', error);
@@ -279,6 +370,17 @@ router.patch('/employees/:id/reactivate', async (req, res) => {
       .single();
       
     if (error) throw error;
+    
+    // Log audit
+    const userId = req.headers['x-user-id'] as string;
+    const userName = req.headers['x-user-name'] as string;
+    await logAudit(
+      userId, userName,
+      'Reactivación de empleado',
+      `Empleado reactivado: ID ${req.params.id}`,
+      'Empleado', req.params.id, null, updatedEmployee.club_id, req
+    );
+
     res.json(updatedEmployee);
   } catch (error) {
     console.error('Error reactivating employee:', error);
@@ -498,6 +600,17 @@ router.post('/users', isAdmin, async (req, res) => {
       .single();
       
     if (error) throw error;
+    
+    // Log audit
+    const userId = req.headers['x-user-id'] as string;
+    const userName = req.headers['x-user-name'] as string;
+    await logAudit(
+      userId, userName,
+      'Creación de usuario',
+      `Usuario creado: ${name} (${email})`,
+      'Usuario', id, name, club_id, req
+    );
+    
     res.status(201).json(newUser);
   } catch (error) {
     res.status(500).json({ error: 'Error al crear usuario' });
@@ -523,6 +636,17 @@ router.patch('/users/:id', isAdmin, async (req, res) => {
       .single();
       
     if (error) throw error;
+    
+    // Log audit
+    const userId = req.headers['x-user-id'] as string;
+    const userName = req.headers['x-user-name'] as string;
+    await logAudit(
+      userId, userName,
+      'Actualización de usuario',
+      `Usuario actualizado: ${name} (${email})`,
+      'Usuario', req.params.id, name, club_id, req
+    );
+    
     res.json(updatedUser);
   } catch (error) {
     res.status(500).json({ error: 'Error al actualizar usuario' });
@@ -552,6 +676,16 @@ router.delete('/users/:id', isAdmin, async (req, res) => {
     // Finally delete the user
     const { error } = await supabase.from('users').delete().eq('id', userId);
     if (error) throw error;
+
+    // Log audit
+    const reqUserId = req.headers['x-user-id'] as string;
+    const reqUserName = req.headers['x-user-name'] as string;
+    await logAudit(
+      reqUserId, reqUserName,
+      'Eliminación de usuario',
+      `Usuario eliminado: ID ${userId}`,
+      'Usuario', userId, null, null, req
+    );
 
     res.json({ success: true });
   } catch (error: any) {

@@ -1,13 +1,44 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Shield, Search, Filter } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+
+interface AuditLog {
+  id: string;
+  created_at: string;
+  user_name: string;
+  action_type: string;
+  action_description: string;
+  entity_name: string;
+  club_id: string;
+}
 
 export default function LogAuditoria() {
-  const logs = [
-    { id: '1', date: '2023-10-25 14:30', user: 'Admin General', action: 'Creación de empleado', entity: 'Juan Pérez (8-888-8888)', club: 'David' },
-    { id: '2', date: '2023-10-25 15:15', user: 'Coordinadora David', action: 'Carga de documento', entity: 'Carnet Blanco - Juan Pérez', club: 'David' },
-    { id: '3', date: '2023-10-26 09:00', user: 'Admin General', action: 'Actualización de club', entity: 'Costa Verde', club: 'Costa Verde' },
-  ];
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch('/api/audit-logs', {
+          headers: {
+            'x-user-role': user?.role || ''
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setLogs(data);
+        }
+      } catch (error) {
+        console.error('Error fetching audit logs:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLogs();
+  }, [user]);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -49,27 +80,41 @@ export default function LogAuditoria() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
-            {logs.map((log) => (
-              <tr key={log.id} className="hover:bg-slate-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                  {log.date}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
-                  {log.user}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                    {log.action}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                  {log.entity}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                  {log.club}
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-4 text-center text-sm text-slate-500">
+                  Cargando logs...
                 </td>
               </tr>
-            ))}
+            ) : logs.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-4 text-center text-sm text-slate-500">
+                  No hay registros de auditoría.
+                </td>
+              </tr>
+            ) : (
+              logs.map((log) => (
+                <tr key={log.id} className="hover:bg-slate-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                    {new Date(log.created_at).toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
+                    {log.user_name || 'Sistema'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                      {log.action_type}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                    {log.entity_name || log.action_description}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                    {log.club_id || '-'}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

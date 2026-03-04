@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, UserMinus } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface TerminateEmployeeModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export default function TerminateEmployeeModal({
   employeeId, 
   employeeName 
 }: TerminateEmployeeModalProps) {
+  const { user } = useAuth();
   const [reason, setReason] = useState('Renuncia');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [error, setError] = useState('');
@@ -31,7 +33,12 @@ export default function TerminateEmployeeModal({
     try {
       const res = await fetch(`/api/employees/${employeeId}/terminate`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || '',
+          'x-user-id': user?.id || '',
+          'x-user-name': user?.name || ''
+        },
         body: JSON.stringify({
           termination_reason: reason,
           termination_date: date

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, Calendar } from 'lucide-react';
 
+import { useAuth } from '../context/AuthContext';
+
 interface EditExpiryModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -18,6 +20,7 @@ export default function EditExpiryModal({
   documentName,
   currentDate 
 }: EditExpiryModalProps) {
+  const { user } = useAuth();
   const [expiryDate, setExpiryDate] = useState(currentDate || '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,7 +35,12 @@ export default function EditExpiryModal({
     try {
       const res = await fetch(`/api/documents/${documentId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || '',
+          'x-user-id': user?.id || '',
+          'x-user-name': user?.name || ''
+        },
         body: JSON.stringify({ expiry_date: expiryDate || null })
       });
 

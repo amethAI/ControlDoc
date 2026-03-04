@@ -88,7 +88,9 @@ export default function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUplo
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            'x-user-role': user?.role || ''
+            'x-user-role': user?.role || '',
+            'x-user-id': user?.id || '',
+            'x-user-name': user?.name || ''
           },
           body: JSON.stringify({
             employee_id: item.employeeId,

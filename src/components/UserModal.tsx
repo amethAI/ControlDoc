@@ -66,7 +66,9 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
         method,
         headers: { 
           'Content-Type': 'application/json',
-          'x-user-role': currentUser?.role || ''
+          'x-user-role': currentUser?.role || '',
+          'x-user-id': currentUser?.id || '',
+          'x-user-name': currentUser?.name || ''
         },
         body: JSON.stringify(formData)
       });
@@ -95,7 +97,11 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
     try {
       const res = await fetch(`/api/users/${user.id}`, {
         method: 'DELETE',
-        headers: { 'x-user-role': currentUser?.role || '' }
+        headers: { 
+          'x-user-role': currentUser?.role || '',
+          'x-user-id': currentUser?.id || '',
+          'x-user-name': currentUser?.name || ''
+        }
       });
       console.log('Delete response status:', res.status);
 

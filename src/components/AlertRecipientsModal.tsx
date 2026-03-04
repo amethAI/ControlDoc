@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Mail, Plus, Trash2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface AlertRecipientsModalProps {
   isOpen: boolean;
@@ -10,6 +11,7 @@ interface AlertRecipientsModalProps {
 }
 
 export default function AlertRecipientsModal({ isOpen, onClose, onSuccess, club, initialEmails }: AlertRecipientsModalProps) {
+  const { user } = useAuth();
   const [emails, setEmails] = useState<string[]>([]);
   const [newEmail, setNewEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,7 +46,12 @@ export default function AlertRecipientsModal({ isOpen, onClose, onSuccess, club,
 
       const res = await fetch('/api/alert-recipients', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || '',
+          'x-user-id': user?.id || '',
+          'x-user-name': user?.name || ''
+        },
         body: JSON.stringify({
           club_id: club.id,
           emails: finalEmails

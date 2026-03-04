@@ -137,14 +137,24 @@ export default function Attendance() {
       // Save attendance records
       const attRes = await fetch('/api/attendance', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || '',
+          'x-user-id': user?.id || '',
+          'x-user-name': user?.name || ''
+        },
         body: JSON.stringify({ records: attendance })
       });
 
       // Save requests
       const reqRes = await fetch('/api/attendance-requests', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || '',
+          'x-user-id': user?.id || '',
+          'x-user-name': user?.name || ''
+        },
         body: JSON.stringify({ 
           records: requests.map(r => ({ ...r, club_id: selectedClubId }))
         })

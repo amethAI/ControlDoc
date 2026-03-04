@@ -73,7 +73,9 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            'x-user-role': user?.role || ''
+            'x-user-role': user?.role || '',
+            'x-user-id': user?.id || '',
+            'x-user-name': user?.name || ''
           },
           body: JSON.stringify({
             full_name: row.full_name,
