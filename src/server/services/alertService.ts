@@ -132,6 +132,7 @@ export async function sendExpirationAlerts(isTest = false) {
 
     const previewUrls: string[] = [];
     let sentCount = 0;
+    let lastError = '';
 
     // Enviar correos por club
     for (const clubId in alertsByClub) {
@@ -217,13 +218,14 @@ export async function sendExpirationAlerts(isTest = false) {
           const url = nodemailer.getTestMessageUrl(info);
           if (url) previewUrls.push(url as string);
         }
-      } catch (sendErr) {
+      } catch (sendErr: any) {
         console.error(`Error al enviar correo a ${toEmails}:`, sendErr);
+        lastError = sendErr.message || String(sendErr);
       }
     }
 
     if (sentCount === 0) {
-       return { success: false, error: 'No se pudo enviar ningún correo. Verifique la configuración de destinatarios y credenciales.' };
+       return { success: false, error: `No se pudo enviar el correo. Detalle técnico: ${lastError || 'Verifique credenciales y destinatarios.'}` };
     }
 
     return { 
