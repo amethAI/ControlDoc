@@ -99,7 +99,9 @@ export async function sendExpirationAlerts(isTest = false) {
       console.log('Usando credenciales reales para enviar correos...');
       
       const host = process.env.EMAIL_HOST || "smtp.office365.com";
-      const port = parseInt(process.env.EMAIL_PORT || "587");
+      // Si es Gmail, forzamos el puerto 465 (SSL) ya que el 587 (TLS) suele dar timeout en Render
+      const isGmail = host.includes('gmail.com');
+      const port = isGmail ? 465 : parseInt(process.env.EMAIL_PORT || "587");
       
       transporter = nodemailer.createTransport({
         host: host,
@@ -110,11 +112,12 @@ export async function sendExpirationAlerts(isTest = false) {
           pass: process.env.EMAIL_PASS,
         },
         tls: {
-          ciphers: 'SSLv3'
+          ciphers: 'SSLv3',
+          rejectUnauthorized: false
         },
-        connectionTimeout: 15000, // 15 seconds
-        greetingTimeout: 15000,
-        socketTimeout: 15000,
+        connectionTimeout: 20000, // 20 seconds
+        greetingTimeout: 20000,
+        socketTimeout: 20000,
         family: 4 // Force IPv4
       } as any);
     } else {
