@@ -1,5 +1,10 @@
 import { supabase } from '../db.js';
 import nodemailer from 'nodemailer';
+import dns from 'dns';
+
+// Forzar a Node.js a preferir IPv4 sobre IPv6 en todas las resoluciones DNS
+// Esto soluciona el error ENETUNREACH en servidores como Render que no tienen salida IPv6
+dns.setDefaultResultOrder('ipv4first');
 
 export async function sendExpirationAlerts(isTest = false) {
   try {
@@ -94,25 +99,22 @@ export async function sendExpirationAlerts(isTest = false) {
       console.log('Usando credenciales reales para enviar correos...');
       
       const host = process.env.EMAIL_HOST || "smtp.office365.com";
-      // Si es Gmail, forzamos la IP de IPv4 directamente para evitar que Node intente resolver IPv6
-      // 142.250.110.108 es una de las IPs públicas de smtp.gmail.com
-      const resolvedHost = host === 'smtp.gmail.com' ? '142.250.110.108' : host;
+      const port = parseInt(process.env.EMAIL_PORT || "587");
       
       transporter = nodemailer.createTransport({
-        host: resolvedHost,
-        port: parseInt(process.env.EMAIL_PORT || "587"),
-        secure: false, // true for 465, false for other ports
+        host: host,
+        port: port,
+        secure: port === 465, // true for 465, false for other ports
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASS,
         },
         tls: {
-          ciphers: 'SSLv3',
-          rejectUnauthorized: false // Importante cuando usamos IP directa en lugar de dominio
+          ciphers: 'SSLv3'
         },
-        connectionTimeout: 10000, // 10 seconds
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
+        connectionTimeout: 15000, // 15 seconds
+        greetingTimeout: 15000,
+        socketTimeout: 15000,
         family: 4 // Force IPv4
       } as any);
     } else {
