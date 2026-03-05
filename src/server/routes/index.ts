@@ -766,6 +766,9 @@ router.post('/test-alert', async (req, res) => {
 router.post('/alerts/send', isAdmin, async (req, res) => {
   try {
     const result = await sendExpirationAlerts(true);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error || 'Error al enviar alertas' });
+    }
     res.json(result);
   } catch (error) {
     console.error('Error sending alerts:', error);

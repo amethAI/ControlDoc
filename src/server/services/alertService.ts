@@ -92,8 +92,14 @@ export async function sendExpirationAlerts(isTest = false) {
     // Si tenemos credenciales reales configuradas
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
       console.log('Usando credenciales reales para enviar correos...');
+      
+      const host = process.env.EMAIL_HOST || "smtp.office365.com";
+      // Si es Gmail, forzamos la IP de IPv4 directamente para evitar que Node intente resolver IPv6
+      // 142.250.110.108 es una de las IPs públicas de smtp.gmail.com
+      const resolvedHost = host === 'smtp.gmail.com' ? '142.250.110.108' : host;
+      
       transporter = nodemailer.createTransport({
-        host: process.env.EMAIL_HOST || "smtp.office365.com",
+        host: resolvedHost,
         port: parseInt(process.env.EMAIL_PORT || "587"),
         secure: false, // true for 465, false for other ports
         auth: {
@@ -101,12 +107,13 @@ export async function sendExpirationAlerts(isTest = false) {
           pass: process.env.EMAIL_PASS,
         },
         tls: {
-          ciphers: 'SSLv3'
+          ciphers: 'SSLv3',
+          rejectUnauthorized: false // Importante cuando usamos IP directa en lugar de dominio
         },
         connectionTimeout: 10000, // 10 seconds
         greetingTimeout: 10000,
         socketTimeout: 10000,
-        family: 4 // Force IPv4 to prevent ENETUNREACH issues on some hosts like Render
+        family: 4 // Force IPv4
       } as any);
     } else {
       // Si no hay credenciales, usamos Ethereal (simulador)
