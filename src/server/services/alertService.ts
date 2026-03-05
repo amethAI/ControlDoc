@@ -107,7 +107,7 @@ export async function sendExpirationAlerts(isTest = false) {
         greetingTimeout: 10000,
         socketTimeout: 10000,
         family: 4 // Force IPv4 to prevent ENETUNREACH issues on some hosts like Render
-      });
+      } as any);
     } else {
       // Si no hay credenciales, usamos Ethereal (simulador)
       console.log('No hay credenciales reales. Creando cuenta de prueba en Ethereal...');
