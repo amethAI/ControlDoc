@@ -62,9 +62,12 @@ export default function AlertRecipientsModal({ isOpen, onClose, onSuccess, club,
         onSuccess();
         onClose();
       } else {
-        alert('Error al guardar destinatarios');
+        const errorData = await res.json();
+        console.error('Error from server:', errorData);
+        alert(`Error al guardar destinatarios: ${errorData.error || 'Desconocido'}`);
       }
     } catch (error) {
+      console.error('Network error:', error);
       alert('Error de red');
     } finally {
       setLoading(false);

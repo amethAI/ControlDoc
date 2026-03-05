@@ -4,6 +4,7 @@ import { sendExpirationAlerts } from '../services/alertService.js';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import archiver from 'archiver';
 
 const router = Router();
 
@@ -120,7 +121,7 @@ router.post('/auth/login', async (req, res) => {
 router.get('/clubs', async (req, res) => {
   const { data: clubs, error } = await supabase.from('clubs').select('*');
   if (error) return res.status(500).json({ error: error.message });
-  res.json(clubs);
+  res.json(clubs ? clubs.filter(c => c.id !== 'global') : []);
 });
 
 // Get single club
@@ -560,7 +561,7 @@ router.get('/dashboard', async (req, res) => {
     }
 
     // 6. Club Distribution
-    const { data: clubs } = await supabase.from('clubs').select('id, name');
+    const { data: clubs } = await supabase.from('clubs').select('id, name').neq('id', 'global');
     const { data: activeEmployees } = await supabase.from('employees').select('club_id').eq('status', 'activo');
     
     const clubDistribution = clubs?.map(club => {
@@ -704,7 +705,8 @@ router.get('/alert-recipients', async (req, res) => {
   
   const formattedRecipients = recipients.map(r => ({
     ...r,
-    club_name: (r.clubs as any)?.name
+    club_id: r.club_id || 'global',
+    club_name: (r.clubs as any)?.name || 'Global'
   }));
   
   res.json(formattedRecipients);
@@ -714,23 +716,35 @@ router.post('/alert-recipients', async (req, res) => {
   const { club_id, emails } = req.body; // emails is an array of strings
   
   try {
-    await supabase.from('alert_recipients').delete().eq('club_id', club_id);
+    if (club_id === 'global') {
+      // Ensure the 'global' club exists to satisfy foreign key constraints
+      const { data: globalClub } = await supabase.from('clubs').select('id').eq('id', 'global').maybeSingle();
+      if (!globalClub) {
+        await supabase.from('clubs').upsert([{ id: 'global', name: 'Global', description: 'Destinatarios Globales', is_active: 1 }]);
+      }
+      await supabase.from('alert_recipients').delete().eq('club_id', 'global');
+    } else {
+      await supabase.from('alert_recipients').delete().eq('club_id', club_id);
+    }
     
     if (emails && emails.length > 0) {
       const insertData = emails.map((email: string) => ({
         id: `ar-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        club_id,
+        club_id: club_id,
         email
       }));
       
       const { error } = await supabase.from('alert_recipients').insert(insertData);
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw error;
+      }
     }
     
     res.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in alert-recipients POST:', error);
-    res.status(500).json({ error: 'Error al actualizar destinatarios' });
+    res.status(500).json({ error: error.message || 'Error al actualizar destinatarios' });
   }
 });
 
@@ -801,6 +815,33 @@ router.get('/backup/employees-csv', async (req, res) => {
 // Restore route
 router.post('/restore/database', (req, res) => {
   res.status(400).json({ error: 'La restauración de base de datos ya no está disponible con Supabase. Use el panel de Supabase para restaurar.' });
+});
+
+// Download Source Code
+router.get('/download-source', (req, res) => {
+  try {
+    const archive = archiver('zip', {
+      zlib: { level: 9 }
+    });
+
+    res.attachment(`psmt-source-code-${new Date().toISOString().split('T')[0]}.zip`);
+
+    archive.on('error', function(err) {
+      res.status(500).send({error: err.message});
+    });
+
+    archive.pipe(res);
+
+    archive.glob('**/*', {
+      cwd: process.cwd(),
+      ignore: ['node_modules/**', 'dist/**', '.git/**', '.env', '.env.*', '*.zip']
+    });
+
+    archive.finalize();
+  } catch (error) {
+    console.error('Error creating zip:', error);
+    res.status(500).json({ error: 'Error al generar el archivo ZIP' });
+  }
 });
 
 export default router;

@@ -37,31 +37,54 @@ export async function sendExpirationAlerts(isTest = false) {
 
     if (error) throw error;
 
-    if (!expiringDocs || expiringDocs.length === 0) {
-      return { success: false, error: isTest ? 'No hay documentos próximos a vencer para generar una prueba.' : 'No hay alertas pendientes hoy.' };
-    }
-
     // We need to fetch clubs separately to get their names
     const { data: clubs } = await supabase.from('clubs').select('id, name');
     const clubMap = new Map(clubs?.map(c => [c.id, c.name]) || []);
 
     // Agrupar por club
     const alertsByClub: Record<string, any> = {};
-    for (const doc of expiringDocs) {
-      const clubId = (doc.employees as any).club_id;
-      const clubName = clubMap.get(clubId) || 'Desconocido';
-      
-      if (!alertsByClub[clubId]) {
-        alertsByClub[clubId] = {
-          club_name: clubName,
-          docs: []
-        };
+    
+    if (expiringDocs && expiringDocs.length > 0) {
+      for (const doc of expiringDocs) {
+        const clubId = (doc.employees as any).club_id;
+        const clubName = clubMap.get(clubId) || 'Desconocido';
+        
+        if (!alertsByClub[clubId]) {
+          alertsByClub[clubId] = {
+            club_name: clubName,
+            docs: []
+          };
+        }
+        alertsByClub[clubId].docs.push({
+          ...doc,
+          full_name: (doc.employees as any).full_name,
+          doc_name: (doc.document_types as any).name
+        });
       }
-      alertsByClub[clubId].docs.push({
-        ...doc,
-        full_name: (doc.employees as any).full_name,
-        doc_name: (doc.document_types as any).name
-      });
+    }
+
+    if (isTest) {
+      // En prueba, asegurarnos de enviar a todos los clubes que tienen destinatarios configurados
+      const { data: allRecipients } = await supabase.from('alert_recipients').select('club_id');
+      const clubsWithRecipients = new Set(allRecipients?.map(r => r.club_id));
+      
+      for (const rawClubId of clubsWithRecipients) {
+        const clubId = rawClubId || 'global';
+        if (!alertsByClub[clubId]) {
+          alertsByClub[clubId] = {
+            club_name: clubId === 'global' ? 'Global' : (clubMap.get(clubId) || 'Desconocido'),
+            docs: [{
+              full_name: 'Empleado de Prueba',
+              doc_name: 'Documento de Prueba',
+              expiry_date: new Date().toISOString().split('T')[0]
+            }]
+          };
+        }
+      }
+    }
+
+    if (Object.keys(alertsByClub).length === 0) {
+      return { success: false, error: isTest ? 'No hay destinatarios configurados para enviar la prueba.' : 'No hay alertas pendientes hoy.' };
     }
 
     let transporter;
@@ -83,6 +106,7 @@ export async function sendExpirationAlerts(isTest = false) {
         connectionTimeout: 10000, // 10 seconds
         greetingTimeout: 10000,
         socketTimeout: 10000,
+        family: 4 // Force IPv4 to prevent ENETUNREACH issues on some hosts like Render
       });
     } else {
       // Si no hay credenciales, usamos Ethereal (simulador)

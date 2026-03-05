@@ -63,10 +63,13 @@ export default function Configuracion() {
     }
   };
 
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   const handleTestAlerts = async () => {
     if (!confirm('¿Deseas enviar una prueba de alertas ahora? Se enviarán correos a los destinatarios configurados.')) return;
     
     setIsSendingAlerts(true);
+    setPreviewUrl(null);
     try {
       const response = await fetch('/api/alerts/send', {
         method: 'POST',
@@ -84,7 +87,7 @@ export default function Configuracion() {
         } else {
           alert('Prueba realizada con éxito (Simulación).');
           if (data.previewUrls && data.previewUrls.length > 0) {
-            window.open(data.previewUrls[0], '_blank');
+            setPreviewUrl(data.previewUrls[0]);
           }
         }
       } else {
@@ -221,6 +224,14 @@ export default function Configuracion() {
                 </div>
               </div>
             </button>
+            {previewUrl && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="text-sm text-blue-800 font-medium mb-2">Simulación de correo generada con éxito:</p>
+                <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 text-sm underline break-all">
+                  Ver correo de prueba en Ethereal Email
+                </a>
+              </div>
+            )}
           </div>
         </div>
       </div>
