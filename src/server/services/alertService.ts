@@ -96,10 +96,16 @@ export async function sendExpirationAlerts(isTest = false) {
     let transporter: any = null;
     let resend: Resend | null = null;
     let useResend = false;
+    let useBrevo = false;
     
-    // Si tenemos clave de Resend, la usamos (es la mejor opción para Render)
-    if (process.env.RESEND_API_KEY) {
-      console.log('Usando Resend API para enviar correos (saltando bloqueos de SMTP)...');
+    // Si tenemos clave de Brevo (Sendinblue), la usamos
+    if (process.env.BREVO_API_KEY) {
+      console.log('Usando Brevo API para enviar correos (permite múltiples destinatarios sin dominio)...');
+      useBrevo = true;
+    }
+    // Si tenemos clave de Resend, la usamos
+    else if (process.env.RESEND_API_KEY) {
+      console.log('Usando Resend API para enviar correos...');
       resend = new Resend(process.env.RESEND_API_KEY);
       useResend = true;
     }
@@ -236,7 +242,29 @@ export async function sendExpirationAlerts(isTest = false) {
 
       console.log(`Enviando correo a: ${toEmails}`);
       try {
-        if (useResend && resend) {
+        if (useBrevo) {
+          const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+              'accept': 'application/json',
+              'api-key': process.env.BREVO_API_KEY as string,
+              'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+              sender: { name: 'Sistema PSMT', email: process.env.EMAIL_USER || 'alertaspsmt@gmail.com' },
+              to: toEmails.split(',').map(e => ({ email: e.trim() })),
+              subject: `⚠️ Alerta de Vencimiento - ${clubData.club_name}`,
+              htmlContent: htmlContent
+            })
+          });
+
+          if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(`Brevo API Error: ${JSON.stringify(errData)}`);
+          }
+          console.log(`Correo enviado con éxito a ${toEmails} via Brevo.`);
+          sentCount++;
+        } else if (useResend && resend) {
           const { data, error } = await resend.emails.send({
             from: process.env.EMAIL_FROM || 'Sistema PSMT <onboarding@resend.dev>',
             to: toEmails.split(',').map(e => e.trim()),
@@ -278,7 +306,7 @@ export async function sendExpirationAlerts(isTest = false) {
     return { 
       success: true, 
       previewUrls, 
-      isRealEmail: !!process.env.EMAIL_USER || useResend
+      isRealEmail: !!process.env.EMAIL_USER || useResend || useBrevo
     };
   } catch (error) {
     console.error('Error sending alerts:', error);
