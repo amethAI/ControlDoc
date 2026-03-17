@@ -174,6 +174,12 @@ router.post('/clubs', isAdmin, async (req, res) => {
 router.get('/employees', async (req, res) => {
   const { club_id, status } = req.query;
   
+  // Debug check
+  const isMock = !process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY;
+  if (isMock) {
+    console.warn('⚠️ API /employees called but Supabase is NOT configured. Using mock data or returning empty.');
+  }
+  
   let query = supabase.from('employees').select('*');
   
   if (club_id) {

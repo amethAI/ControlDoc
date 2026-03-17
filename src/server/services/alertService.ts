@@ -1,5 +1,6 @@
 import { supabase } from '../db.js';
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import dns from 'dns';
 
 // Forzar a Node.js a preferir IPv4 sobre IPv6 en todas las resoluciones DNS
@@ -92,34 +93,53 @@ export async function sendExpirationAlerts(isTest = false) {
       return { success: false, error: isTest ? 'No hay destinatarios configurados para enviar la prueba.' : 'No hay alertas pendientes hoy.' };
     }
 
-    let transporter;
+    let transporter: any = null;
+    let resend: Resend | null = null;
+    let useResend = false;
     
-    // Si tenemos credenciales reales configuradas
-    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-      console.log('Usando credenciales reales para enviar correos...');
+    // Si tenemos clave de Resend, la usamos (es la mejor opción para Render)
+    if (process.env.RESEND_API_KEY) {
+      console.log('Usando Resend API para enviar correos (saltando bloqueos de SMTP)...');
+      resend = new Resend(process.env.RESEND_API_KEY);
+      useResend = true;
+    }
+    // Si tenemos credenciales reales configuradas para SMTP
+    else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      console.log('Usando credenciales reales SMTP para enviar correos...');
       
       const host = process.env.EMAIL_HOST || "smtp.office365.com";
-      // Si es Gmail, forzamos el puerto 465 (SSL) ya que el 587 (TLS) suele dar timeout en Render
       const isGmail = host.includes('gmail.com');
-      const port = isGmail ? 465 : parseInt(process.env.EMAIL_PORT || "587");
       
-      transporter = nodemailer.createTransport({
-        host: host,
-        port: port,
-        secure: port === 465, // true for 465, false for other ports
+      let transportConfig: any = {
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASS,
         },
-        tls: {
-          ciphers: 'SSLv3',
-          rejectUnauthorized: false
-        },
-        connectionTimeout: 20000, // 20 seconds
+        connectionTimeout: 20000,
         greetingTimeout: 20000,
         socketTimeout: 20000,
-        family: 4 // Force IPv4
-      } as any);
+      };
+
+      if (isGmail) {
+        // Configuracion optima y nativa para Gmail
+        transportConfig.service = 'gmail';
+        transportConfig.host = 'smtp.gmail.com';
+        transportConfig.port = 465;
+        transportConfig.secure = true;
+        transportConfig.family = 4; // Forzar IPv4 para evitar ENETUNREACH en Render
+      } else {
+        const port = parseInt(process.env.EMAIL_PORT || "587");
+        transportConfig.host = host;
+        transportConfig.port = port;
+        transportConfig.secure = port === 465;
+        transportConfig.tls = {
+          ciphers: 'SSLv3',
+          rejectUnauthorized: false
+        };
+        transportConfig.family = 4;
+      }
+      
+      transporter = nodemailer.createTransport(transportConfig);
     } else {
       // Si no hay credenciales, usamos Ethereal (simulador)
       console.log('No hay credenciales reales. Creando cuenta de prueba en Ethereal...');
@@ -216,19 +236,34 @@ export async function sendExpirationAlerts(isTest = false) {
 
       console.log(`Enviando correo a: ${toEmails}`);
       try {
-        const info = await transporter.sendMail({
-          from: process.env.EMAIL_FROM || (process.env.EMAIL_USER ? `"Sistema PSMT" <${process.env.EMAIL_USER}>` : '"Sistema PSMT" <alertas@psmt.com>'),
-          to: toEmails,
-          subject: `⚠️ Alerta de Vencimiento - ${clubData.club_name}`,
-          html: htmlContent,
-        });
-        console.log(`Correo enviado con éxito a ${toEmails}. MessageId: ${info.messageId}`);
-        
-        sentCount++;
+        if (useResend && resend) {
+          const { data, error } = await resend.emails.send({
+            from: process.env.EMAIL_FROM || 'Sistema PSMT <onboarding@resend.dev>',
+            to: toEmails.split(',').map(e => e.trim()),
+            subject: `⚠️ Alerta de Vencimiento - ${clubData.club_name}`,
+            html: htmlContent,
+          });
 
-        if (!process.env.EMAIL_USER) {
-          const url = nodemailer.getTestMessageUrl(info);
-          if (url) previewUrls.push(url as string);
+          if (error) {
+            throw new Error(`Resend API Error: ${error.message}`);
+          }
+          console.log(`Correo enviado con éxito a ${toEmails} via Resend. ID: ${data?.id}`);
+          sentCount++;
+        } else {
+          const info = await transporter.sendMail({
+            from: process.env.EMAIL_FROM || (process.env.EMAIL_USER ? `"Sistema PSMT" <${process.env.EMAIL_USER}>` : '"Sistema PSMT" <alertas@psmt.com>'),
+            to: toEmails,
+            subject: `⚠️ Alerta de Vencimiento - ${clubData.club_name}`,
+            html: htmlContent,
+          });
+          console.log(`Correo enviado con éxito a ${toEmails} via SMTP. MessageId: ${info.messageId}`);
+          
+          sentCount++;
+
+          if (!process.env.EMAIL_USER) {
+            const url = nodemailer.getTestMessageUrl(info);
+            if (url) previewUrls.push(url as string);
+          }
         }
       } catch (sendErr: any) {
         console.error(`Error al enviar correo a ${toEmails}:`, sendErr);
@@ -243,7 +278,7 @@ export async function sendExpirationAlerts(isTest = false) {
     return { 
       success: true, 
       previewUrls, 
-      isRealEmail: !!process.env.EMAIL_USER 
+      isRealEmail: !!process.env.EMAIL_USER || useResend
     };
   } catch (error) {
     console.error('Error sending alerts:', error);
