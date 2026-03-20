@@ -27,6 +27,7 @@ export default function GestionUsuarios() {
         setUsers(usersData);
       } else {
         console.error('Error fetching users:', usersData);
+        alert(`Error al cargar usuarios: ${usersData.error || 'Error desconocido'}`);
         setUsers([]);
       }
       
@@ -34,6 +35,7 @@ export default function GestionUsuarios() {
         setClubs(clubsData);
       } else {
         console.error('Error fetching clubs:', clubsData);
+        alert(`Error al cargar clubes: ${clubsData.error || 'Error desconocido'}`);
         setClubs([]);
       }
     } catch (error) {

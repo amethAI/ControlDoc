@@ -594,7 +594,7 @@ router.get('/dashboard', async (req, res) => {
 
 // User management routes
 router.get('/users', isAdmin, async (req, res) => {
-  const { data: users, error } = await supabase.from('users').select('id, email, password_hash as password, name, role, club_id, is_active');
+  const { data: users, error } = await supabase.from('users').select('id, email, password:password_hash, name, role, club_id, is_active');
   if (error) return res.status(500).json({ error: error.message });
   res.json(users);
 });
