@@ -68,18 +68,36 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
       skipEmptyLines: true,
       complete: (results) => {
         const parsedRows = results.data.map((row: any) => {
+          // Normalize keys to ignore case, accents, and extra spaces
+          const normalizedRow: Record<string, string> = {};
+          Object.keys(row).forEach(key => {
+            if (key) {
+              const normalizedKey = key.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+              normalizedRow[normalizedKey] = row[key];
+            }
+          });
+
+          // Helper to find value by partial key match
+          const getValueByKeywords = (rowObj: Record<string, string>, keywords: string[]) => {
+            const foundKey = Object.keys(rowObj).find(k => keywords.some(kw => k.includes(kw)));
+            return foundKey ? rowObj[foundKey] : '';
+          };
+
           // Try to match club name from CSV to club_id
-          const clubName = row['Club'] || row['Sede'] || row['club'] || row['sede'] || '';
-          const matchedClub = clubs.find(c => 
-            c.name.toLowerCase().includes(clubName.toLowerCase()) || 
-            clubName.toLowerCase().includes(c.name.toLowerCase())
-          );
+          const clubName = getValueByKeywords(normalizedRow, ['club', 'sede', 'sucursal']);
+          let matchedClub;
+          if (clubName) {
+            matchedClub = clubs.find(c => 
+              c.name.toLowerCase().includes(clubName.toLowerCase()) || 
+              clubName.toLowerCase().includes(c.name.toLowerCase())
+            );
+          }
 
           return {
             id: Math.random().toString(36).substr(2, 9),
-            full_name: row['Nombre Completo'] || row['Nombre'] || row['nombre'] || '',
-            cedula: row['Cédula'] || row['Cedula'] || row['cedula'] || '',
-            position: row['Cargo'] || row['Posición'] || row['cargo'] || '',
+            full_name: getValueByKeywords(normalizedRow, ['nombre', 'empleado']),
+            cedula: getValueByKeywords(normalizedRow, ['cedula', 'identificacion', 'id', 'documento']),
+            position: getValueByKeywords(normalizedRow, ['cargo', 'posicion', 'puesto', 'rol']),
             club_id: clubId || matchedClub?.id || '',
             status: 'pending' as const
           };
@@ -288,28 +306,33 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
               </tbody>
             </table>
           </div>
-          <div className="mt-4 flex gap-3">
-            <button
-              onClick={addRow}
-              className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              Agregar otra fila
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              <Upload className="h-4 w-4 mr-2 text-slate-500" />
-              Importar CSV
-            </button>
-            <input 
-              type="file" 
-              accept=".csv" 
-              className="hidden" 
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-            />
+          <div className="mt-4 flex flex-col gap-3">
+            <div className="flex gap-3">
+              <button
+                onClick={addRow}
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Agregar otra fila
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                <Upload className="h-4 w-4 mr-2 text-slate-500" />
+                Importar CSV
+              </button>
+              <input 
+                type="file" 
+                accept=".csv" 
+                className="hidden" 
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              * Para importar correctamente, asegúrate de que tu archivo Excel tenga las columnas: <b>Nombre</b>, <b>Cédula</b>, <b>Cargo</b> y <b>Sede</b>.
+            </p>
           </div>
         </div>
 
