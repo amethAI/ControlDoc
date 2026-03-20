@@ -78,7 +78,7 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
         onClose();
       } else {
         const data = await res.json();
-        alert(data.error || 'Error al guardar usuario');
+        alert(data.details ? `Error: ${data.details}` : data.error || 'Error al guardar usuario');
       }
     } catch (error) {
       alert('Error de red');

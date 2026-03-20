@@ -68,11 +68,12 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
       skipEmptyLines: true,
       complete: (results) => {
         const parsedRows = results.data.map((row: any) => {
-          // Normalize keys to ignore case, accents, and extra spaces
+          // Normalize keys to ignore case, accents, and extra spaces/punctuation
           const normalizedRow: Record<string, string> = {};
           Object.keys(row).forEach(key => {
             if (key) {
-              const normalizedKey = key.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+              // Remove accents, then remove all non-alphanumeric characters to handle encoding artifacts
+              const normalizedKey = key.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
               normalizedRow[normalizedKey] = row[key];
             }
           });
@@ -96,8 +97,8 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
           return {
             id: Math.random().toString(36).substr(2, 9),
             full_name: getValueByKeywords(normalizedRow, ['nombre', 'empleado']),
-            cedula: getValueByKeywords(normalizedRow, ['cedula', 'identificacion', 'id', 'documento']),
-            position: getValueByKeywords(normalizedRow, ['cargo', 'posicion', 'puesto', 'rol']),
+            cedula: getValueByKeywords(normalizedRow, ['cedula', 'cdula', 'identificacion', 'identidad', 'documento', 'id']),
+            position: getValueByKeywords(normalizedRow, ['cargo', 'posicion', 'posicin', 'puesto', 'rol']),
             club_id: clubId || matchedClub?.id || '',
             status: 'pending' as const
           };

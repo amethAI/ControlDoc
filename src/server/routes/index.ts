@@ -246,7 +246,10 @@ router.get('/employees/:id', async (req, res) => {
 router.get('/document-types', async (req, res) => {
   const { data: types, error } = await supabase.from('document_types').select('*').eq('is_active', 1).order('sort_order');
   if (error) return res.status(500).json({ error: error.message });
-  res.json(types);
+  
+  // Filter out "Carta de ingreso" as requested
+  const filteredTypes = types?.filter(type => type.name !== 'Carta de ingreso') || [];
+  res.json(filteredTypes);
 });
 
 // Get employee documents
@@ -619,8 +622,9 @@ router.post('/users', isAdmin, async (req, res) => {
     );
     
     res.status(201).json(newUser);
-  } catch (error) {
-    res.status(500).json({ error: 'Error al crear usuario' });
+  } catch (error: any) {
+    console.error('Error creating user:', error);
+    res.status(500).json({ error: 'Error al crear usuario', details: error.message || error });
   }
 });
 
