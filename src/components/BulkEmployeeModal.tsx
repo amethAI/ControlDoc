@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { X, UserPlus, Trash2, Check, AlertCircle, Building2, Briefcase, CreditCard } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, UserPlus, Trash2, Check, AlertCircle, Building2, Briefcase, CreditCard, Upload } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../context/AuthContext';
+import Papa from 'papaparse';
 
 interface BulkEmployeeModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
   const [rows, setRows] = useState<NewEmployeeRow[]>([]);
   const [clubs, setClubs] = useState<{id: string, name: string}[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -55,6 +57,54 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
 
   const updateRow = (id: string, updates: Partial<NewEmployeeRow>) => {
     setRows(prev => prev.map(row => row.id === id ? { ...row, ...updates } : row));
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const parsedRows = results.data.map((row: any) => {
+          // Try to match club name from CSV to club_id
+          const clubName = row['Club'] || row['Sede'] || row['club'] || row['sede'] || '';
+          const matchedClub = clubs.find(c => 
+            c.name.toLowerCase().includes(clubName.toLowerCase()) || 
+            clubName.toLowerCase().includes(c.name.toLowerCase())
+          );
+
+          return {
+            id: Math.random().toString(36).substr(2, 9),
+            full_name: row['Nombre Completo'] || row['Nombre'] || row['nombre'] || '',
+            cedula: row['Cédula'] || row['Cedula'] || row['cedula'] || '',
+            position: row['Cargo'] || row['Posición'] || row['cargo'] || '',
+            club_id: clubId || matchedClub?.id || '',
+            status: 'pending' as const
+          };
+        });
+
+        if (parsedRows.length > 0) {
+          // Replace empty initial rows if they haven't been touched
+          const isInitialEmpty = rows.length === 3 && rows.every(r => !r.full_name && !r.cedula && !r.position);
+          if (isInitialEmpty) {
+            setRows(parsedRows);
+          } else {
+            setRows(prev => [...prev, ...parsedRows]);
+          }
+        }
+        
+        // Reset file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      },
+      error: (error) => {
+        console.error('Error parsing CSV:', error);
+        alert('Hubo un error al leer el archivo CSV.');
+      }
+    });
   };
 
   const handleSaveAll = async () => {
@@ -238,13 +288,29 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
               </tbody>
             </table>
           </div>
-          <button
-            onClick={addRow}
-            className="mt-4 inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-          >
-            <UserPlus className="h-4 w-4 mr-2" />
-            Agregar otra fila
-          </button>
+          <div className="mt-4 flex gap-3">
+            <button
+              onClick={addRow}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Agregar otra fila
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              <Upload className="h-4 w-4 mr-2 text-slate-500" />
+              Importar CSV
+            </button>
+            <input 
+              type="file" 
+              accept=".csv" 
+              className="hidden" 
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+            />
+          </div>
         </div>
 
         <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">

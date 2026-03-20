@@ -13,6 +13,8 @@ interface Employee {
   position: string;
   status: string;
   club_id: string;
+  termination_reason?: string;
+  termination_date?: string;
 }
 
 export default function Employees() {
@@ -141,9 +143,15 @@ export default function Employees() {
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                 Estado
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Docs
-              </th>
+              {statusFilter === 'inactivo' ? (
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Motivo de Baja
+                </th>
+              ) : (
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Docs
+                </th>
+              )}
               <th scope="col" className="relative px-6 py-3">
                 <span className="sr-only">Acciones</span>
               </th>
@@ -176,14 +184,20 @@ export default function Employees() {
                       {person.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                    {/* Mock document status indicators */}
-                    <div className="flex gap-1">
-                      <div className="w-3 h-3 rounded-full bg-green-500" title="Vigente"></div>
-                      <div className="w-3 h-3 rounded-full bg-amber-500" title="Próximo a vencer"></div>
-                      <div className="w-3 h-3 rounded-full bg-orange-500" title="Faltante"></div>
-                    </div>
-                  </td>
+                  {statusFilter === 'inactivo' ? (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                      {person.termination_reason || 'No especificado'}
+                    </td>
+                  ) : (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                      {/* Mock document status indicators */}
+                      <div className="flex gap-1">
+                        <div className="w-3 h-3 rounded-full bg-green-500" title="Vigente"></div>
+                        <div className="w-3 h-3 rounded-full bg-amber-500" title="Próximo a vencer"></div>
+                        <div className="w-3 h-3 rounded-full bg-orange-500" title="Faltante"></div>
+                      </div>
+                    </td>
+                  )}
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <Link to={`/empleados/${person.id}`} className="text-blue-600 hover:text-blue-900">
                       Ver Perfil
