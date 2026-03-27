@@ -956,6 +956,57 @@ router.post('/attendance-requests', async (req, res) => {
   }
 });
 
+// Get expiring documents
+router.get('/documents/expirations', canViewData, async (req, res) => {
+  const { club_id: queryClubId, status } = req.query;
+  const user = (req as any).user;
+  
+  // If user is Supervisor Interno, they can only see their club
+  const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
+  
+  try {
+    let query = supabase
+      .from('employee_documents')
+      .select(`
+        id,
+        file_name,
+        file_url,
+        expiry_date,
+        status,
+        document_types ( id, name ),
+        employees!inner ( id, full_name, cedula, position, status, club_id, clubs ( name ) )
+      `)
+      .eq('is_current', 1)
+      .not('expiry_date', 'is', null)
+      .eq('employees.status', 'activo');
+
+    if (club_id) {
+      query = query.eq('employees.club_id', club_id);
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0];
+
+    if (status === 'vencido') {
+      query = query.lt('expiry_date', todayStr);
+    } else if (status === 'proximo_vencer') {
+      query = query.gte('expiry_date', todayStr).lte('expiry_date', thirtyDaysStr);
+    } else if (status === 'vigente') {
+      query = query.gt('expiry_date', thirtyDaysStr);
+    }
+
+    const { data, error } = await query.order('expiry_date', { ascending: true });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching expiring documents:', error);
+    res.status(500).json({ error: 'Error al obtener documentos por vencer' });
+  }
+});
+
 // Get dashboard stats
 router.get('/dashboard', canViewData, async (req, res) => {
   const { club_id: queryClubId } = req.query;

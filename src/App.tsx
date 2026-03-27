@@ -20,6 +20,7 @@ import Configuracion from './pages/Configuracion';
 import GestionUsuarios from './pages/GestionUsuarios';
 import DestinatariosAlertas from './pages/DestinatariosAlertas';
 import LogAuditoria from './pages/LogAuditoria';
+import Expirations from './pages/Expirations';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
@@ -48,6 +49,7 @@ function AppRoutes() {
         <Route path="clubes/:id" element={<ClubDetail />} />
         <Route path="asistencia" element={<Attendance />} />
         <Route path="rendimiento" element={<RendimientoVentas />} />
+        <Route path="vencimientos" element={<Expirations />} />
         <Route path="configuracion" element={<Configuracion />} />
         <Route path="configuracion/usuarios" element={<GestionUsuarios />} />
         <Route path="configuracion/alertas" element={<DestinatariosAlertas />} />

@@ -10,7 +10,8 @@ import {
   Shield,
   Building2,
   CalendarCheck,
-  TrendingUp
+  TrendingUp,
+  CalendarClock
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -27,6 +28,7 @@ export default function Layout() {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Empleados', href: '/empleados', icon: Users },
+    { name: 'Vencimientos', href: '/vencimientos', icon: CalendarClock },
     { name: 'Asistencia', href: '/asistencia', icon: CalendarCheck },
     ...((user?.role === 'Administrador' || user?.role === 'Supervisor Interno') ? [
       { name: 'Rendimiento', href: '/rendimiento', icon: TrendingUp }
