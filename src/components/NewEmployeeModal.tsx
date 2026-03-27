@@ -18,6 +18,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
     position: '',
     contract_type: 'indefinido',
     contract_start: new Date().toISOString().split('T')[0],
+    contract_end: '',
     club_id: clubId || ''
   });
   const [clubs, setClubs] = useState<{id: string, name: string}[]>([]);
@@ -49,6 +50,11 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
     setLoading(true);
 
     try {
+      const payload = {
+        ...formData,
+        contract_end: formData.contract_end || null
+      };
+      
       const res = await apiFetch('/api/employees', {
         method: 'POST',
         headers: { 
@@ -57,7 +63,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
           'x-user-id': user?.id || '',
           'x-user-name': user?.name || ''
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       if (res.ok) {
@@ -69,6 +75,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
           position: '',
           contract_type: 'indefinido',
           contract_start: new Date().toISOString().split('T')[0],
+          contract_end: '',
           club_id: clubId || ''
         });
       } else {
@@ -161,11 +168,29 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
                   <label className="block text-sm font-medium text-slate-700">Tipo de Contrato</label>
                   <select
                     value={formData.contract_type}
-                    onChange={e => setFormData({...formData, contract_type: e.target.value})}
+                    onChange={e => {
+                      const newType = e.target.value;
+                      let newEnd = formData.contract_end;
+                      
+                      if (newType === '1 año' && formData.contract_start) {
+                        const start = new Date(formData.contract_start);
+                        start.setFullYear(start.getFullYear() + 1);
+                        newEnd = start.toISOString().split('T')[0];
+                      } else if (newType === 'indefinido') {
+                        newEnd = '';
+                      }
+                      
+                      setFormData({
+                        ...formData, 
+                        contract_type: newType,
+                        contract_end: newEnd
+                      });
+                    }}
                     className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
                   >
                     <option value="indefinido">Indefinido</option>
                     <option value="definido">Definido</option>
+                    <option value="1 año">Definido (1 año)</option>
                     <option value="servicios">Servicios Profesionales</option>
                   </select>
                 </div>
@@ -175,10 +200,39 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
                     type="date"
                     required
                     value={formData.contract_start}
-                    onChange={e => setFormData({...formData, contract_start: e.target.value})}
+                    onChange={e => {
+                      const newStart = e.target.value;
+                      let newEnd = formData.contract_end;
+                      
+                      if (formData.contract_type === '1 año' && newStart) {
+                        const start = new Date(newStart);
+                        start.setFullYear(start.getFullYear() + 1);
+                        newEnd = start.toISOString().split('T')[0];
+                      }
+                      
+                      setFormData({
+                        ...formData, 
+                        contract_start: newStart,
+                        contract_end: newEnd
+                      });
+                    }}
                     className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
                   />
                 </div>
+
+                {formData.contract_type !== 'indefinido' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Fecha de Terminación de Contrato</label>
+                    <input
+                      type="date"
+                      required={formData.contract_type !== 'indefinido'}
+                      value={formData.contract_end}
+                      onChange={e => setFormData({...formData, contract_end: e.target.value})}
+                      disabled={formData.contract_type === '1 año'}
+                      className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm disabled:bg-slate-100 disabled:text-slate-500"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">

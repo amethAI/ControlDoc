@@ -69,6 +69,15 @@ export default function Expirations() {
     return matchesSearch;
   });
 
+  const groupedEmployees = filteredEmployees.reduce((acc, emp) => {
+    const clubName = emp.club_name || 'Sin Club';
+    if (!acc[clubName]) {
+      acc[clubName] = [];
+    }
+    acc[clubName].push(emp);
+    return acc;
+  }, {} as Record<string, ChecklistEmployee[]>);
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -163,29 +172,8 @@ export default function Expirations() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-center text-xs whitespace-nowrap">
-            <thead className="bg-red-600 text-white font-bold">
-              <tr>
-                <th colSpan={12} className="px-4 py-3 text-lg tracking-wider uppercase">
-                  CHECK LIST {clubFilter === 'all' ? 'GLOBAL' : clubs.find(c => c.id === clubFilter)?.name}
-                </th>
-              </tr>
-              <tr className="bg-slate-200 text-slate-800 border-b border-slate-300">
-                <th className="px-3 py-3 border-r border-slate-300">No.</th>
-                <th className="px-4 py-3 border-r border-slate-300 text-left">NOMBRE</th>
-                <th className="px-4 py-3 border-r border-slate-300">CÉDULA</th>
-                <th className="px-4 py-3 border-r border-slate-300">CARTA DE<br/>INGRESO</th>
-                <th className="px-4 py-3 border-r border-slate-300">CARNET<br/>VERDE</th>
-                <th className="px-4 py-3 border-r border-slate-300">CARNET<br/>BLANCO</th>
-                <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>AVISO CSS</th>
-                <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>INICIO DE<br/>CONTRATO</th>
-                <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACION DE<br/>PERIODO<br/>PROBATORIO</th>
-                <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACIÓN DE<br/>CONTRATO</th>
-                <th className="px-4 py-3 border-r border-slate-300">TIPO DE<br/>CONTRATOS</th>
-                <th className="px-4 py-3">CANTIDAD DE<br/>CONTRATOS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
-              {loading ? (
+            {loading ? (
+              <tbody>
                 <tr>
                   <td colSpan={12} className="px-6 py-12 text-center">
                     <div className="flex justify-center items-center">
@@ -193,62 +181,91 @@ export default function Expirations() {
                     </div>
                   </td>
                 </tr>
-              ) : filteredEmployees.length === 0 ? (
+              </tbody>
+            ) : filteredEmployees.length === 0 ? (
+              <tbody>
                 <tr>
                   <td colSpan={12} className="px-6 py-12 text-center text-slate-500">
                     <p className="text-lg font-medium text-slate-900">No hay datos</p>
                     <p>No se encontraron empleados con los filtros seleccionados.</p>
                   </td>
                 </tr>
-              ) : (
-                filteredEmployees.map((emp, index) => (
-                  <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-3 py-2 border-r border-slate-200 font-medium">{index + 1}</td>
-                    <td className="px-4 py-2 border-r border-slate-200 text-left font-bold text-slate-800">
-                      <a href={`/employees/${emp.id}`} className="hover:text-blue-600 hover:underline">
-                        {emp.full_name}
-                      </a>
-                    </td>
-                    <td className="px-4 py-2 border-r border-slate-200 font-medium">{emp.cedula}</td>
-                    <td className="px-4 py-2 border-r border-slate-200 font-bold">
-                      {emp.documents.carta_ingreso.exists ? (
-                        <a href={emp.documents.carta_ingreso.file_url || '#'} target="_blank" rel="noopener noreferrer" className="text-slate-800 hover:text-blue-600">SI</a>
-                      ) : (
-                        <span className="text-slate-400">NO</span>
-                      )}
-                    </td>
-                    <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.carnet_verde?.expiry_date || null)}`}>
-                      {emp.documents.carnet_verde ? (
-                        <a href={emp.documents.carnet_verde.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                          {formatDate(emp.documents.carnet_verde.expiry_date)}
-                        </a>
-                      ) : ''}
-                    </td>
-                    <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.carnet_blanco?.expiry_date || null)}`}>
-                      {emp.documents.carnet_blanco ? (
-                        <a href={emp.documents.carnet_blanco.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                          {formatDate(emp.documents.carnet_blanco.expiry_date)}
-                        </a>
-                      ) : ''}
-                    </td>
-                    <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.aviso_css?.expiry_date || null)}`}>
-                      {emp.documents.aviso_css ? (
-                        <a href={emp.documents.aviso_css.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                          {formatDate(emp.documents.aviso_css.expiry_date)}
-                        </a>
-                      ) : ''}
-                    </td>
-                    <td className="px-4 py-2 border-r border-slate-200">{formatDate(emp.contract_start)}</td>
-                    <td className="px-4 py-2 border-r border-slate-200">{formatDate(emp.probatorio_end)}</td>
-                    <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.contract_end)}`}>
-                      {formatDate(emp.contract_end)}
-                    </td>
-                    <td className="px-4 py-2 border-r border-slate-200 font-medium">{emp.contract_type}</td>
-                    <td className="px-4 py-2 font-medium">{emp.contratos_count}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
+              </tbody>
+            ) : (
+              Object.entries(groupedEmployees).map(([clubName, employeesInClub]) => (
+                <React.Fragment key={clubName}>
+                  <thead className="bg-red-600 text-white font-bold">
+                    <tr>
+                      <th colSpan={12} className="px-4 py-3 text-lg tracking-wider uppercase">
+                        CHECK LIST {clubName}
+                      </th>
+                    </tr>
+                    <tr className="bg-slate-200 text-slate-800 border-b border-slate-300">
+                      <th className="px-3 py-3 border-r border-slate-300">No.</th>
+                      <th className="px-4 py-3 border-r border-slate-300 text-left">NOMBRE</th>
+                      <th className="px-4 py-3 border-r border-slate-300">CÉDULA</th>
+                      <th className="px-4 py-3 border-r border-slate-300">CARTA DE<br/>INGRESO</th>
+                      <th className="px-4 py-3 border-r border-slate-300">CARNET<br/>VERDE</th>
+                      <th className="px-4 py-3 border-r border-slate-300">CARNET<br/>BLANCO</th>
+                      <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>AVISO CSS</th>
+                      <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>INICIO DE<br/>CONTRATO</th>
+                      <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACION DE<br/>PERIODO<br/>PROBATORIO</th>
+                      <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACIÓN DE<br/>CONTRATO</th>
+                      <th className="px-4 py-3 border-r border-slate-300">TIPO DE<br/>CONTRATOS</th>
+                      <th className="px-4 py-3">CANTIDAD DE<br/>CONTRATOS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {employeesInClub.map((emp, index) => (
+                      <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-3 py-2 border-r border-slate-200 font-medium">{index + 1}</td>
+                        <td className="px-4 py-2 border-r border-slate-200 text-left font-bold text-slate-800">
+                          <a href={`/employees/${emp.id}`} className="hover:text-blue-600 hover:underline">
+                            {emp.full_name}
+                          </a>
+                        </td>
+                        <td className="px-4 py-2 border-r border-slate-200 font-medium">{emp.cedula}</td>
+                        <td className="px-4 py-2 border-r border-slate-200 font-bold">
+                          {emp.documents.carta_ingreso.exists ? (
+                            <a href={emp.documents.carta_ingreso.file_url || '#'} target="_blank" rel="noopener noreferrer" className="text-slate-800 hover:text-blue-600">SI</a>
+                          ) : (
+                            <span className="text-slate-400">NO</span>
+                          )}
+                        </td>
+                        <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.carnet_verde?.expiry_date || null)}`}>
+                          {emp.documents.carnet_verde ? (
+                            <a href={emp.documents.carnet_verde.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                              {formatDate(emp.documents.carnet_verde.expiry_date)}
+                            </a>
+                          ) : ''}
+                        </td>
+                        <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.carnet_blanco?.expiry_date || null)}`}>
+                          {emp.documents.carnet_blanco ? (
+                            <a href={emp.documents.carnet_blanco.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                              {formatDate(emp.documents.carnet_blanco.expiry_date)}
+                            </a>
+                          ) : ''}
+                        </td>
+                        <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.aviso_css?.expiry_date || null)}`}>
+                          {emp.documents.aviso_css ? (
+                            <a href={emp.documents.aviso_css.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                              {formatDate(emp.documents.aviso_css.expiry_date)}
+                            </a>
+                          ) : ''}
+                        </td>
+                        <td className="px-4 py-2 border-r border-slate-200">{formatDate(emp.contract_start)}</td>
+                        <td className="px-4 py-2 border-r border-slate-200">{formatDate(emp.probatorio_end)}</td>
+                        <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.contract_end)}`}>
+                          {formatDate(emp.contract_end)}
+                        </td>
+                        <td className="px-4 py-2 border-r border-slate-200 font-medium">{emp.contract_type}</td>
+                        <td className="px-4 py-2 font-medium">{emp.contratos_count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </React.Fragment>
+              ))
+            )}
           </table>
         </div>
       </div>

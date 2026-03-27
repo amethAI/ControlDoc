@@ -401,7 +401,7 @@ router.get('/employees', canViewData, async (req, res) => {
 
 // Create employee
 router.post('/employees', canModifyData, async (req, res) => {
-  const { full_name, cedula, position, contract_type, contract_start, club_id } = req.body;
+  const { full_name, cedula, position, contract_type, contract_start, contract_end, club_id } = req.body;
   const user = (req as any).user;
 
   // Restriction: Supervisor Interno can only create for their club
@@ -414,7 +414,7 @@ router.post('/employees', canModifyData, async (req, res) => {
     const { data: newEmployee, error } = await supabase
       .from('employees')
       .insert([{ 
-        id, full_name, cedula, position, contract_type, contract_start, club_id, status: 'activo' 
+        id, full_name, cedula, position, contract_type, contract_start, contract_end, club_id, status: 'activo' 
       }])
       .select()
       .single();
@@ -684,8 +684,8 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
     // Get all active employees to match by name
     const { data: employees, error: empError } = await supabase
       .from('employees')
-      .select('id, full_name')
-      .eq('status', 'Activo');
+      .select('id, full_name, contract_start')
+      .eq('status', 'activo');
 
     if (empError) throw empError;
     
@@ -738,10 +738,17 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
           contract_type: record.tipoContrato
         };
         
-        if (record.tipoContrato === 'INDEFINIDA' || record.tipoContrato === 'INDEFINIDO') {
+        if (record.tipoContrato.toUpperCase() === 'INDEFINIDA' || record.tipoContrato.toUpperCase() === 'INDEFINIDO') {
           updateData.contract_end = null;
         } else if (record.fechaTerminacionContrato) {
           updateData.contract_end = record.fechaTerminacionContrato;
+        } else if (record.tipoContrato.toUpperCase() === '1 AÑO' || record.tipoContrato.toUpperCase() === '1 ANO') {
+          // Auto-calculate 1 year from contract_start if not provided
+          if (employee.contract_start) {
+            const start = new Date(employee.contract_start);
+            start.setFullYear(start.getFullYear() + 1);
+            updateData.contract_end = start.toISOString().split('T')[0];
+          }
         }
 
         await supabase

@@ -135,7 +135,7 @@ export default function UploadDocumentModal({
         const isContractTiedDoc = ['Afiliación CSS', 'Contrato firmado', 'Solicitud de entrada al club', 'Aviso de entrada'].some(name => item.typeName.includes(name));
         
         if (isContractTiedDoc) {
-          if (employeeContractType === 'INDEFINIDA' || employeeContractType === 'INDEFINIDO') {
+          if (employeeContractType?.toUpperCase() === 'INDEFINIDA' || employeeContractType?.toUpperCase() === 'INDEFINIDO') {
             // Indefinite contract, no expiry date
           } else if (employeeContractEnd) {
             formData.append('expiry_date', employeeContractEnd);

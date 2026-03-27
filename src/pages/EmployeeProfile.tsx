@@ -332,7 +332,7 @@ export default function EmployeeProfile() {
               status = doc?.status;
               
               if (isContractTiedDoc && doc) {
-                if (employee?.contract_type === 'INDEFINIDA' || employee?.contract_type === 'INDEFINIDO') {
+                if (employee?.contract_type?.toUpperCase() === 'INDEFINIDA' || employee?.contract_type?.toUpperCase() === 'INDEFINIDO') {
                   status = 'vigente';
                   expiryDisplay = (
                     <span className="flex-shrink-0 text-xs font-medium text-slate-500">
