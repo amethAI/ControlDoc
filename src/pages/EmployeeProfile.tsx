@@ -309,6 +309,7 @@ export default function EmployeeProfile() {
             let doc;
             let status;
             let expiryDisplay = null;
+            const isContractTiedDoc = ['Afiliación CSS', 'Contrato firmado', 'Solicitud de entrada al club', 'Aviso de entrada'].some(name => type.name.includes(name));
 
             if (type.id === 'doc-personal-combined') {
               const combinedDocs = documents.filter(d => ['doc-3', 'doc-4', 'doc-5'].includes(d.document_type_id));
@@ -329,8 +330,6 @@ export default function EmployeeProfile() {
             } else {
               doc = documents.find(d => d.document_type_id === type.id);
               status = doc?.status;
-              
-              const isContractTiedDoc = ['Afiliación CSS', 'Contrato firmado', 'Solicitud de entrada al club', 'Aviso de entrada'].some(name => type.name.includes(name));
               
               if (isContractTiedDoc && doc) {
                 if (employee?.contract_type === 'INDEFINIDA' || employee?.contract_type === 'INDEFINIDO') {
