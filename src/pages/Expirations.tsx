@@ -1,42 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Filter, Search, AlertTriangle, Clock, CheckCircle, FileText, Download } from 'lucide-react';
+import { Filter, Search, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
+import * as XLSX from 'xlsx';
 
-interface ExpirationDoc {
+interface ChecklistEmployee {
   id: string;
-  file_name: string;
-  file_url: string;
-  expiry_date: string;
-  status: string;
-  document_types: {
-    id: string;
-    name: string;
-  };
-  employees: {
-    id: string;
-    full_name: string;
-    cedula: string;
-    position: string;
-    club_id: string;
-    clubs: {
-      name: string;
-    };
+  full_name: string;
+  cedula: string;
+  club_name: string;
+  contract_start: string | null;
+  contract_end: string | null;
+  contract_type: string;
+  probatorio_end: string | null;
+  contratos_count: number;
+  documents: {
+    carta_ingreso: { exists: boolean; file_url?: string };
+    carnet_verde: { expiry_date: string | null; file_url: string } | null;
+    carnet_blanco: { expiry_date: string | null; file_url: string } | null;
+    aviso_css: { expiry_date: string | null; file_url: string } | null;
   };
 }
 
 export default function Expirations() {
   const { user } = useAuth();
-  const [documents, setDocuments] = useState<ExpirationDoc[]>([]);
+  const [employees, setEmployees] = useState<ChecklistEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [clubFilter, setClubFilter] = useState<string>('all');
   const [clubs, setClubs] = useState<{id: string, name: string}[]>([]);
 
   useEffect(() => {
     fetchData();
-  }, [statusFilter, clubFilter]);
+  }, [clubFilter]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -50,77 +46,96 @@ export default function Expirations() {
         }
       }
 
-      // Fetch expirations
-      let url = '/api/documents/expirations?';
-      if (statusFilter !== 'all') url += `status=${statusFilter}&`;
+      // Fetch checklist
+      let url = '/api/reports/checklist?';
       if (clubFilter !== 'all') url += `club_id=${clubFilter}&`;
 
       const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
-        setDocuments(data);
+        setEmployees(data);
       }
     } catch (error) {
-      console.error('Error fetching expirations:', error);
+      console.error('Error fetching checklist:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredDocuments = documents.filter(doc => {
+  const filteredEmployees = employees.filter(emp => {
     const matchesSearch = 
-      doc.employees.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.employees.cedula.includes(searchTerm) ||
-      doc.document_types.name.toLowerCase().includes(searchTerm.toLowerCase());
-    
+      emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.cedula.includes(searchTerm);
     return matchesSearch;
   });
 
-  const getStatusBadge = (expiryDate: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    // Format as DD-MMM-YY (e.g., 30-Jul-28)
+    const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: '2-digit' };
+    return date.toLocaleDateString('es-ES', options).replace(/ /g, '-').replace('.', '');
+  };
+
+  const getCellColorClass = (expiryDate: string | null) => {
+    if (!expiryDate) return '';
+    
     const end = new Date(expiryDate);
     const now = new Date();
     const diffDays = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     
-    if (diffDays < 0) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-          <AlertTriangle className="h-3 w-3" />
-          Vencido ({Math.abs(diffDays)} días)
-        </span>
-      );
-    } else if (diffDays <= 30) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
-          <Clock className="h-3 w-3" />
-          Vence en {diffDays} días
-        </span>
-      );
-    } else {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
-          <CheckCircle className="h-3 w-3" />
-          Vigente
-        </span>
-      );
-    }
+    if (diffDays < 0) return 'bg-red-100 text-red-800 font-medium';
+    if (diffDays <= 30) return 'bg-amber-100 text-amber-800 font-medium';
+    return 'bg-emerald-100 text-emerald-800 font-medium';
+  };
+
+  const exportToExcel = () => {
+    const dataToExport = filteredEmployees.map((emp, index) => ({
+      'No.': index + 1,
+      'NOMBRE': emp.full_name,
+      'CÉDULA': emp.cedula,
+      'CARTA DE INGRESO': emp.documents.carta_ingreso.exists ? 'SI' : 'NO',
+      'CARNET VERDE': formatDate(emp.documents.carnet_verde?.expiry_date || null),
+      'CARNET BLANCO': formatDate(emp.documents.carnet_blanco?.expiry_date || null),
+      'FECHA DE AVISO CSS': formatDate(emp.documents.aviso_css?.expiry_date || null),
+      'FECHA DE INICIO DE CONTRATO': formatDate(emp.contract_start),
+      'FECHA DE TERMINACION DE PERIODO PROBATORIO': formatDate(emp.probatorio_end),
+      'FECHA DE TERMINACIÓN DE CONTRATO': formatDate(emp.contract_end),
+      'TIPO DE CONTRATOS': emp.contract_type,
+      'CANTIDAD DE CONTRATOS': emp.contratos_count
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Checklist');
+    
+    const clubName = clubFilter === 'all' ? 'Todos' : clubs.find(c => c.id === clubFilter)?.name || '';
+    XLSX.writeFile(wb, `Checklist_${clubName}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-[1600px] mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Control de Vencimientos</h1>
-          <p className="text-slate-500 mt-1">Monitorea y gestiona las fechas de expiración de documentos y contratos.</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Check List de Empleados</h1>
+          <p className="text-slate-500 mt-1">Vista consolidada de documentos y fechas de vencimiento.</p>
         </div>
+        <button
+          onClick={exportToExcel}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium shadow-sm"
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          Exportar a Excel
+        </button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
+          <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Buscar por empleado, cédula o documento..."
+              placeholder="Buscar por empleado o cédula..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
@@ -128,105 +143,108 @@ export default function Expirations() {
           </div>
           
           <div className="flex gap-2">
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none appearance-none cursor-pointer"
-              >
-                <option value="all">Todos los estados</option>
-                <option value="vencido">Vencidos</option>
-                <option value="proximo_vencer">Próximos a vencer (30 días)</option>
-                <option value="vigente">Vigentes</option>
-              </select>
-            </div>
-
             {user?.role !== 'Supervisor Interno' && (
-              <select
-                value={clubFilter}
-                onChange={(e) => setClubFilter(e.target.value)}
-                className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer"
-              >
-                <option value="all">Todos los clubes</option>
-                {clubs.map(club => (
-                  <option key={club.id} value={club.id}>{club.name}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <select
+                  value={clubFilter}
+                  onChange={(e) => setClubFilter(e.target.value)}
+                  className="pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer appearance-none"
+                >
+                  <option value="all">Todos los clubes</option>
+                  {clubs.map(club => (
+                    <option key={club.id} value={club.id}>{club.name}</option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-medium">
+          <table className="w-full text-center text-xs whitespace-nowrap">
+            <thead className="bg-red-600 text-white font-bold">
               <tr>
-                <th className="px-6 py-4">Empleado</th>
-                <th className="px-6 py-4">Club</th>
-                <th className="px-6 py-4">Documento</th>
-                <th className="px-6 py-4">Fecha Vencimiento</th>
-                <th className="px-6 py-4">Estado</th>
-                <th className="px-6 py-4 text-right">Acciones</th>
+                <th colSpan={12} className="px-4 py-3 text-lg tracking-wider uppercase">
+                  CHECK LIST {clubFilter === 'all' ? 'GLOBAL' : clubs.find(c => c.id === clubFilter)?.name}
+                </th>
+              </tr>
+              <tr className="bg-slate-200 text-slate-800 border-b border-slate-300">
+                <th className="px-3 py-3 border-r border-slate-300">No.</th>
+                <th className="px-4 py-3 border-r border-slate-300 text-left">NOMBRE</th>
+                <th className="px-4 py-3 border-r border-slate-300">CÉDULA</th>
+                <th className="px-4 py-3 border-r border-slate-300">CARTA DE<br/>INGRESO</th>
+                <th className="px-4 py-3 border-r border-slate-300">CARNET<br/>VERDE</th>
+                <th className="px-4 py-3 border-r border-slate-300">CARNET<br/>BLANCO</th>
+                <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>AVISO CSS</th>
+                <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>INICIO DE<br/>CONTRATO</th>
+                <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACION DE<br/>PERIODO<br/>PROBATORIO</th>
+                <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACIÓN DE<br/>CONTRATO</th>
+                <th className="px-4 py-3 border-r border-slate-300">TIPO DE<br/>CONTRATOS</th>
+                <th className="px-4 py-3">CANTIDAD DE<br/>CONTRATOS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-200 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
+                  <td colSpan={12} className="px-6 py-12 text-center">
                     <div className="flex justify-center items-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                     </div>
                   </td>
                 </tr>
-              ) : filteredDocuments.length === 0 ? (
+              ) : filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                    <Calendar className="h-12 w-12 mx-auto text-slate-300 mb-3" />
-                    <p className="text-lg font-medium text-slate-900">No hay documentos</p>
-                    <p>No se encontraron documentos con los filtros seleccionados.</p>
+                  <td colSpan={12} className="px-6 py-12 text-center text-slate-500">
+                    <p className="text-lg font-medium text-slate-900">No hay datos</p>
+                    <p>No se encontraron empleados con los filtros seleccionados.</p>
                   </td>
                 </tr>
               ) : (
-                filteredDocuments.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-slate-900">{doc.employees.full_name}</div>
-                      <div className="text-xs text-slate-500">{doc.employees.cedula}</div>
+                filteredEmployees.map((emp, index) => (
+                  <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-3 py-2 border-r border-slate-200 font-medium">{index + 1}</td>
+                    <td className="px-4 py-2 border-r border-slate-200 text-left font-bold text-slate-800">
+                      <a href={`/employees/${emp.id}`} className="hover:text-blue-600 hover:underline">
+                        {emp.full_name}
+                      </a>
                     </td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {doc.employees.clubs?.name || 'N/A'}
+                    <td className="px-4 py-2 border-r border-slate-200 font-medium">{emp.cedula}</td>
+                    <td className="px-4 py-2 border-r border-slate-200 font-bold">
+                      {emp.documents.carta_ingreso.exists ? (
+                        <a href={emp.documents.carta_ingreso.file_url || '#'} target="_blank" rel="noopener noreferrer" className="text-slate-800 hover:text-blue-600">SI</a>
+                      ) : (
+                        <span className="text-slate-400">NO</span>
+                      )}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-slate-400" />
-                        <span className="font-medium text-slate-700">{doc.document_types.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 font-medium text-slate-700">
-                      {new Date(doc.expiry_date).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4">
-                      {getStatusBadge(doc.expiry_date)}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <a
-                          href={doc.file_url || '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Ver documento"
-                        >
-                          <Download className="h-4 w-4" />
+                    <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.carnet_verde?.expiry_date || null)}`}>
+                      {emp.documents.carnet_verde ? (
+                        <a href={emp.documents.carnet_verde.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                          {formatDate(emp.documents.carnet_verde.expiry_date)}
                         </a>
-                        <a
-                          href={`/employees/${doc.employees.id}`}
-                          className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
-                        >
-                          Ver Perfil
-                        </a>
-                      </div>
+                      ) : ''}
                     </td>
+                    <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.carnet_blanco?.expiry_date || null)}`}>
+                      {emp.documents.carnet_blanco ? (
+                        <a href={emp.documents.carnet_blanco.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                          {formatDate(emp.documents.carnet_blanco.expiry_date)}
+                        </a>
+                      ) : ''}
+                    </td>
+                    <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.aviso_css?.expiry_date || null)}`}>
+                      {emp.documents.aviso_css ? (
+                        <a href={emp.documents.aviso_css.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                          {formatDate(emp.documents.aviso_css.expiry_date)}
+                        </a>
+                      ) : ''}
+                    </td>
+                    <td className="px-4 py-2 border-r border-slate-200">{formatDate(emp.contract_start)}</td>
+                    <td className="px-4 py-2 border-r border-slate-200">{formatDate(emp.probatorio_end)}</td>
+                    <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.contract_end)}`}>
+                      {formatDate(emp.contract_end)}
+                    </td>
+                    <td className="px-4 py-2 border-r border-slate-200 font-medium">{emp.contract_type}</td>
+                    <td className="px-4 py-2 font-medium">{emp.contratos_count}</td>
                   </tr>
                 ))
               )}

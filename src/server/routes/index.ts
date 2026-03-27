@@ -1007,6 +1007,88 @@ router.get('/documents/expirations', canViewData, async (req, res) => {
   }
 });
 
+// Get checklist report
+router.get('/reports/checklist', canViewData, async (req, res) => {
+  const { club_id: queryClubId } = req.query;
+  const user = (req as any).user;
+  
+  const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
+  
+  try {
+    let query = supabase
+      .from('employees')
+      .select(`
+        id,
+        full_name,
+        cedula,
+        contract_start,
+        contract_end,
+        contract_type,
+        club_id,
+        clubs ( name ),
+        employee_documents (
+          id,
+          file_url,
+          expiry_date,
+          is_current,
+          document_types ( id, name )
+        )
+      `)
+      .eq('status', 'activo');
+
+    if (club_id && club_id !== 'all') {
+      query = query.eq('club_id', club_id);
+    }
+
+    const { data: employees, error } = await query.order('full_name', { ascending: true });
+
+    if (error) throw error;
+
+    const checklist = employees.map(emp => {
+      const docs = emp.employee_documents?.filter(d => d.is_current === 1) || [];
+      
+      const getDoc = (nameIncludes: string) => docs.find(d => (d.document_types as any)?.name.toLowerCase().includes(nameIncludes.toLowerCase()));
+      
+      const cartaIngreso = getDoc('Carta de ingreso');
+      const carnetVerde = getDoc('Carnet verde');
+      const carnetBlanco = getDoc('Carnet blanco');
+      const avisoCss = getDoc('Aviso') || getDoc('Afiliación CSS');
+      
+      const contratosCount = docs.filter(d => (d.document_types as any)?.name.toLowerCase().includes('contrato')).length;
+
+      let probatorioEnd = null;
+      if (emp.contract_start) {
+        const start = new Date(emp.contract_start);
+        start.setMonth(start.getMonth() + 3);
+        probatorioEnd = start.toISOString().split('T')[0];
+      }
+
+      return {
+        id: emp.id,
+        full_name: emp.full_name,
+        cedula: emp.cedula,
+        club_name: (emp.clubs as any)?.name || 'N/A',
+        contract_start: emp.contract_start,
+        contract_end: emp.contract_end,
+        contract_type: emp.contract_type,
+        probatorio_end: probatorioEnd,
+        contratos_count: contratosCount,
+        documents: {
+          carta_ingreso: cartaIngreso ? { exists: true, file_url: cartaIngreso.file_url } : { exists: false },
+          carnet_verde: carnetVerde ? { expiry_date: carnetVerde.expiry_date, file_url: carnetVerde.file_url } : null,
+          carnet_blanco: carnetBlanco ? { expiry_date: carnetBlanco.expiry_date, file_url: carnetBlanco.file_url } : null,
+          aviso_css: avisoCss ? { expiry_date: avisoCss.expiry_date, file_url: avisoCss.file_url } : null,
+        }
+      };
+    });
+
+    res.json(checklist);
+  } catch (error) {
+    console.error('Error fetching checklist:', error);
+    res.status(500).json({ error: 'Error al obtener el checklist' });
+  }
+});
+
 // Get dashboard stats
 router.get('/dashboard', canViewData, async (req, res) => {
   const { club_id: queryClubId } = req.query;
