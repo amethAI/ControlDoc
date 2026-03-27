@@ -688,6 +688,15 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
       .eq('status', 'Activo');
 
     if (empError) throw empError;
+    
+    // Get contract-tied document types
+    const { data: docTypes } = await supabase
+      .from('document_types')
+      .select('id, name');
+      
+    const contractTiedDocTypeIds = docTypes
+      ?.filter(dt => ['Afiliación CSS', 'Contrato firmado', 'Solicitud de entrada al club', 'Aviso de entrada'].some(name => dt.name.includes(name)))
+      .map(dt => dt.id) || [];
 
     for (const record of records) {
       if (!record.name) continue;
@@ -721,6 +730,34 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
           .eq('employee_id', employee.id)
           .eq('document_type_id', 'doc-3')
           .eq('is_current', 1);
+      }
+      
+      // Update Contract Type and End Date
+      if (record.tipoContrato) {
+        const updateData: any = {
+          contract_type: record.tipoContrato
+        };
+        
+        if (record.tipoContrato === 'INDEFINIDA' || record.tipoContrato === 'INDEFINIDO') {
+          updateData.contract_end = null;
+        } else if (record.fechaTerminacionContrato) {
+          updateData.contract_end = record.fechaTerminacionContrato;
+        }
+
+        await supabase
+          .from('employees')
+          .update(updateData)
+          .eq('id', employee.id);
+          
+        // Update all contract-tied documents for this employee
+        if (contractTiedDocTypeIds.length > 0 && ('contract_end' in updateData)) {
+          await supabase
+            .from('employee_documents')
+            .update({ expiry_date: updateData.contract_end })
+            .eq('employee_id', employee.id)
+            .in('document_type_id', contractTiedDocTypeIds)
+            .eq('is_current', 1);
+        }
       }
       
       successCount++;
@@ -934,9 +971,12 @@ router.get('/dashboard', canViewData, async (req, res) => {
     const { count: totalEmployees } = await empQuery;
 
     // 2. Expired Documents
+    const todayStr = new Date().toISOString().split('T')[0];
+    
     let expiredQuery = supabase.from('employee_documents').select('id', { count: 'exact', head: true })
       .eq('is_current', 1)
-      .eq('status', 'vencido');
+      .not('expiry_date', 'is', null)
+      .lt('expiry_date', todayStr);
     
     if (club_id) {
       // Need to join with employees to filter by club_id
@@ -944,7 +984,8 @@ router.get('/dashboard', canViewData, async (req, res) => {
         .from('employee_documents')
         .select('id, employees!inner(club_id)')
         .eq('is_current', 1)
-        .eq('status', 'vencido')
+        .not('expiry_date', 'is', null)
+        .lt('expiry_date', todayStr)
         .eq('employees.club_id', club_id);
       var expiredDocuments = expiredDocs?.length || 0;
     } else {
@@ -956,7 +997,6 @@ router.get('/dashboard', canViewData, async (req, res) => {
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
     const dateStr = thirtyDaysFromNow.toISOString().split('T')[0];
-    const todayStr = new Date().toISOString().split('T')[0];
     
     let expiringQuery = supabase.from('employee_documents').select('id', { count: 'exact', head: true })
       .eq('is_current', 1)

@@ -329,7 +329,40 @@ export default function EmployeeProfile() {
             } else {
               doc = documents.find(d => d.document_type_id === type.id);
               status = doc?.status;
-              if (doc?.expiry_date) {
+              
+              const isContractTiedDoc = ['Afiliación CSS', 'Contrato firmado', 'Solicitud de entrada al club', 'Aviso de entrada'].some(name => type.name.includes(name));
+              
+              if (isContractTiedDoc && doc) {
+                if (employee?.contract_type === 'INDEFINIDA' || employee?.contract_type === 'INDEFINIDO') {
+                  status = 'vigente';
+                  expiryDisplay = (
+                    <span className="flex-shrink-0 text-xs font-medium text-slate-500">
+                      Vigente (Indefinido)
+                    </span>
+                  );
+                } else if (employee?.contract_end) {
+                  const end = new Date(employee.contract_end);
+                  const now = new Date();
+                  const diffDays = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  
+                  if (diffDays < 0) status = 'vencido';
+                  else if (diffDays <= 30) status = 'proximo_vencer';
+                  else status = 'vigente';
+                  
+                  expiryDisplay = (
+                    <span className="flex-shrink-0 text-xs font-medium text-slate-500">
+                      Vence (Contrato): {end.toLocaleDateString()}
+                    </span>
+                  );
+                } else {
+                  status = 'sin_fecha';
+                  expiryDisplay = (
+                    <span className="flex-shrink-0 text-xs font-medium text-slate-500">
+                      Falta fecha de contrato
+                    </span>
+                  );
+                }
+              } else if (doc?.expiry_date) {
                 expiryDisplay = (
                   <span className="flex-shrink-0 text-xs font-medium text-slate-500">
                     Vence: {new Date(doc.expiry_date).toLocaleDateString()}
@@ -385,7 +418,7 @@ export default function EmployeeProfile() {
                           <Eye className="h-3.5 w-3.5" />
                           Ver
                         </a>
-                        {type.id !== 'doc-personal-combined' && (user?.role === 'Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
+                        {type.id !== 'doc-personal-combined' && !isContractTiedDoc && (user?.role === 'Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
                           <button 
                             onClick={() => handleEditClick(doc, type.name)}
                             className="p-1.5 bg-white/80 hover:bg-white rounded-md text-slate-600 hover:text-blue-600 shadow-sm border border-slate-200 transition-all"
@@ -422,6 +455,8 @@ export default function EmployeeProfile() {
           documentTypeId={selectedDocType.id}
           documentTypeName={selectedDocType.name}
           availableDocTypes={docTypes.map(t => ({ id: t.id, name: t.name }))}
+          employeeContractEnd={employee.contract_end}
+          employeeContractType={employee.contract_type}
         />
       )}
 

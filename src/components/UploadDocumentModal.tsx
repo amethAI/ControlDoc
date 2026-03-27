@@ -12,6 +12,8 @@ interface UploadDocumentModalProps {
   documentTypeId: string;
   documentTypeName: string;
   availableDocTypes?: { id: string, name: string }[]; // Added to pass all types for auto-classification
+  employeeContractEnd?: string | null;
+  employeeContractType?: string;
 }
 
 interface FileClassification {
@@ -28,7 +30,9 @@ export default function UploadDocumentModal({
   employeeId, 
   documentTypeId,
   documentTypeName,
-  availableDocTypes = []
+  availableDocTypes = [],
+  employeeContractEnd,
+  employeeContractType
 }: UploadDocumentModalProps) {
   const { user } = useAuth();
   const [files, setFiles] = useState<FileClassification[]>([]);
@@ -128,11 +132,22 @@ export default function UploadDocumentModal({
         formData.append('employee_id', employeeId);
         formData.append('document_type_id', item.typeId);
         
-        // Use the specific expiry date if set
-        const expiry = item.expiryDate;
-        if (expiry && expiry !== 'indefinido') {
-          formData.append('expiry_date', expiry);
+        const isContractTiedDoc = ['Afiliación CSS', 'Contrato firmado', 'Solicitud de entrada al club', 'Aviso de entrada'].some(name => item.typeName.includes(name));
+        
+        if (isContractTiedDoc) {
+          if (employeeContractType === 'INDEFINIDA' || employeeContractType === 'INDEFINIDO') {
+            // Indefinite contract, no expiry date
+          } else if (employeeContractEnd) {
+            formData.append('expiry_date', employeeContractEnd);
+          }
+        } else {
+          // Use the specific expiry date if set
+          const expiry = item.expiryDate;
+          if (expiry && expiry !== 'indefinido') {
+            formData.append('expiry_date', expiry);
+          }
         }
+        
         formData.append('status', 'cargado');
 
         const res = await apiFetch('/api/documents', {
@@ -249,7 +264,7 @@ export default function UploadDocumentModal({
                                   </select>
                                 </div>
                                 
-                                {item.typeId !== 'doc-personal-combined' && (
+                                {item.typeId !== 'doc-personal-combined' && !['Afiliación CSS', 'Contrato firmado', 'Solicitud de entrada al club', 'Aviso de entrada'].some(name => item.typeName.includes(name)) && (
                                   <div>
                                     <label className="block text-xs font-medium text-slate-700 mb-1">Vencimiento</label>
                                     <div className="space-y-2">

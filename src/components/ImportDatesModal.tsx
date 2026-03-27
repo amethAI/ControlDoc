@@ -74,14 +74,18 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
               return key ? row[key] : null;
             };
 
-            const name = getCol(['nombre', 'empleado']);
+            const name = getCol(['nombre', 'empleado', 'demostradora']);
             const carnetVerdeRaw = getCol(['verde', 'salud']);
             const carnetBlancoRaw = getCol(['blanco', 'adestramiento', 'adiestramiento']);
+            const tipoContratoRaw = getCol(['tipo de contrato']);
+            const fechaTerminacionContratoRaw = getCol(['fecha de terminación de contrato', 'terminación de contrato', 'terminacion de contrato']);
 
             return {
               name,
               carnetVerde: carnetVerdeRaw ? parseSpanishDate(carnetVerdeRaw) : null,
-              carnetBlanco: carnetBlancoRaw ? parseSpanishDate(carnetBlancoRaw) : null
+              carnetBlanco: carnetBlancoRaw ? parseSpanishDate(carnetBlancoRaw) : null,
+              tipoContrato: tipoContratoRaw ? tipoContratoRaw.trim().toUpperCase() : null,
+              fechaTerminacionContrato: fechaTerminacionContratoRaw ? parseSpanishDate(fechaTerminacionContratoRaw) : null
             };
           }).filter(r => r.name); // Only keep rows with a name
 
