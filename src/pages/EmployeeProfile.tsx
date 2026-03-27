@@ -2,10 +2,11 @@ import { apiFetch } from '../lib/api';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Upload, Download, FileText, AlertCircle, CheckCircle2, Clock, Edit2, UserMinus, UserPlus, Eye } from 'lucide-react';
+import { ArrowLeft, Upload, Download, FileText, AlertCircle, CheckCircle2, Clock, Edit2, UserMinus, UserPlus, Eye, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import UploadDocumentModal from '../components/UploadDocumentModal';
 import EditExpiryModal from '../components/EditExpiryModal';
+import DeleteDocumentModal from '../components/DeleteDocumentModal';
 import TerminateEmployeeModal from '../components/TerminateEmployeeModal';
 import ReactivateEmployeeModal from '../components/ReactivateEmployeeModal';
 import JSZip from 'jszip';
@@ -52,6 +53,7 @@ export default function EmployeeProfile() {
   const [loading, setLoading] = useState(true);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isTerminateModalOpen, setIsTerminateModalOpen] = useState(false);
   const [isReactivateModalOpen, setIsReactivateModalOpen] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState<{id: string, name: string} | null>(null);
@@ -112,6 +114,11 @@ export default function EmployeeProfile() {
     setSelectedDoc(doc);
     setSelectedDocType({ id: doc.document_type_id, name: typeName });
     setIsEditModalOpen(true);
+  };
+
+  const handleDeleteClick = (typeId: string, typeName: string) => {
+    setSelectedDocType({ id: typeId, name: typeName });
+    setIsDeleteModalOpen(true);
   };
 
   const getFileUrl = (url: string | undefined | null) => {
@@ -298,8 +305,37 @@ export default function EmployeeProfile() {
         <h3 className="text-lg font-medium text-slate-900 mb-4">Documentación Obligatoria</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {docTypes.map((type) => {
-            const doc = documents.find(d => d.document_type_id === type.id);
-            const status = doc?.status;
+            let doc;
+            let status;
+            let expiryDisplay = null;
+
+            if (type.id === 'doc-personal-combined') {
+              const combinedDocs = documents.filter(d => ['doc-3', 'doc-4', 'doc-5'].includes(d.document_type_id));
+              doc = combinedDocs[0]; // Use the first one to get the file_url
+              
+              if (combinedDocs.length > 0) {
+                if (combinedDocs.some(d => d.status === 'vencido')) status = 'vencido';
+                else if (combinedDocs.some(d => d.status === 'proximo_vencer')) status = 'proximo_vencer';
+                else if (combinedDocs.some(d => d.status === 'vigente')) status = 'vigente';
+                else status = 'sin_fecha';
+                
+                expiryDisplay = (
+                  <span className="flex-shrink-0 text-xs font-medium text-slate-500">
+                    Fechas en Excel
+                  </span>
+                );
+              }
+            } else {
+              doc = documents.find(d => d.document_type_id === type.id);
+              status = doc?.status;
+              if (doc?.expiry_date) {
+                expiryDisplay = (
+                  <span className="flex-shrink-0 text-xs font-medium text-slate-500">
+                    Vence: {new Date(doc.expiry_date).toLocaleDateString()}
+                  </span>
+                );
+              }
+            }
             
             return (
               <div key={type.id} className={`relative rounded-xl border p-5 flex flex-col gap-4 transition-colors ${getStatusColor(status)}`}>
@@ -336,11 +372,7 @@ export default function EmployeeProfile() {
                       </a>
                     </div>
                     <div className="flex items-center gap-2">
-                      {doc.expiry_date && (
-                        <span className="flex-shrink-0 text-xs font-medium text-slate-500">
-                          Vence: {new Date(doc.expiry_date).toLocaleDateString()}
-                        </span>
-                      )}
+                      {expiryDisplay}
                       <div className="flex items-center gap-1">
                         <a 
                           href={getFileUrl(doc.file_url)} 
@@ -352,13 +384,22 @@ export default function EmployeeProfile() {
                           <Eye className="h-3.5 w-3.5" />
                           Ver
                         </a>
-                        {(user?.role === 'Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
+                        {type.id !== 'doc-personal-combined' && (user?.role === 'Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
                           <button 
                             onClick={() => handleEditClick(doc, type.name)}
                             className="p-1.5 bg-white/80 hover:bg-white rounded-md text-slate-600 hover:text-blue-600 shadow-sm border border-slate-200 transition-all"
                             title="Editar fecha"
                           >
                             <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {(user?.role === 'Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
+                          <button 
+                            onClick={() => handleDeleteClick(type.id, type.name)}
+                            className="p-1.5 bg-white/80 hover:bg-white rounded-md text-slate-600 hover:text-red-600 shadow-sm border border-slate-200 transition-all"
+                            title="Eliminar documento"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
                       </div>
@@ -391,6 +432,17 @@ export default function EmployeeProfile() {
           documentId={selectedDoc.id}
           documentName={selectedDocType.name}
           currentDate={selectedDoc.expiry_date}
+        />
+      )}
+
+      {selectedDocType && (
+        <DeleteDocumentModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          onSuccess={fetchData}
+          employeeId={employee.id}
+          typeId={selectedDocType.id}
+          typeName={selectedDocType.name}
         />
       )}
 

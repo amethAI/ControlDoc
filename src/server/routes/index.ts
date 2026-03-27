@@ -633,6 +633,41 @@ router.patch('/documents/:id', canModifyData, async (req, res) => {
   }
 });
 
+// Delete document
+router.delete('/employees/:employeeId/documents/:typeId', canModifyData, async (req, res) => {
+  const { employeeId, typeId } = req.params;
+  
+  try {
+    let typeIdsToDelete = [typeId];
+    if (typeId === 'doc-personal-combined') {
+      typeIdsToDelete = ['doc-3', 'doc-4', 'doc-5'];
+    }
+
+    // Mark as not current instead of hard delete to keep history
+    const { error } = await supabase
+      .from('employee_documents')
+      .update({ is_current: 0 })
+      .eq('employee_id', employeeId)
+      .in('document_type_id', typeIdsToDelete)
+      .eq('is_current', 1);
+      
+    if (error) throw error;
+    
+    // Log audit
+    await logAudit(
+      req,
+      'Eliminación de documento',
+      `Documento(s) eliminado(s) para tipo: ${typeId}`,
+      'Documento', employeeId, null, null
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting document:', error);
+    res.status(500).json({ error: 'Error al eliminar documento' });
+  }
+});
+
 // Import document dates from Excel/CSV
 router.post('/import-document-dates', canModifyData, async (req, res) => {
   const { records } = req.body; // Array of { name: string, carnetVerde: string, carnetBlanco: string }
