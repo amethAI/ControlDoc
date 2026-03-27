@@ -1,11 +1,12 @@
 import { apiFetch } from '../lib/api';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Search, Plus, Filter, Upload } from 'lucide-react';
+import { Search, Plus, Filter, Upload, FileSpreadsheet } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import NewEmployeeModal from '../components/NewEmployeeModal';
 import BulkUploadModal from '../components/BulkUploadModal';
 import BulkEmployeeModal from '../components/BulkEmployeeModal';
+import ImportDatesModal from '../components/ImportDatesModal';
 
 interface Employee {
   id: string;
@@ -26,11 +27,15 @@ export default function Employees() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isBulkEmployeeModalOpen, setIsBulkEmployeeModalOpen] = useState(false);
+  const [isImportDatesModalOpen, setIsImportDatesModalOpen] = useState(false);
 
   const fetchEmployees = useCallback(async () => {
     try {
-      let url = user?.role === 'Coordinadora' 
-        ? `/api/employees?club_id=${user.club_id}&status=${statusFilter}`
+      // Coordinadora and Supervisor Interno are restricted to their club
+      const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
+      
+      let url = isRestricted 
+        ? `/api/employees?club_id=${user?.club_id}&status=${statusFilter}`
         : `/api/employees?status=${statusFilter}`;
       
       const res = await apiFetch(url);
@@ -79,8 +84,17 @@ export default function Employees() {
         </div>
 
         <div className="flex gap-3">
-          {user?.role === 'Administrador' && (
+          {(user?.role === 'Administrador' || user?.role === 'Supervisor Interno') && (
             <>
+              {user?.role === 'Administrador' && (
+                <button 
+                  onClick={() => setIsImportDatesModalOpen(true)}
+                  className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" />
+                  Importar Fechas
+                </button>
+              )}
               <button 
                 onClick={() => setIsBulkEmployeeModalOpen(true)}
                 className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -235,6 +249,12 @@ export default function Employees() {
         onClose={() => setIsBulkEmployeeModalOpen(false)}
         onSuccess={fetchEmployees}
         clubId={user?.role === 'Coordinadora' ? user.club_id : undefined}
+      />
+
+      <ImportDatesModal
+        isOpen={isImportDatesModalOpen}
+        onClose={() => setIsImportDatesModalOpen(false)}
+        onSuccess={fetchEmployees}
       />
     </div>
   );

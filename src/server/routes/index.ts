@@ -61,19 +61,52 @@ const isAdmin = (req: any, res: any, next: any) => {
   next();
 };
 
+// Middleware to check if user can view data (Employees, Attendance, Dashboard)
+const canViewData = (req: any, res: any, next: any) => {
+  const allowedRoles = ['Administrador', 'Supervisor Interno', 'Supervisora', 'Coordinadora'];
+  const user = (req as any).user;
+  
+  if (!user || !allowedRoles.includes(user.role)) {
+    return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para ver esta sección.' });
+  }
+  next();
+};
+
+// Middleware to check if user can modify data
+const canModifyData = (req: any, res: any, next: any) => {
+  const allowedRoles = ['Administrador', 'Supervisor Interno'];
+  const user = (req as any).user;
+  
+  if (!user || !allowedRoles.includes(user.role)) {
+    return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para realizar modificaciones.' });
+  }
+  next();
+};
+
 // Middleware to check if user is Internal (Admin or Internal Supervisor)
 const isInternal = (req: any, res: any, next: any) => {
   const internalRoles = ['Administrador', 'Supervisor Interno'];
   const user = (req as any).user;
+  
   if (!user || !internalRoles.includes(user.role)) {
     return res.status(403).json({ error: 'Acceso denegado. Esta sección es privada para el equipo interno.' });
   }
+
+  // Restriction: Supervisor Interno can only access their assigned club
+  if (user.role === 'Supervisor Interno' && !user.club_id) {
+    return res.status(403).json({ error: 'Acceso denegado. El supervisor no tiene un club asignado.' });
+  }
+
   next();
 };
 
 // Performance Routes
 router.get('/api/performance', isAuthenticated, isInternal, async (req, res) => {
-  const { date, club_id } = req.query;
+  const { date, club_id: queryClubId } = req.query;
+  const user = (req as any).user;
+  
+  // If user is Supervisor Interno, they can only see their club
+  const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
   
   try {
     let query = supabase
@@ -100,6 +133,14 @@ router.post('/api/performance', isAuthenticated, isInternal, async (req, res) =>
   const records = Array.isArray(req.body) ? req.body : [req.body];
   const user = (req as any).user;
   
+  // If user is Supervisor Interno, they can only save data for their club
+  if (user.role === 'Supervisor Interno') {
+    const invalidRecord = records.find((r: any) => r.club_id !== user.club_id);
+    if (invalidRecord) {
+      return res.status(403).json({ error: 'Acceso denegado. Solo puede registrar datos para su club asignado.' });
+    }
+  }
+  
   try {
     const { data, error } = await supabase
       .from('daily_performance')
@@ -118,10 +159,19 @@ router.post('/api/performance', isAuthenticated, isInternal, async (req, res) =>
 });
 
 router.get('/api/performance/stats', isAuthenticated, isInternal, async (req, res) => {
+  const user = (req as any).user;
+  
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('daily_performance')
       .select('meta, actual_sales, date');
+    
+    // If user is Supervisor Interno, filter by their club
+    if (user.role === 'Supervisor Interno') {
+      query = query.eq('club_id', user.club_id);
+    }
+    
+    const { data, error } = await query;
     
     if (error) throw error;
     
@@ -321,8 +371,12 @@ router.post('/clubs', isAdmin, async (req, res) => {
 });
 
 // Get employees
-router.get('/employees', async (req, res) => {
-  const { club_id, status } = req.query;
+router.get('/employees', canViewData, async (req, res) => {
+  const { club_id: queryClubId, status } = req.query;
+  const user = (req as any).user;
+  
+  // If user is Supervisor Interno, they can only see their club
+  const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
   
   // Debug check
   const isMock = !process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY;
@@ -346,8 +400,14 @@ router.get('/employees', async (req, res) => {
 });
 
 // Create employee
-router.post('/employees', isAdmin, async (req, res) => {
+router.post('/employees', canModifyData, async (req, res) => {
   const { full_name, cedula, position, contract_type, contract_start, club_id } = req.body;
+  const user = (req as any).user;
+
+  // Restriction: Supervisor Interno can only create for their club
+  if (user.role === 'Supervisor Interno' && club_id !== user.club_id) {
+    return res.status(403).json({ error: 'Acceso denegado. Solo puede crear empleados para su club asignado.' });
+  }
   
   try {
     const id = `emp-${Date.now()}`;
@@ -395,9 +455,27 @@ router.get('/document-types', async (req, res) => {
   const { data: types, error } = await supabase.from('document_types').select('*').eq('is_active', 1).order('sort_order');
   if (error) return res.status(500).json({ error: error.message });
   
-  // Filter out "Carta de ingreso" as requested
-  const filteredTypes = types?.filter(type => type.name !== 'Carta de ingreso') || [];
-  res.json(filteredTypes);
+  // Filter out specific documents and rename others for the new requirement
+  const processedTypes = types?.map(type => {
+    // We want to hide these specific types as requested
+    if (['Carnet verde', 'Carnet blanco', 'Cédula', 'Carta de ingreso'].includes(type.name)) {
+      return null;
+    }
+    return type;
+  }).filter(Boolean) || [];
+  
+  // Add a virtual "Documentos Personales" type that will represent the combined file
+  processedTypes.unshift({
+    id: 'doc-personal-combined',
+    name: 'Documentos Personales',
+    description: 'Archivo unificado con Cédula, Carnet Verde y Carnet Blanco',
+    has_expiry: 1, // We need expiry to handle the alerts from the excel
+    is_required: 1,
+    is_active: 1,
+    sort_order: 0
+  });
+  
+  res.json(processedTypes);
 });
 
 // Get employee documents
@@ -413,7 +491,7 @@ router.get('/employees/:id/documents', async (req, res) => {
 });
 
 // Create document (upload)
-router.post('/documents', isAdmin, (req, res, next) => {
+router.post('/documents', canModifyData, (req, res, next) => {
   upload.single('file')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
@@ -469,6 +547,40 @@ router.post('/documents', isAdmin, (req, res, next) => {
       
     const file_url = publicUrlData.publicUrl;
     
+    // Handle the special 'doc-personal-combined' type
+    if (document_type_id === 'doc-personal-combined') {
+      // Mark previous versions as not current for all related types
+      await supabase
+        .from('employee_documents')
+        .update({ is_current: 0 })
+        .eq('employee_id', employee_id)
+        .in('document_type_id', ['doc-3', 'doc-4', 'doc-5']); // Carnet blanco, Carnet verde, Cédula
+
+      // Insert document records for each type
+      const docsToInsert = [
+        { id: `doc-${Date.now()}-1`, employee_id, document_type_id: 'doc-3', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status }, // Carnet blanco
+        { id: `doc-${Date.now()}-2`, employee_id, document_type_id: 'doc-4', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status }, // Carnet verde
+        { id: `doc-${Date.now()}-3`, employee_id, document_type_id: 'doc-5', file_url, file_name, file_size_kb, expiry_date: null, status: 'sin_fecha' } // Cédula (no expiry)
+      ];
+
+      const { data: newDocs, error } = await supabase
+        .from('employee_documents')
+        .insert(docsToInsert)
+        .select();
+        
+      if (error) throw error;
+      
+      // Log audit
+      await logAudit(
+        req,
+        'Carga de documento',
+        `Documento unificado subido: ${file_name}`,
+        'Documento', id, file_name, null
+      );
+      
+      return res.status(201).json(newDocs[0]); // Return one of them to satisfy the frontend
+    }
+
     // Mark previous versions as not current
     await supabase
       .from('employee_documents')
@@ -503,7 +615,7 @@ router.post('/documents', isAdmin, (req, res, next) => {
 });
 
 // Update document (e.g., expiry date)
-router.patch('/documents/:id', async (req, res) => {
+router.patch('/documents/:id', canModifyData, async (req, res) => {
   const { expiry_date } = req.body;
   
   try {
@@ -521,8 +633,85 @@ router.patch('/documents/:id', async (req, res) => {
   }
 });
 
+// Import document dates from Excel/CSV
+router.post('/import-document-dates', canModifyData, async (req, res) => {
+  const { records } = req.body; // Array of { name: string, carnetVerde: string, carnetBlanco: string }
+  
+  if (!Array.isArray(records)) {
+    return res.status(400).json({ error: 'Formato inválido. Se esperaba un array de registros.' });
+  }
+
+  try {
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
+    // Get all active employees to match by name
+    const { data: employees, error: empError } = await supabase
+      .from('employees')
+      .select('id, full_name')
+      .eq('status', 'Activo');
+
+    if (empError) throw empError;
+
+    for (const record of records) {
+      if (!record.name) continue;
+      
+      // Find employee by name (case-insensitive, trim spaces)
+      const employee = employees.find(e => 
+        e.full_name.toLowerCase().trim() === record.name.toLowerCase().trim()
+      );
+
+      if (!employee) {
+        errorCount++;
+        errors.push(`Empleado no encontrado: ${record.name}`);
+        continue;
+      }
+
+      // Update Carnet Verde (doc-4)
+      if (record.carnetVerde) {
+        await supabase
+          .from('employee_documents')
+          .update({ expiry_date: record.carnetVerde })
+          .eq('employee_id', employee.id)
+          .eq('document_type_id', 'doc-4')
+          .eq('is_current', 1);
+      }
+
+      // Update Carnet Blanco (doc-3)
+      if (record.carnetBlanco) {
+        await supabase
+          .from('employee_documents')
+          .update({ expiry_date: record.carnetBlanco })
+          .eq('employee_id', employee.id)
+          .eq('document_type_id', 'doc-3')
+          .eq('is_current', 1);
+      }
+      
+      successCount++;
+    }
+
+    await logAudit(
+      req,
+      'Importación de Fechas',
+      `Se importaron fechas de vencimiento para ${successCount} empleados`,
+      'Documentos', 'bulk', 'Excel', null
+    );
+
+    res.json({ 
+      success: true, 
+      message: `Proceso completado. ${successCount} actualizados, ${errorCount} errores.`,
+      errors 
+    });
+
+  } catch (error) {
+    console.error('Error importing dates:', error);
+    res.status(500).json({ error: 'Error al procesar la importación' });
+  }
+});
+
 // Terminate employee
-router.patch('/employees/:id/terminate', async (req, res) => {
+router.patch('/employees/:id/terminate', canModifyData, async (req, res) => {
   const { termination_reason, termination_date } = req.body;
   
   try {
@@ -556,7 +745,7 @@ router.patch('/employees/:id/terminate', async (req, res) => {
 });
 
 // Reactivate employee
-router.patch('/employees/:id/reactivate', async (req, res) => {
+router.patch('/employees/:id/reactivate', canModifyData, async (req, res) => {
   const { contract_start } = req.body;
   
   try {
@@ -591,9 +780,17 @@ router.patch('/employees/:id/reactivate', async (req, res) => {
 });
 
 // Attendance routes
-router.get('/attendance', async (req, res) => {
-  const { club_id, start_date, end_date } = req.query;
+router.get('/attendance', canViewData, async (req, res) => {
+  const { club_id: queryClubId, start_date, end_date } = req.query;
+  const user = (req as any).user;
   
+  // If user is Supervisor Interno, they can only see their club
+  const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
+  
+  if (!club_id) {
+    return res.status(400).json({ error: 'Se requiere club_id' });
+  }
+
   try {
     // We need to join attendance with employees to filter by club_id
     const { data: attendance, error } = await supabase
@@ -688,8 +885,12 @@ router.post('/attendance-requests', async (req, res) => {
 });
 
 // Get dashboard stats
-router.get('/dashboard', async (req, res) => {
-  const { club_id } = req.query;
+router.get('/dashboard', canViewData, async (req, res) => {
+  const { club_id: queryClubId } = req.query;
+  const user = (req as any).user;
+  
+  // If user is Supervisor Interno, they can only see their club
+  const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
   
   try {
     // 1. Total Employees

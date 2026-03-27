@@ -32,8 +32,11 @@ export default function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      const url = user?.role === 'Coordinadora' 
-        ? `/api/dashboard?club_id=${user.club_id}`
+      // Coordinadora and Supervisor Interno are restricted to their club
+      const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
+      
+      const url = isRestricted 
+        ? `/api/dashboard?club_id=${user?.club_id}`
         : '/api/dashboard';
       const res = await apiFetch(url);
       if (res.ok) {
@@ -51,7 +54,7 @@ export default function Dashboard() {
     fetchStats();
   }, [user]);
 
-  const kpis = [
+  const kpis: { name: string; value: string | number; icon: any; color: string; textColor: string }[] = [
     { name: 'Total Empleados Activos', value: stats.totalEmployees, icon: Users, color: 'bg-blue-500', textColor: 'text-blue-600' },
     { name: 'Documentos Vencidos', value: stats.expiredDocuments, icon: AlertTriangle, color: 'bg-red-500', textColor: 'text-red-600' },
     { name: 'Próximos a Vencer', value: stats.expiringSoonDocuments, icon: FileWarning, color: 'bg-amber-500', textColor: 'text-amber-600' },

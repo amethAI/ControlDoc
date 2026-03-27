@@ -69,6 +69,9 @@ export default function Attendance() {
   const [selectedClubId, setSelectedClubId] = useState(user?.club_id || '');
   const [viewHalf, setViewHalf] = useState<'1' | '2' | 'full'>('full');
 
+  const isReadOnly = user?.role === 'Supervisora' || user?.role === 'Coordinadora';
+  const isRestricted = user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora';
+
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   
@@ -118,6 +121,8 @@ export default function Attendance() {
   }, [fetchData]);
 
   const handleStatusChange = (employeeId: string, date: Date) => {
+    if (isReadOnly) return;
+    
     const dateStr = format(date, 'yyyy-MM-dd');
     const existing = attendance.find(a => a.employee_id === employeeId && a.date === dateStr);
     
@@ -275,10 +280,11 @@ export default function Attendance() {
             </button>
           </div>
 
-          {user?.role === 'Administrador' && (
+          {(!isRestricted || user?.role === 'Supervisor Interno' || user?.role === 'Supervisora') && (
             <select
               value={selectedClubId}
               onChange={(e) => setSelectedClubId(e.target.value)}
+              disabled={isRestricted && user?.role !== 'Supervisora'}
               className="rounded-lg border-slate-300 text-sm focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Seleccionar Club</option>
@@ -306,23 +312,27 @@ export default function Attendance() {
             </button>
           </div>
 
-          <button
-            onClick={() => setIsReconcileModalOpen(true)}
-            disabled={!selectedClubId}
-            className="inline-flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-900 disabled:opacity-50 shadow-sm transition-colors"
-          >
-            <Clock className="h-4 w-4 mr-2" />
-            Cuadrar Mes
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={() => setIsReconcileModalOpen(true)}
+              disabled={!selectedClubId}
+              className="inline-flex items-center px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-900 disabled:opacity-50 shadow-sm transition-colors"
+            >
+              <Clock className="h-4 w-4 mr-2" />
+              Cuadrar Mes
+            </button>
+          )}
 
-          <button
-            onClick={handleSave}
-            disabled={saving || !selectedClubId}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shadow-sm transition-colors"
-          >
-            <Save className="h-4 w-4 mr-2" />
-            {saving ? 'Guardando...' : 'Guardar Cambios'}
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={handleSave}
+              disabled={saving || !selectedClubId}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shadow-sm transition-colors"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {saving ? 'Guardando...' : 'Guardar Cambios'}
+            </button>
+          )}
         </div>
       </div>
 

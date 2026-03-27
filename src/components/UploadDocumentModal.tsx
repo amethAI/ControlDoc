@@ -116,15 +116,25 @@ export default function UploadDocumentModal({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Fecha de Vencimiento (opcional)</label>
-                <input
-                  type="date"
-                  value={expiryDate}
-                  onChange={e => setExpiryDate(e.target.value)}
-                  className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
-                />
-              </div>
+              {documentTypeId !== 'doc-personal-combined' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Fecha de Vencimiento (opcional)</label>
+                  <input
+                    type="date"
+                    value={expiryDate}
+                    onChange={e => setExpiryDate(e.target.value)}
+                    className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
+                  />
+                </div>
+              )}
+
+              {documentTypeId === 'doc-personal-combined' && (
+                <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
+                  <p className="text-sm text-blue-800">
+                    <strong>Nota:</strong> Las fechas de vencimiento para este documento unificado se gestionarán a través de la carga masiva de Excel.
+                  </p>
+                </div>
+              )}
 
               <div className="mt-5 sm:mt-6 flex gap-3">
                 <button
