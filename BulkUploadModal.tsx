@@ -1,159 +1,70 @@
-import { apiFetch } from '../lib/api';
-import React, { useState, useEffect } from 'react';
-import { X, Mail, Plus, Trash2 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { toast } from 'sonner';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-interface AlertRecipientsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-  club: any;
-  initialEmails: string[];
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { Toaster } from 'sonner';
+import Login from './pages/Login';
+import Layout from './components/Layout';
+import Dashboard from './pages/Dashboard';
+import Employees from './pages/Employees';
+import EmployeeProfile from './pages/EmployeeProfile';
+import Clubs from './pages/Clubs';
+import ClubDetail from './pages/ClubDetail';
+import Attendance from './pages/Attendance';
+import RendimientoVentas from './pages/RendimientoVentas';
+import Configuracion from './pages/Configuracion';
+import GestionUsuarios from './pages/GestionUsuarios';
+import DestinatariosAlertas from './pages/DestinatariosAlertas';
+import LogAuditoria from './pages/LogAuditoria';
+
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user } = useAuth();
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+  return <>{children}</>;
+};
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Dashboard />} />
+        <Route path="empleados" element={<Employees />} />
+        <Route path="empleados/:id" element={<EmployeeProfile />} />
+        <Route path="clubes" element={<Clubs />} />
+        <Route path="clubes/:id" element={<ClubDetail />} />
+        <Route path="asistencia" element={<Attendance />} />
+        <Route path="rendimiento" element={<RendimientoVentas />} />
+        <Route path="configuracion" element={<Configuracion />} />
+        <Route path="configuracion/usuarios" element={<GestionUsuarios />} />
+        <Route path="configuracion/alertas" element={<DestinatariosAlertas />} />
+        <Route path="configuracion/auditoria" element={<LogAuditoria />} />
+        {/* Add more routes here as needed */}
+      </Route>
+    </Routes>
+  );
 }
 
-export default function AlertRecipientsModal({ isOpen, onClose, onSuccess, club, initialEmails }: AlertRecipientsModalProps) {
-  const { user } = useAuth();
-  const [emails, setEmails] = useState<string[]>([]);
-  const [newEmail, setNewEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      setEmails(initialEmails || []);
-      setNewEmail('');
-    }
-  }, [isOpen, initialEmails]);
-
-  const handleAddEmail = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newEmail && !emails.includes(newEmail)) {
-      setEmails([...emails, newEmail]);
-      setNewEmail('');
-    }
-  };
-
-  const handleRemoveEmail = (emailToRemove: string) => {
-    setEmails(emails.filter(e => e !== emailToRemove));
-  };
-
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      // Si hay un correo escrito pero no se le dio a "Agregar", lo incluimos
-      let finalEmails = [...emails];
-      if (newEmail && !emails.includes(newEmail)) {
-        finalEmails.push(newEmail);
-      }
-
-      const res = await apiFetch('/api/alert-recipients', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-user-role': user?.role || '',
-          'x-user-id': user?.id || '',
-          'x-user-name': user?.name || ''
-        },
-        body: JSON.stringify({
-          club_id: club.id,
-          emails: finalEmails
-        })
-      });
-
-      if (res.ok) {
-        toast.success('Destinatarios guardados con éxito');
-        onSuccess();
-        onClose();
-      } else {
-        const errorData = await res.json();
-        console.error('Error from server:', errorData);
-        toast.error(`Error al guardar destinatarios: ${errorData.error || 'Desconocido'}`);
-      }
-    } catch (error) {
-      console.error('Network error:', error);
-      toast.error('Error de red');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
+export default function App() {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-          <div>
-            <h3 className="text-xl font-bold text-slate-800">Editar Destinatarios</h3>
-            <p className="text-sm text-slate-500">{club?.name}</p>
-          </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-            <X className="h-6 w-6" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-4">
-          <form onSubmit={handleAddEmail} className="flex gap-2">
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Mail className="h-4 w-4 text-slate-400" />
-              </div>
-              <input
-                type="email"
-                required
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
-                placeholder="nuevo.correo@psmt.com"
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Agregar
-            </button>
-          </form>
-
-          <div className="space-y-2 max-h-60 overflow-y-auto">
-            {emails.length === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-4">No hay correos configurados.</p>
-            ) : (
-              emails.map((email) => (
-                <div key={email} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-slate-400" />
-                    <span className="text-sm font-medium text-slate-700">{email}</span>
-                  </div>
-                  <button
-                    onClick={() => handleRemoveEmail(email)}
-                    className="p-1 text-slate-400 hover:text-red-500 transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="pt-4 flex gap-3 border-t border-slate-100">
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shadow-sm"
-            >
-              {loading ? 'Guardando...' : 'Guardar Cambios'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <AuthProvider>
+      <Router>
+        <AppRoutes />
+        <Toaster position="top-right" richColors />
+      </Router>
+    </AuthProvider>
   );
 }

@@ -1,85 +1,130 @@
+import React, { useState } from 'react';
+import { X, Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
+import Papa from 'papaparse';
 import { apiFetch } from '../lib/api';
-import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
 
-interface NewEmployeeModalProps {
+interface ImportDatesModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  clubId?: string;
 }
 
-export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }: NewEmployeeModalProps) {
-  const { user } = useAuth();
-  const [formData, setFormData] = useState({
-    full_name: '',
-    cedula: '',
-    position: '',
-    contract_type: 'indefinido',
-    contract_start: new Date().toISOString().split('T')[0],
-    club_id: clubId || ''
-  });
-  const [clubs, setClubs] = useState<{id: string, name: string}[]>([]);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      if (!clubId) {
-        apiFetch('/api/clubs')
-          .then(res => res.json())
-          .then(data => setClubs(data))
-          .catch(err => console.error('Error fetching clubs:', err));
-      } else {
-        setFormData(prev => ({ ...prev, club_id: clubId }));
-      }
+const parseSpanishDate = (dateStr: string): string | null => {
+  if (!dateStr || dateStr.trim() === '') return null;
+  
+  // Try to match DD-MMM-YY (e.g., 30-Jul-28)
+  const parts = dateStr.trim().split('-');
+  if (parts.length === 3) {
+    const day = parts[0].padStart(2, '0');
+    const monthStr = parts[1].toLowerCase();
+    let year = parts[2];
+    
+    // Handle 2-digit years
+    if (year.length === 2) {
+      year = `20${year}`;
     }
-  }, [isOpen, clubId]);
+
+    const months: Record<string, string> = {
+      'ene': '01', 'feb': '02', 'mar': '03', 'abr': '04', 'may': '05', 'jun': '06',
+      'jul': '07', 'ago': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dic': '12'
+    };
+
+    const month = months[monthStr];
+    if (day && month && year) {
+      return `${year}-${month}-${day}`; // YYYY-MM-DD
+    }
+  }
+
+  // Fallback: try standard Date parsing if it's already in a recognizable format
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split('T')[0];
+  }
+
+  return null;
+};
+
+export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportDatesModalProps) {
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<{ success: boolean; message: string; errors: string[] } | null>(null);
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.club_id) {
-      setError('Por favor selecciona un club');
+  const handleProcess = () => {
+    if (!file) {
+      toast.error('Por favor selecciona un archivo CSV');
       return;
     }
-    setError('');
+
     setLoading(true);
+    setResults(null);
 
-    try {
-      const res = await apiFetch('/api/employees', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-user-role': user?.role || '',
-          'x-user-id': user?.id || '',
-          'x-user-name': user?.name || ''
-        },
-        body: JSON.stringify(formData)
-      });
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          const records = results.data.map((row: any) => {
+            // Find columns dynamically (case insensitive)
+            const getCol = (keywords: string[]) => {
+              const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
+              return key ? row[key] : null;
+            };
 
-      if (res.ok) {
-        onSuccess();
-        onClose();
-        setFormData({
-          full_name: '',
-          cedula: '',
-          position: '',
-          contract_type: 'indefinido',
-          contract_start: new Date().toISOString().split('T')[0],
-          club_id: clubId || ''
-        });
-      } else {
-        const data = await res.json();
-        setError(data.error || 'Error al crear empleado');
+            const name = getCol(['nombre', 'empleado']);
+            const carnetVerdeRaw = getCol(['verde', 'salud']);
+            const carnetBlancoRaw = getCol(['blanco', 'adestramiento', 'adiestramiento']);
+
+            return {
+              name,
+              carnetVerde: carnetVerdeRaw ? parseSpanishDate(carnetVerdeRaw) : null,
+              carnetBlanco: carnetBlancoRaw ? parseSpanishDate(carnetBlancoRaw) : null
+            };
+          }).filter(r => r.name); // Only keep rows with a name
+
+          if (records.length === 0) {
+            toast.error('No se encontraron registros válidos en el archivo. Verifica que tenga una columna "NOMBRE".');
+            setLoading(false);
+            return;
+          }
+
+          const res = await apiFetch('/api/import-document-dates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ records })
+          });
+
+          const data = await res.json();
+          
+          if (res.ok) {
+            setResults(data);
+            if (data.errors.length === 0) {
+              toast.success('Importación completada con éxito');
+              setTimeout(() => {
+                onSuccess();
+                onClose();
+              }, 2000);
+            } else {
+              toast.warning('Importación completada con algunas advertencias');
+              onSuccess();
+            }
+          } else {
+            toast.error(data.error || 'Error al procesar la importación');
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          toast.error('Error al procesar el archivo');
+        } finally {
+          setLoading(false);
+        }
+      },
+      error: (error) => {
+        toast.error(`Error al leer el archivo: ${error.message}`);
+        setLoading(false);
       }
-    } catch (err) {
-      setError('Error de conexión');
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   return (
@@ -88,116 +133,108 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
         <div className="fixed inset-0 bg-slate-900/50 transition-opacity" onClick={onClose} />
         
         <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
-          <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+          <div className="bg-white px-4 pb-4 pt-5 sm:p-6">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-semibold leading-6 text-slate-900">
-                Nuevo Empleado
-              </h3>
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="h-6 w-6 text-green-600" />
+                <h3 className="text-lg font-semibold leading-6 text-slate-900">
+                  Importar Fechas de Vencimiento
+                </h3>
+              </div>
               <button onClick={onClose} className="text-slate-400 hover:text-slate-500">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {error && (
-              <div className="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
-                <p className="text-sm text-red-700">{error}</p>
+            {!results ? (
+              <div className="space-y-4">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-blue-800">
+                  <p className="font-medium mb-1">Instrucciones:</p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Sube un archivo en formato <strong>CSV</strong>.</li>
+                    <li>Debe contener una columna llamada <strong>"NOMBRE"</strong>.</li>
+                    <li>Debe contener columnas para <strong>"CARNET VERDE"</strong> y <strong>"CARNET BLANCO"</strong>.</li>
+                    <li>Las fechas deben estar en formato <strong>DD-MMM-YY</strong> (ej. 30-Jul-28) o <strong>YYYY-MM-DD</strong>.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <div 
+                    className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-lg hover:border-green-400 transition-colors cursor-pointer bg-slate-50" 
+                    onClick={() => document.getElementById('csv-upload')?.click()}
+                  >
+                    <div className="space-y-1 text-center">
+                      <Upload className="mx-auto h-12 w-12 text-slate-400" />
+                      <div className="flex text-sm text-slate-600 justify-center">
+                        <span className="relative cursor-pointer rounded-md font-medium text-green-600 hover:text-green-500">
+                          {file ? file.name : 'Seleccionar archivo CSV'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">Solo archivos .csv</p>
+                    </div>
+                    <input 
+                      id="csv-upload" 
+                      type="file" 
+                      className="sr-only" 
+                      accept=".csv"
+                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-5 sm:mt-6 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="flex-1 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleProcess}
+                    disabled={loading || !file}
+                    className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600 disabled:opacity-50"
+                  >
+                    {loading ? 'Procesando...' : 'Procesar Archivo'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className={`p-4 rounded-lg border ${results.errors.length > 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
+                  <p className={`font-medium ${results.errors.length > 0 ? 'text-yellow-800' : 'text-green-800'}`}>
+                    {results.message}
+                  </p>
+                </div>
+
+                {results.errors.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="text-sm font-medium text-slate-900 flex items-center gap-2 mb-2">
+                      <AlertCircle className="h-4 w-4 text-yellow-600" />
+                      Advertencias ({results.errors.length})
+                    </h4>
+                    <div className="max-h-40 overflow-y-auto bg-slate-50 p-3 rounded border border-slate-200 text-sm text-slate-600">
+                      <ul className="list-disc pl-5 space-y-1">
+                        {results.errors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-5 sm:mt-6">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
+                  >
+                    Cerrar
+                  </button>
+                </div>
               </div>
             )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {!clubId && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">Club</label>
-                  <select
-                    required
-                    value={formData.club_id}
-                    onChange={e => setFormData({...formData, club_id: e.target.value})}
-                    className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
-                  >
-                    <option value="">Selecciona un club</option>
-                    {clubs.map(club => (
-                      <option key={club.id} value={club.id}>{club.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Nombre Completo</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.full_name}
-                  onChange={e => setFormData({...formData, full_name: e.target.value})}
-                  className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Cédula</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.cedula}
-                  onChange={e => setFormData({...formData, cedula: e.target.value})}
-                  className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
-                  placeholder="Ej: 8-888-8888"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Cargo</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.position}
-                  onChange={e => setFormData({...formData, position: e.target.value})}
-                  className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">Tipo de Contrato</label>
-                  <select
-                    value={formData.contract_type}
-                    onChange={e => setFormData({...formData, contract_type: e.target.value})}
-                    className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
-                  >
-                    <option value="indefinido">Indefinido</option>
-                    <option value="definido">Definido</option>
-                    <option value="servicios">Servicios Profesionales</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">Fecha de Ingreso</label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.contract_start}
-                    onChange={e => setFormData({...formData, contract_start: e.target.value})}
-                    className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="inline-flex w-full justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:col-start-2 disabled:opacity-50"
-                >
-                  {loading ? 'Guardando...' : 'Guardar Empleado'}
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="mt-3 inline-flex w-full justify-center rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 sm:col-start-1 sm:mt-0"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       </div>

@@ -1,126 +1,148 @@
 import { apiFetch } from '../lib/api';
-import React, { useState } from 'react';
-import { X, UserPlus } from 'lucide-react';
+import React from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { 
+  LayoutDashboard, 
+  Users, 
+  Settings, 
+  LogOut, 
+  Shield,
+  Building2,
+  CalendarCheck,
+  TrendingUp
+} from 'lucide-react';
+import clsx from 'clsx';
 
-interface ReactivateEmployeeModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-  employeeId: string;
-  employeeName: string;
-}
+export default function Layout() {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-export default function ReactivateEmployeeModal({ 
-  isOpen, 
-  onClose, 
-  onSuccess, 
-  employeeId, 
-  employeeName 
-}: ReactivateEmployeeModalProps) {
-  const { user } = useAuth();
-  const [newStartDate, setNewStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  if (!isOpen) return null;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      const res = await apiFetch(`/api/employees/${employeeId}/reactivate`, {
-        method: 'PATCH',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-user-role': user?.role || '',
-          'x-user-id': user?.id || '',
-          'x-user-name': user?.name || ''
-        },
-        body: JSON.stringify({
-          contract_start: newStartDate
-        })
-      });
-
-      if (res.ok) {
-        onSuccess();
-        onClose();
-      } else {
-        const data = await res.json();
-        setError(data.error || 'Error al reactivar al empleado');
-      }
-    } catch (err) {
-      setError('Error de conexión');
-    } finally {
-      setLoading(false);
-    }
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
   };
 
+  const navigation = [
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Empleados', href: '/empleados', icon: Users },
+    { name: 'Asistencia', href: '/asistencia', icon: CalendarCheck },
+    ...((user?.role === 'Administrador' || user?.role === 'Supervisor Interno') ? [
+      { name: 'Rendimiento', href: '/rendimiento', icon: TrendingUp }
+    ] : []),
+    ...((user?.role === 'Administrador' || user?.role === 'Coordinadora') ? [
+      { name: 'Clubes', href: '/clubes', icon: Building2 }
+    ] : []),
+    ...(user?.role === 'Administrador' ? [
+      { name: 'Configuración', href: '/configuracion', icon: Settings }
+    ] : [])
+  ];
+
+  const [isOnline, setIsOnline] = React.useState(true);
+
+  React.useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const res = await apiFetch('/api/health');
+        setIsOnline(res.ok);
+      } catch (e) {
+        setIsOnline(false);
+      }
+    };
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
-        <div className="fixed inset-0 bg-slate-900/50 transition-opacity" onClick={onClose} />
+    <div className="min-h-screen bg-slate-50 flex">
+      {/* Sidebar */}
+      <div className="w-64 bg-indigo-950 text-white flex flex-col">
+        <div className="h-16 flex items-center px-6 border-b border-slate-800">
+          <Shield className="h-8 w-8 text-blue-500 mr-3" />
+          <span className="text-xl font-bold tracking-tight">ControlDoc</span>
+        </div>
         
-        <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md">
-          <div className="bg-white px-4 pb-4 pt-5 sm:p-6">
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 text-green-600 rounded-lg">
-                  <UserPlus className="h-5 w-5" />
-                </div>
-                <h3 className="text-lg font-semibold leading-6 text-slate-900">
-                  Reactivar Empleado
-                </h3>
-              </div>
-              <button onClick={onClose} className="text-slate-400 hover:text-slate-500">
-                <X className="h-5 w-5" />
+        <div className="flex-1 py-6 flex flex-col gap-1 px-3">
+          {navigation.map((item) => {
+            const isActive = location.pathname === item.href || 
+                            (item.href !== '/' && location.pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.name}
+                to={item.href}
+                className={clsx(
+                  'flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                  isActive 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                )}
+              >
+                <item.icon className={clsx('mr-3 h-5 w-5', isActive ? 'text-white' : 'text-slate-400')} />
+                {item.name}
+              </Link>
+            );
+          })}
+        </div>
+
+        <div className="p-4 border-t border-slate-800">
+          <div className="mb-4 px-2 flex flex-col gap-1">
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-[10px] font-bold tracking-widest uppercase">Sistema v1.0.8</span>
+              <button 
+                onClick={() => {
+                  try {
+                    localStorage.clear();
+                  } catch (e) {
+                    console.warn('localStorage not available', e);
+                  }
+                  window.location.href = window.location.origin + '?force=' + Date.now();
+                }} 
+                className="text-[9px] hover:text-white transition-colors underline decoration-slate-700"
+              >
+                Refrescar
               </button>
             </div>
-
-            <p className="text-sm text-slate-500 mb-6">
-              Estás a punto de reactivar a <span className="font-semibold text-slate-900">{employeeName}</span>. 
-              El empleado volverá a aparecer en las listas activas. Por favor, ingresa la nueva fecha de reingreso.
-            </p>
-
-            {error && (
-              <div className="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Nueva Fecha de Ingreso</label>
-                <input
-                  type="date"
-                  required
-                  value={newStartDate}
-                  onChange={e => setNewStartDate(e.target.value)}
-                  className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 sm:text-sm"
-                />
-              </div>
-
-              <div className="mt-6 flex gap-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600 disabled:opacity-50"
-                >
-                  {loading ? 'Procesando...' : 'Confirmar Reingreso'}
-                </button>
-              </div>
-            </form>
           </div>
+          <div className="flex items-center mb-4 px-2">
+            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold">
+              {user?.name.charAt(0)}
+            </div>
+            <div className="ml-3 overflow-hidden">
+              <p className="text-sm font-medium truncate">{user?.name}</p>
+              <p className="text-xs text-slate-400 truncate">{user?.role}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center w-full px-3 py-2 text-sm font-medium text-slate-300 rounded-lg hover:bg-slate-800 hover:text-white transition-colors"
+          >
+            <LogOut className="mr-3 h-5 w-5 text-slate-400" />
+            Cerrar Sesión
+          </button>
         </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
+          <h1 className="text-xl font-semibold text-slate-800">
+            {navigation.find(n => location.pathname === n.href || (n.href !== '/' && location.pathname.startsWith(n.href)))?.name || 'ControlDoc'}
+          </h1>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-50 border border-slate-200">
+              <div className={clsx("w-2 h-2 rounded-full animate-pulse", isOnline ? "bg-emerald-500" : "bg-red-500")}></div>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                {isOnline ? "Servidor Activo" : "Servidor Desconectado"}
+              </span>
+            </div>
+          </div>
+        </header>
+        
+        <main className="flex-1 overflow-auto p-8">
+          <Outlet />
+        </main>
       </div>
     </div>
   );

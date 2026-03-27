@@ -1,232 +1,210 @@
 import { apiFetch } from '../lib/api';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Users, AlertTriangle, FileWarning, UploadCloud, Building2, TrendingUp } from 'lucide-react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  Cell,
-  PieChart,
-  Pie
-} from 'recharts';
+import { Building2, Plus, Search, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+interface Club {
+  id: string;
+  name: string;
+  description: string;
+  address: string;
+  is_active: number;
+}
 
-export default function Dashboard() {
+export default function Clubs() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({
-    totalEmployees: 0,
-    expiredDocuments: 0,
-    expiringSoonDocuments: 0,
-    incompleteEmployees: 0,
-    documentsUploadedToday: 0,
-    clubDistribution: [] as { name: string, value: number }[]
-  });
-  const [loading, setLoading] = useState(true);
+  console.log('Clubs Page Loaded - Version 1.0.7');
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newClub, setNewClub] = useState({ name: '', description: '', address: '' });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const fetchStats = async () => {
+  const fetchClubs = async () => {
     try {
-      const url = user?.role === 'Coordinadora' 
-        ? `/api/dashboard?club_id=${user.club_id}`
-        : '/api/dashboard';
-      const res = await apiFetch(url);
+      const res = await apiFetch('/api/clubs');
       if (res.ok) {
         const data = await res.json();
-        setStats(data);
+        setClubs(data);
       }
     } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error fetching clubs:', error);
     }
   };
 
   useEffect(() => {
-    fetchStats();
-  }, [user]);
+    fetchClubs();
+  }, []);
 
-  const kpis = [
-    { name: 'Total Empleados Activos', value: stats.totalEmployees, icon: Users, color: 'bg-blue-500', textColor: 'text-blue-600' },
-    { name: 'Documentos Vencidos', value: stats.expiredDocuments, icon: AlertTriangle, color: 'bg-red-500', textColor: 'text-red-600' },
-    { name: 'Próximos a Vencer', value: stats.expiringSoonDocuments, icon: FileWarning, color: 'bg-amber-500', textColor: 'text-amber-600' },
-    { name: 'Doc. Incompleta', value: stats.incompleteEmployees, icon: FileWarning, color: 'bg-orange-500', textColor: 'text-orange-600' },
-  ];
+  const handleCreateClub = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+    try {
+      const res = await apiFetch('/api/clubs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || '',
+          'x-user-id': user?.id || '',
+          'x-user-name': user?.name || ''
+        },
+        body: JSON.stringify(newClub)
+      });
+
+      if (res.ok) {
+        await fetchClubs();
+        setIsModalOpen(false);
+        setNewClub({ name: '', description: '', address: '' });
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Error al crear el club');
+      }
+    } catch (err) {
+      setError('Error de conexión');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const filteredClubs = clubs.filter(club => {
+    const matchesSearch = club.name.toLowerCase().includes(searchTerm.toLowerCase());
+    if (user?.role === 'Coordinadora') {
+      return matchesSearch && club.id === user.club_id;
+    }
+    return matchesSearch;
+  });
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Panel de Control</h1>
-          <p className="text-slate-500 mt-1">Resumen ejecutivo del estado de personal y documentación.</p>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div className="flex-1 max-w-lg relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-slate-400" />
+          </div>
+          <input
+            type="text"
+            className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg leading-5 bg-white placeholder-slate-500 focus:outline-none focus:placeholder-slate-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            placeholder="Buscar club..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">
-          <TrendingUp className="h-4 w-4 text-emerald-500" />
-          <span className="text-sm font-medium text-slate-700">Actualizado: {new Date().toLocaleDateString('es-PA')}</span>
+        <div className="flex gap-3 items-center">
+          <span className="text-xs font-bold text-orange-600 mr-2 bg-orange-50 px-2 py-1 rounded">DEBUG: {user?.role || 'Sin Rol'}</span>
+          {user?.role === 'Administrador' && (
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Nuevo Club
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi) => (
-          <div key={kpi.name} className="bg-white overflow-hidden shadow-sm rounded-2xl border border-slate-200 hover:shadow-md transition-shadow">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredClubs.map((club) => (
+          <div key={club.id} className="bg-white overflow-hidden shadow-sm rounded-xl border border-slate-200">
             <div className="p-6">
-              <div className="flex items-center justify-between">
-                <div className={`rounded-xl p-3 ${kpi.color} bg-opacity-10 ${kpi.textColor}`}>
-                  <kpi.icon className="h-6 w-6" aria-hidden="true" />
+              <div className="flex items-center justify-between mb-4">
+                <div className="h-12 w-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                  <Building2 className="h-6 w-6" />
                 </div>
-                <div className="text-right">
-                  <dt className="text-sm font-medium text-slate-500 truncate">{kpi.name}</dt>
-                  <dd className="text-3xl font-bold text-slate-900">{kpi.value}</dd>
-                </div>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                  club.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'
+                }`}>
+                  {club.is_active ? 'Activo' : 'Inactivo'}
+                </span>
               </div>
+              <h3 className="text-lg font-semibold text-slate-900">{club.name}</h3>
+              <p className="mt-1 text-sm text-slate-500 line-clamp-2">
+                {club.description || 'Sin descripción'}
+              </p>
+            </div>
+            <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-end">
+              <Link to={`/clubes/${club.id}`} className="text-sm font-medium text-blue-600 hover:text-blue-800">
+                Gestionar
+              </Link>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Distribución por Club */}
-        <div className="lg:col-span-2 bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-slate-400" />
-              Distribución de Personal por Club
-            </h3>
-          </div>
-          <div className="p-6 h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.clubDistribution}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#64748b', fontSize: 12 }}
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#64748b', fontSize: 12 }}
-                />
-                <Tooltip 
-                  cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                  {stats.clubDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Estado de Documentación */}
-        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50">
-            <h3 className="text-lg font-bold text-slate-800">Estado de Documentación</h3>
-          </div>
-          <div className="p-6 h-[350px] flex flex-col items-center justify-center">
-            <ResponsiveContainer width="100%" height="80%">
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Vencidos', value: stats.expiredDocuments },
-                    { name: 'Próximos', value: stats.expiringSoonDocuments },
-                    { name: 'Al día', value: Math.max(0, stats.totalEmployees * 8 - stats.expiredDocuments - stats.expiringSoonDocuments) }
-                  ]}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  <Cell fill="#ef4444" />
-                  <Cell fill="#f59e0b" />
-                  <Cell fill="#10b981" />
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="mt-4 grid grid-cols-3 gap-4 w-full text-center">
-              <div>
-                <div className="w-3 h-3 rounded-full bg-red-500 mx-auto mb-1"></div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Vencidos</p>
-              </div>
-              <div>
-                <div className="w-3 h-3 rounded-full bg-amber-500 mx-auto mb-1"></div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Próximos</p>
-              </div>
-              <div>
-                <div className="w-3 h-3 rounded-full bg-emerald-500 mx-auto mb-1"></div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Al día</p>
+      {/* Modal Nuevo Club */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[9999] overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
+            <div className="fixed inset-0 bg-slate-900/50 transition-opacity" onClick={() => setIsModalOpen(false)} />
+            
+            <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-slate-900">Crear Nuevo Club</h3>
+                  <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-500">
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+                <form onSubmit={handleCreateClub} className="space-y-4">
+                  {error && (
+                    <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm">
+                      {error}
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Nombre del Club</label>
+                    <input
+                      type="text"
+                      required
+                      className="mt-1 block w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      value={newClub.name}
+                      onChange={(e) => setNewClub({ ...newClub, name: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Descripción</label>
+                    <textarea
+                      className="mt-1 block w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      rows={3}
+                      value={newClub.description}
+                      onChange={(e) => setNewClub({ ...newClub, description: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Dirección</label>
+                    <input
+                      type="text"
+                      className="mt-1 block w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      value={newClub.address}
+                      onChange={(e) => setNewClub({ ...newClub, address: e.target.value })}
+                    />
+                  </div>
+                  <div className="mt-5 sm:mt-6 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 bg-white hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="flex-1 px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                    >
+                      {isLoading ? 'Creando...' : 'Crear Club'}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Alertas de Documentación */}
-        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-lg font-bold text-slate-800">Alertas Críticas</h3>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">
-              {stats.expiredDocuments} Pendientes
-            </span>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {stats.expiredDocuments > 0 ? (
-              <div className="p-6 flex items-start gap-4 hover:bg-slate-50 transition-colors">
-                <div className="p-2 bg-red-50 text-red-600 rounded-lg">
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-900">Documentos Vencidos Detectados</p>
-                  <p className="text-sm text-slate-500 mt-1">Hay {stats.expiredDocuments} documentos que requieren renovación inmediata para evitar multas.</p>
-                </div>
-              </div>
-            ) : (
-              <div className="p-12 text-center text-slate-500">
-                No hay alertas críticas en este momento.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Actividad Reciente */}
-        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100">
-            <h3 className="text-lg font-bold text-slate-800">Actividad Reciente</h3>
-          </div>
-          <div className="divide-y divide-slate-100">
-            <div className="p-6 flex items-start gap-4 hover:bg-slate-50 transition-colors">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                <UploadCloud className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-slate-900">Carga de Documentos</p>
-                <p className="text-sm text-slate-500 mt-1">Se han cargado {stats.documentsUploadedToday} nuevos documentos en las últimas 24 horas.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

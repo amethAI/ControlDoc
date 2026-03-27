@@ -1,33 +1,8 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ControlDoc - v1.0.7</title>
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <script>
-      // Force a one-time reload to clear cache
-      (function() {
-        try {
-          const VERSION = '1.0.7';
-          if (localStorage.getItem('app_version') !== VERSION) {
-            localStorage.setItem('app_version', VERSION);
-            // Add a timestamp to the URL to bypass proxy cache
-            const url = new URL(window.location.href);
-            url.searchParams.set('v', Date.now());
-            window.location.replace(url.toString());
-          }
-        } catch (e) {
-          console.warn('localStorage not available', e);
-        }
-      })();
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example

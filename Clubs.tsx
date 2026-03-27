@@ -1,17 +1,13 @@
-export const apiFetch = async (url: string, options: RequestInit = {}) => {
-  const token = localStorage.getItem('token');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+@import "tailwindcss";
 
-  const headers = new Headers(options.headers || {});
-  
-  // Only add token for internal API requests
-  if (token && url.startsWith('/api')) {
-    headers.set('Authorization', `Bearer ${token}`);
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", serif;
+}
+
+@layer base {
+  body {
+    @apply font-sans text-slate-900 bg-slate-50;
   }
-
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
-
-  return response;
-};
+}

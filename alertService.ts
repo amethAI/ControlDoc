@@ -1,158 +1,229 @@
 import { apiFetch } from '../lib/api';
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Users, Plus, Search } from 'lucide-react';
-import UserModal from '../components/UserModal';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { toast } from 'sonner';
+import { Search, Plus, Filter, Upload, FileSpreadsheet } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import NewEmployeeModal from '../components/NewEmployeeModal';
+import BulkUploadModal from '../components/BulkUploadModal';
+import BulkEmployeeModal from '../components/BulkEmployeeModal';
+import ImportDatesModal from '../components/ImportDatesModal';
 
-export default function GestionUsuarios() {
-  const { user: currentUser } = useAuth();
-  const [users, setUsers] = useState<any[]>([]);
-  const [clubs, setClubs] = useState<any[]>([]);
+interface Employee {
+  id: string;
+  full_name: string;
+  cedula: string;
+  position: string;
+  status: string;
+  club_id: string;
+  termination_reason?: string;
+  termination_date?: string;
+}
+
+export default function Employees() {
+  const { user } = useAuth();
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('activo');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isBulkEmployeeModalOpen, setIsBulkEmployeeModalOpen] = useState(false);
+  const [isImportDatesModalOpen, setIsImportDatesModalOpen] = useState(false);
 
-  const fetchData = async () => {
+  const fetchEmployees = useCallback(async () => {
     try {
-      const [usersRes, clubsRes] = await Promise.all([
-        apiFetch('/api/users', {
-          headers: { 'x-user-role': currentUser?.role || '' }
-        }),
-        apiFetch('/api/clubs')
-      ]);
-      const usersData = await usersRes.json();
-      const clubsData = await clubsRes.json();
+      // Coordinadora and Supervisor Interno are restricted to their club
+      const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
       
-      if (Array.isArray(usersData)) {
-        setUsers(usersData);
-      } else {
-        console.error('Error fetching users:', usersData);
-        toast.error(`Error al cargar usuarios: ${usersData.error || 'Error desconocido'}`);
-        setUsers([]);
-      }
+      let url = isRestricted 
+        ? `/api/employees?club_id=${user?.club_id}&status=${statusFilter}`
+        : `/api/employees?status=${statusFilter}`;
       
-      if (Array.isArray(clubsData)) {
-        setClubs(clubsData);
-      } else {
-        console.error('Error fetching clubs:', clubsData);
-        toast.error(`Error al cargar clubes: ${clubsData.error || 'Error desconocido'}`);
-        setClubs([]);
+      const res = await apiFetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setEmployees(data);
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
-      setUsers([]);
-      setClubs([]);
+      console.error('Error fetching employees:', error);
     }
-  };
+  }, [user, statusFilter]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchEmployees();
+  }, [fetchEmployees]);
 
-  const getClubName = (clubId: string) => {
-    if (!clubId) return 'Todos';
-    const club = clubs.find(c => c.id === clubId);
-    return club ? club.name : 'Todos';
-  };
-
-  const handleEdit = (user: any) => {
-    setSelectedUser(user);
-    setIsModalOpen(true);
-  };
-
-  const handleNew = () => {
-    setSelectedUser(null);
-    setIsModalOpen(true);
-  };
-
-  const filteredUsers = users.filter(user => {
-    if (!user) return false;
-    const nameMatch = (user.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const emailMatch = (user.email || '').toLowerCase().includes(searchTerm.toLowerCase());
-    return nameMatch || emailMatch;
-  });
+  const filteredEmployees = employees.filter(emp => 
+    emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.cedula.includes(searchTerm)
+  );
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link to="/configuracion" className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <h2 className="text-2xl font-bold text-slate-800">Gestión de Usuarios</h2>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex p-1 bg-slate-100 rounded-lg w-fit">
+          <button
+            onClick={() => setStatusFilter('activo')}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+              statusFilter === 'activo' 
+                ? 'bg-white text-blue-600 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Activos
+          </button>
+          <button
+            onClick={() => setStatusFilter('inactivo')}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+              statusFilter === 'inactivo' 
+                ? 'bg-white text-blue-600 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Inactivos (Historial)
+          </button>
         </div>
-        <button 
-          onClick={handleNew}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Usuario
-        </button>
+
+        <div className="flex gap-3">
+          {(user?.role === 'Administrador' || user?.role === 'Supervisor Interno') && (
+            <>
+              {user?.role === 'Administrador' && (
+                <button 
+                  onClick={() => setIsImportDatesModalOpen(true)}
+                  className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" />
+                  Importar Fechas
+                </button>
+              )}
+              <button 
+                onClick={() => setIsBulkEmployeeModalOpen(true)}
+                className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <Plus className="h-4 w-4 mr-2 text-slate-500" />
+                Carga Masiva Empleados
+              </button>
+              <button 
+                onClick={() => setIsBulkModalOpen(true)}
+                className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <Upload className="h-4 w-4 mr-2 text-slate-500" />
+                Carga Masiva Docs
+              </button>
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nuevo Empleado
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center">
+        <div className="flex-1 max-w-lg relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-slate-400" />
+          </div>
+          <input
+            type="text"
+            className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg leading-5 bg-white placeholder-slate-500 focus:outline-none focus:placeholder-slate-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            placeholder="Buscar por nombre o cédula..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-3">
+          <button className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+            <Filter className="h-4 w-4 mr-2 text-slate-500" />
+            Filtros
+          </button>
+        </div>
       </div>
 
       <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-          <div className="flex-1 max-w-md relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-slate-400" />
-            </div>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm bg-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Buscar por nombre o correo..."
-            />
-          </div>
-        </div>
-        
         <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-white">
+          <thead className="bg-slate-50">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Usuario</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Rol</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Club Asignado</th>
-              <th scope="col" className="relative px-6 py-3"><span className="sr-only">Acciones</span></th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Empleado
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Cédula
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Cargo
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Estado
+              </th>
+              {statusFilter === 'inactivo' ? (
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Motivo de Baja
+                </th>
+              ) : (
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Docs
+                </th>
+              )}
+              <th scope="col" className="relative px-6 py-3">
+                <span className="sr-only">Acciones</span>
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
-            {filteredUsers.map((user) => (
-              <tr key={user.id} className="hover:bg-slate-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-medium">
-                      {(user.name || '?').charAt(0).toUpperCase()}
+            {filteredEmployees.length > 0 ? (
+              filteredEmployees.map((person) => (
+                <tr key={person.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-medium">
+                        {person.full_name.charAt(0)}
+                      </div>
+                      <div className="ml-4">
+                        <div className="text-sm font-medium text-slate-900">{person.full_name}</div>
+                      </div>
                     </div>
-                    <div className="ml-3">
-                      <div className="text-sm font-medium text-slate-900">{user.name || 'Sin nombre'}</div>
-                      <div className="text-sm text-slate-500">{user.email || 'Sin correo'}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-slate-100 text-slate-800">
-                    {user.role}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                  {getClubName(user.club_id)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button 
-                    onClick={() => handleEdit(user)}
-                    className="text-blue-600 hover:text-blue-900"
-                  >
-                    Editar
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {filteredUsers.length === 0 && (
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                    {person.cedula}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                    {person.position}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      person.status === 'activo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {person.status}
+                    </span>
+                  </td>
+                  {statusFilter === 'inactivo' ? (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                      {person.termination_reason || 'No especificado'}
+                    </td>
+                  ) : (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                      {/* Mock document status indicators */}
+                      <div className="flex gap-1">
+                        <div className="w-3 h-3 rounded-full bg-green-500" title="Vigente"></div>
+                        <div className="w-3 h-3 rounded-full bg-amber-500" title="Próximo a vencer"></div>
+                        <div className="w-3 h-3 rounded-full bg-orange-500" title="Faltante"></div>
+                      </div>
+                    </td>
+                  )}
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <Link to={`/empleados/${person.id}`} className="text-blue-600 hover:text-blue-900">
+                      Ver Perfil
+                    </Link>
+                  </td>
+                </tr>
+              ))
+            ) : (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
-                  No se encontraron usuarios.
+                <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                  No se encontraron empleados.
                 </td>
               </tr>
             )}
@@ -160,11 +231,30 @@ export default function GestionUsuarios() {
         </table>
       </div>
 
-      <UserModal
+      <NewEmployeeModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSuccess={fetchData}
-        user={selectedUser}
+        onSuccess={fetchEmployees}
+        clubId={user?.role === 'Coordinadora' ? user.club_id : undefined}
+      />
+
+      <BulkUploadModal 
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        onSuccess={fetchEmployees}
+      />
+
+      <BulkEmployeeModal 
+        isOpen={isBulkEmployeeModalOpen}
+        onClose={() => setIsBulkEmployeeModalOpen(false)}
+        onSuccess={fetchEmployees}
+        clubId={user?.role === 'Coordinadora' ? user.club_id : undefined}
+      />
+
+      <ImportDatesModal
+        isOpen={isImportDatesModalOpen}
+        onClose={() => setIsImportDatesModalOpen(false)}
+        onSuccess={fetchEmployees}
       />
     </div>
   );

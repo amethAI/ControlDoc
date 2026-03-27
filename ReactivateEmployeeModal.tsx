@@ -1,145 +1,75 @@
-import { apiFetch } from '../lib/api';
-import React from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Settings, 
-  LogOut, 
-  Shield,
-  Building2,
-  CalendarCheck
-} from 'lucide-react';
-import clsx from 'clsx';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 
-export default function Layout() {
-  const { user, logout } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
+interface Props {
+  children?: ReactNode;
+}
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+interface State {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: ErrorInfo | null;
+}
+
+class ErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false,
+    error: null,
+    errorInfo: null
   };
 
-  const navigation = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Empleados', href: '/empleados', icon: Users },
-    { name: 'Asistencia', href: '/asistencia', icon: CalendarCheck },
-    ...((user?.role === 'Administrador' || user?.role === 'Coordinadora') ? [
-      { name: 'Clubes', href: '/clubes', icon: Building2 }
-    ] : []),
-    ...(user?.role === 'Administrador' ? [
-      { name: 'Configuración', href: '/configuracion', icon: Settings }
-    ] : [])
-  ];
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error, errorInfo: null };
+  }
 
-  const [isOnline, setIsOnline] = React.useState(true);
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Uncaught error:', error, errorInfo);
+    this.setState({
+      error,
+      errorInfo
+    });
+  }
 
-  React.useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        const res = await apiFetch('/api/health');
-        setIsOnline(res.ok);
-      } catch (e) {
-        setIsOnline(false);
-      }
-    };
-    checkStatus();
-    const interval = setInterval(checkStatus, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar */}
-      <div className="w-64 bg-indigo-950 text-white flex flex-col">
-        <div className="h-16 flex items-center px-6 border-b border-slate-800">
-          <Shield className="h-8 w-8 text-blue-500 mr-3" />
-          <span className="text-xl font-bold tracking-tight">ControlDoc</span>
-        </div>
-        
-        <div className="flex-1 py-6 flex flex-col gap-1 px-3">
-          {navigation.map((item) => {
-            const isActive = location.pathname === item.href || 
-                            (item.href !== '/' && location.pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={clsx(
-                  'flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                  isActive 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                )}
-              >
-                <item.icon className={clsx('mr-3 h-5 w-5', isActive ? 'text-white' : 'text-slate-400')} />
-                {item.name}
-              </Link>
-            );
-          })}
-        </div>
-
-        <div className="p-4 border-t border-slate-800">
-          <div className="mb-4 px-2 flex flex-col gap-1">
-            <div className="flex items-center justify-between text-slate-500">
-              <span className="text-[10px] font-bold tracking-widest uppercase">Sistema v1.0.8</span>
-              <button 
-                onClick={() => {
-                  try {
-                    localStorage.clear();
-                  } catch (e) {
-                    console.warn('localStorage not available', e);
-                  }
-                  window.location.href = window.location.origin + '?force=' + Date.now();
-                }} 
-                className="text-[9px] hover:text-white transition-colors underline decoration-slate-700"
-              >
-                Refrescar
-              </button>
+  public render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+          <div className="bg-white p-8 rounded-xl shadow-lg max-w-2xl w-full border border-red-100">
+            <div className="flex items-center gap-3 mb-6 text-red-600">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <h1 className="text-2xl font-bold">Algo salió mal</h1>
             </div>
+            
+            <p className="text-slate-600 mb-6">
+              La aplicación ha encontrado un error inesperado. Por favor, intenta recargar la página.
+            </p>
+
+            <div className="bg-slate-100 p-4 rounded-lg overflow-auto mb-6 max-h-64 text-sm font-mono text-slate-800">
+              <p className="font-bold mb-2">{this.state.error && this.state.error.toString()}</p>
+              <pre className="whitespace-pre-wrap">{this.state.errorInfo?.componentStack}</pre>
+            </div>
+
+            <button
+              onClick={() => {
+                try {
+                  localStorage.clear();
+                } catch (e) {
+                  console.warn('localStorage not available', e);
+                }
+                window.location.href = window.location.origin + '?force=' + Date.now();
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors w-full"
+            >
+              Recargar Aplicación
+            </button>
           </div>
-          <div className="flex items-center mb-4 px-2">
-            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold">
-              {user?.name.charAt(0)}
-            </div>
-            <div className="ml-3 overflow-hidden">
-              <p className="text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-slate-400 truncate">{user?.role}</p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center w-full px-3 py-2 text-sm font-medium text-slate-300 rounded-lg hover:bg-slate-800 hover:text-white transition-colors"
-          >
-            <LogOut className="mr-3 h-5 w-5 text-slate-400" />
-            Cerrar Sesión
-          </button>
         </div>
-      </div>
+      );
+    }
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
-          <h1 className="text-xl font-semibold text-slate-800">
-            {navigation.find(n => location.pathname === n.href || (n.href !== '/' && location.pathname.startsWith(n.href)))?.name || 'ControlDoc'}
-          </h1>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-50 border border-slate-200">
-              <div className={clsx("w-2 h-2 rounded-full animate-pulse", isOnline ? "bg-emerald-500" : "bg-red-500")}></div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                {isOnline ? "Servidor Activo" : "Servidor Desconectado"}
-              </span>
-            </div>
-          </div>
-        </header>
-        
-        <main className="flex-1 overflow-auto p-8">
-          <Outlet />
-        </main>
-      </div>
-    </div>
-  );
+    return this.props.children;
+  }
 }
+
+export default ErrorBoundary;
