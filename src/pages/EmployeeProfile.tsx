@@ -1,6 +1,6 @@
 import { apiFetch } from '../lib/api';
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, Upload, Download, FileText, AlertCircle, CheckCircle2, Clock, Edit2, UserMinus, UserPlus, Eye, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
@@ -46,6 +46,7 @@ interface EmployeeDocument {
 
 export default function EmployeeProfile() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [docTypes, setDocTypes] = useState<DocumentType[]>([]);
@@ -224,9 +225,9 @@ export default function EmployeeProfile() {
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link to="/empleados" className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
+          <button onClick={() => navigate(-1)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
             <ArrowLeft className="h-5 w-5" />
-          </Link>
+          </button>
           <h2 className="text-2xl font-bold text-slate-800">Perfil del Empleado</h2>
         </div>
         <div className="flex gap-3">

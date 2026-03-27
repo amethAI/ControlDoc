@@ -34,15 +34,11 @@ export default function UploadDocumentModal({
   const [files, setFiles] = useState<FileClassification[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  // Single file fallback state (if the user only selects one file and we don't use auto-classification)
-  const [singleExpiryDate, setSingleExpiryDate] = useState('');
 
   // Reset state when modal opens/closes
   useEffect(() => {
     if (isOpen) {
       setFiles([]);
-      setSingleExpiryDate('');
       setError('');
     }
   }, [isOpen]);
@@ -132,9 +128,9 @@ export default function UploadDocumentModal({
         formData.append('employee_id', employeeId);
         formData.append('document_type_id', item.typeId);
         
-        // Use the specific expiry date if set, otherwise fallback to singleExpiryDate if it's just one file
-        const expiry = item.expiryDate || (files.length === 1 ? singleExpiryDate : '');
-        if (expiry) {
+        // Use the specific expiry date if set
+        const expiry = item.expiryDate;
+        if (expiry && expiry !== 'indefinido') {
           formData.append('expiry_date', expiry);
         }
         formData.append('status', 'cargado');
@@ -255,13 +251,30 @@ export default function UploadDocumentModal({
                                 
                                 {item.typeId !== 'doc-personal-combined' && (
                                   <div>
-                                    <label className="block text-xs font-medium text-slate-700 mb-1">Vencimiento (Opcional)</label>
-                                    <input
-                                      type="date"
-                                      value={item.expiryDate}
-                                      onChange={(e) => updateExpiryDate(index, e.target.value)}
-                                      className="block w-full text-sm rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                    />
+                                    <label className="block text-xs font-medium text-slate-700 mb-1">Vencimiento</label>
+                                    <div className="space-y-2">
+                                      <input
+                                        type="date"
+                                        value={item.expiryDate}
+                                        onChange={(e) => updateExpiryDate(index, e.target.value)}
+                                        disabled={item.expiryDate === 'indefinido'}
+                                        className="block w-full text-sm rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400"
+                                      />
+                                      <div className="flex items-center">
+                                        <input
+                                          id={`indefinite-${index}`}
+                                          type="checkbox"
+                                          checked={item.expiryDate === 'indefinido'}
+                                          onChange={(e) => {
+                                            updateExpiryDate(index, e.target.checked ? 'indefinido' : '');
+                                          }}
+                                          className="h-3.5 w-3.5 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                                        />
+                                        <label htmlFor={`indefinite-${index}`} className="ml-2 block text-xs text-slate-600">
+                                          Sin vencimiento (Indefinido)
+                                        </label>
+                                      </div>
+                                    </div>
                                   </div>
                                 )}
                               </div>

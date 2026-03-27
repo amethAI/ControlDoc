@@ -24,6 +24,7 @@ export default function EditExpiryModal({
 }: EditExpiryModalProps) {
   const { user } = useAuth();
   const [expiryDate, setExpiryDate] = useState(currentDate || '');
+  const [isIndefinite, setIsIndefinite] = useState(!currentDate);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -43,7 +44,7 @@ export default function EditExpiryModal({
           'x-user-id': user?.id || '',
           'x-user-name': user?.name || ''
         },
-        body: JSON.stringify({ expiry_date: expiryDate || null })
+        body: JSON.stringify({ expiry_date: isIndefinite ? null : (expiryDate || null) })
       });
 
       if (res.ok) {
@@ -96,12 +97,31 @@ export default function EditExpiryModal({
                   </div>
                   <input
                     type="date"
-                    required
+                    required={!isIndefinite}
+                    disabled={isIndefinite}
                     value={expiryDate}
                     onChange={e => setExpiryDate(e.target.value)}
-                    className="block w-full pl-10 rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
+                    className="block w-full pl-10 rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm disabled:bg-slate-100 disabled:text-slate-400"
                   />
                 </div>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  id="indefinite"
+                  type="checkbox"
+                  checked={isIndefinite}
+                  onChange={(e) => {
+                    setIsIndefinite(e.target.checked);
+                    if (e.target.checked) {
+                      setExpiryDate('');
+                    }
+                  }}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                />
+                <label htmlFor="indefinite" className="ml-2 block text-sm text-slate-700">
+                  Documento sin fecha de vencimiento (Indefinido)
+                </label>
               </div>
 
               <div className="mt-5 sm:mt-6 flex gap-3">

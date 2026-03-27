@@ -68,6 +68,7 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      encoding: 'ISO-8859-1',
       complete: (results) => {
         const parsedRows = results.data.map((row: any) => {
           // Normalize keys to ignore case, accents, and extra spaces/punctuation

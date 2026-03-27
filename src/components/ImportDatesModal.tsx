@@ -64,6 +64,7 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      encoding: 'ISO-8859-1',
       complete: async (results) => {
         try {
           const records = results.data.map((row: any) => {
