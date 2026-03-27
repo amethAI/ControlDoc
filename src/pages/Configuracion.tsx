@@ -1,13 +1,19 @@
+import { apiFetch } from '../lib/api';
 import React, { useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Settings, Users, Bell, Shield, Database, Download, FileSpreadsheet, Upload, Send } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function Configuracion() {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isSendingAlerts, setIsSendingAlerts] = useState(false);
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [showTestAlertConfirm, setShowTestAlertConfirm] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   if (user?.role !== 'Administrador') {
     return (
@@ -17,12 +23,42 @@ export default function Configuracion() {
     );
   }
 
-  const handleDownloadBackup = () => {
-    window.open('/api/backup/database', '_blank');
+  const handleDownloadBackup = async () => {
+    try {
+      const response = await apiFetch('/api/backup/database');
+      if (!response.ok) throw new Error('Error al descargar');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `psmt-backup-${new Date().toISOString().split('T')[0]}.sql`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading backup:', error);
+      toast.error('Error al descargar el respaldo');
+    }
   };
 
-  const handleExportCSV = () => {
-    window.open('/api/backup/employees-csv', '_blank');
+  const handleExportCSV = async () => {
+    try {
+      const response = await apiFetch('/api/backup/employees-csv');
+      if (!response.ok) throw new Error('Error al exportar');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `empleados-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+      toast.error('Error al exportar CSV');
+    }
   };
 
   const handleRestoreClick = () => {
@@ -33,45 +69,52 @@ export default function Configuracion() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!confirm('¿Estás seguro de que deseas restaurar la base de datos? Esto SOBREESCRIBIRÁ todos los datos actuales con los del archivo seleccionado.')) {
-      e.target.value = '';
-      return;
-    }
+    setSelectedFile(file);
+    setShowRestoreConfirm(true);
+  };
+
+  const executeRestore = async () => {
+    if (!selectedFile) return;
 
     setIsRestoring(true);
     try {
-      const response = await fetch('/api/restore/database', {
+      const response = await apiFetch('/api/restore/database', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
         },
-        body: file,
+        body: selectedFile,
       });
 
       if (response.ok) {
-        alert('Base de datos restaurada con éxito. La página se recargará.');
-        window.location.reload();
+        toast.success('Base de datos restaurada con éxito. La página se recargará.');
+        setTimeout(() => window.location.reload(), 1500);
       } else {
         const data = await response.json();
-        alert(data.error || 'Error al restaurar la base de datos');
+        toast.error(data.error || 'Error al restaurar la base de datos');
       }
     } catch (error) {
-      alert('Error de red al intentar restaurar la base de datos');
+      toast.error('Error de red al intentar restaurar la base de datos');
     } finally {
       setIsRestoring(false);
-      e.target.value = '';
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const handleTestAlerts = async () => {
-    if (!confirm('¿Deseas enviar una prueba de alertas ahora? Se enviarán correos a los destinatarios configurados.')) return;
-    
+    setShowTestAlertConfirm(true);
+  };
+
+  const executeTestAlerts = async () => {
     setIsSendingAlerts(true);
     setPreviewUrl(null);
     try {
-      const response = await fetch('/api/alerts/send', {
+      const response = await apiFetch('/api/alerts/send', {
         method: 'POST',
         headers: {
           'x-user-role': user?.role || '',
@@ -83,18 +126,18 @@ export default function Configuracion() {
       const data = await response.json();
       if (response.ok && data.success) {
         if (data.isRealEmail) {
-          alert('Alertas enviadas con éxito a los correos configurados.');
+          toast.success('Alertas enviadas con éxito a los correos configurados.');
         } else {
-          alert('Prueba realizada con éxito (Simulación).');
+          toast.success('Prueba realizada con éxito (Simulación).');
           if (data.previewUrls && data.previewUrls.length > 0) {
             setPreviewUrl(data.previewUrls[0]);
           }
         }
       } else {
-        alert(data.error || 'Error al enviar alertas');
+        toast.error(data.error || 'Error al enviar alertas');
       }
     } catch (error) {
-      alert('Error de red al intentar enviar alertas');
+      toast.error('Error de red al intentar enviar alertas');
     } finally {
       setIsSendingAlerts(false);
     }
@@ -191,7 +234,24 @@ export default function Configuracion() {
             </button>
 
             <button 
-              onClick={() => window.open('/api/download-source', '_blank')}
+              onClick={async () => {
+                try {
+                  const response = await apiFetch('/api/download-source');
+                  if (!response.ok) throw new Error('Error al descargar');
+                  const blob = await response.blob();
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `psmt-source-code-${new Date().toISOString().split('T')[0]}.zip`;
+                  document.body.appendChild(a);
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                  document.body.removeChild(a);
+                } catch (error) {
+                  console.error('Error downloading source:', error);
+                  toast.error('Error al descargar el código fuente');
+                }
+              }}
               className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-left group"
             >
               <div className="flex items-center gap-3">
@@ -267,6 +327,29 @@ export default function Configuracion() {
           </div>
         </Link>
       </div>
+
+      <ConfirmModal
+        isOpen={showRestoreConfirm}
+        onClose={() => {
+          setShowRestoreConfirm(false);
+          setSelectedFile(null);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        }}
+        onConfirm={executeRestore}
+        title="Restaurar Base de Datos"
+        message="¿Estás seguro de que deseas restaurar la base de datos? Esto SOBREESCRIBIRÁ todos los datos actuales con los del archivo seleccionado."
+        isDestructive={true}
+      />
+
+      <ConfirmModal
+        isOpen={showTestAlertConfirm}
+        onClose={() => setShowTestAlertConfirm(false)}
+        onConfirm={executeTestAlerts}
+        title="Enviar Prueba de Alertas"
+        message="¿Deseas enviar una prueba de alertas ahora? Se enviarán correos a los destinatarios configurados."
+      />
     </div>
   );
 }

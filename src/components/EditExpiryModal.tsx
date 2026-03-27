@@ -1,5 +1,7 @@
+import { apiFetch } from '../lib/api';
 import React, { useState } from 'react';
 import { X, Calendar } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { useAuth } from '../context/AuthContext';
 
@@ -33,7 +35,7 @@ export default function EditExpiryModal({
     setLoading(true);
 
     try {
-      const res = await fetch(`/api/documents/${documentId}`, {
+      const res = await apiFetch(`/api/documents/${documentId}`, {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',
@@ -45,14 +47,15 @@ export default function EditExpiryModal({
       });
 
       if (res.ok) {
+        toast.success('Fecha actualizada exitosamente');
         onSuccess();
         onClose();
       } else {
         const data = await res.json();
-        setError(data.error || 'Error al actualizar fecha');
+        toast.error(data.error || 'Error al actualizar fecha');
       }
     } catch (err) {
-      setError('Error de conexión');
+      toast.error('Error de conexión');
     } finally {
       setLoading(false);
     }

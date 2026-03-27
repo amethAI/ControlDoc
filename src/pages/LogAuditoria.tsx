@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Shield, Search, Filter } from 'lucide-react';
@@ -21,7 +22,7 @@ export default function LogAuditoria() {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        const res = await fetch('/api/audit-logs', {
+        const res = await apiFetch('/api/audit-logs', {
           headers: {
             'x-user-role': user?.role || ''
           }

@@ -1,6 +1,8 @@
+import { apiFetch } from '../lib/api';
 import React, { useState } from 'react';
 import { X, Upload } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 
 interface UploadDocumentModalProps {
   isOpen: boolean;
@@ -38,36 +40,32 @@ export default function UploadDocumentModal({
     setLoading(true);
 
     try {
-      // In a real app, we would use FormData to upload the actual file
-      // For this demo, we'll send the metadata and a mock file name
-      const res = await fetch('/api/documents', {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('employee_id', employeeId);
+      formData.append('document_type_id', documentTypeId);
+      if (expiryDate) {
+        formData.append('expiry_date', expiryDate);
+      }
+      formData.append('status', 'cargado');
+
+      const res = await apiFetch('/api/documents', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-user-role': user?.role || '',
-          'x-user-id': user?.id || '',
-          'x-user-name': user?.name || ''
-        },
-        body: JSON.stringify({
-          employee_id: employeeId,
-          document_type_id: documentTypeId,
-          file_name: file.name,
-          expiry_date: expiryDate || null,
-          status: 'cargado'
-        })
+        body: formData
       });
 
       if (res.ok) {
+        toast.success('Documento subido exitosamente');
         onSuccess();
         onClose();
         setFile(null);
         setExpiryDate('');
       } else {
         const data = await res.json();
-        setError(data.error || 'Error al subir documento');
+        toast.error(data.error || 'Error al subir documento');
       }
     } catch (err) {
-      setError('Error de conexión');
+      toast.error('Error de conexión');
     } finally {
       setLoading(false);
     }

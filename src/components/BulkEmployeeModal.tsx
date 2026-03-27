@@ -1,8 +1,10 @@
+import { apiFetch } from '../lib/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { X, UserPlus, Trash2, Check, AlertCircle, Building2, Briefcase, CreditCard, Upload } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../context/AuthContext';
 import Papa from 'papaparse';
+import { toast } from 'sonner';
 
 interface BulkEmployeeModalProps {
   isOpen: boolean;
@@ -30,7 +32,7 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
 
   useEffect(() => {
     if (isOpen) {
-      fetch('/api/clubs').then(res => res.json()).then(setClubs);
+      apiFetch('/api/clubs').then(res => res.json()).then(setClubs);
       // Add initial 3 rows
       setRows([
         { id: '1', full_name: '', cedula: '', position: '', club_id: clubId || '', status: 'pending' },
@@ -121,7 +123,7 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
       },
       error: (error) => {
         console.error('Error parsing CSV:', error);
-        alert('Hubo un error al leer el archivo CSV.');
+        toast.error('Hubo un error al leer el archivo CSV.');
       }
     });
   };
@@ -138,7 +140,7 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
       updateRow(row.id, { status: 'saving' });
       try {
         console.log(`Guardando empleado: ${row.full_name}`);
-        const response = await fetch('/api/employees', {
+        const response = await apiFetch('/api/employees', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -173,10 +175,13 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
     setIsSaving(false);
     
     if (!hasError) {
+      toast.success('Empleados cargados exitosamente');
       setTimeout(() => {
         onSuccess();
         onClose();
       }, 1000);
+    } else {
+      toast.warning('Se completó la carga con algunos errores');
     }
   };
 

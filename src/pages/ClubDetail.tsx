@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -36,8 +37,8 @@ export default function ClubDetail() {
     }
     try {
       const [clubRes, empRes] = await Promise.all([
-        fetch(`/api/clubs/${id}`),
-        fetch(`/api/employees?club_id=${id}&status=activo`)
+        apiFetch(`/api/clubs/${id}`),
+        apiFetch(`/api/employees?club_id=${id}&status=activo`)
       ]);
 
       if (clubRes.ok && empRes.ok) {

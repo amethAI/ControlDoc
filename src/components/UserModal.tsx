@@ -1,6 +1,8 @@
+import { apiFetch } from '../lib/api';
 import React, { useState, useEffect } from 'react';
 import { X, User, Mail, Shield, Building2, Lock, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -22,9 +24,10 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
   useEffect(() => {
-    fetch('/api/clubs').then(res => res.json()).then(setClubs);
+    apiFetch('/api/clubs').then(res => res.json()).then(setClubs);
   }, []);
 
   useEffect(() => {
@@ -62,7 +65,7 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
       const url = user ? `/api/users/${user.id}` : '/api/users';
       const method = user ? 'PATCH' : 'POST';
       
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 
           'Content-Type': 'application/json',
@@ -74,14 +77,15 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
       });
 
       if (res.ok) {
+        toast.success(user ? 'Usuario actualizado con éxito' : 'Usuario creado con éxito');
         onSuccess();
         onClose();
       } else {
         const data = await res.json();
-        alert(data.details ? `Error: ${data.details}` : data.error || 'Error al guardar usuario');
+        toast.error(data.details ? `Error: ${data.details}` : data.error || 'Error al guardar usuario');
       }
     } catch (error) {
-      alert('Error de red');
+      toast.error('Error de red');
     } finally {
       setLoading(false);
     }
@@ -90,12 +94,11 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
   const handleDelete = async () => {
     console.log('handleDelete triggered');
     if (!user) return;
-    if (!confirm(`¿Estás seguro de que deseas eliminar al usuario "${user.name}"? Esta acción no se puede deshacer.`)) return;
 
     console.log('Deleting user:', user.id);
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/users/${user.id}`, {
+      const res = await apiFetch(`/api/users/${user.id}`, {
         method: 'DELETE',
         headers: { 
           'x-user-role': currentUser?.role || '',
@@ -106,15 +109,16 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
       console.log('Delete response status:', res.status);
 
       if (res.ok) {
+        toast.success('Usuario eliminado con éxito');
         onSuccess();
         onClose();
       } else {
         const data = await res.json();
-        alert(data.error || 'Error al eliminar usuario');
+        toast.error(data.error || 'Error al eliminar usuario');
       }
     } catch (error) {
       console.error('Delete error:', error);
-      alert('Error de red');
+      toast.error('Error de red');
     } finally {
       setIsDeleting(false);
     }
@@ -203,7 +207,8 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
                 className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="Administrador">Administrador</option>
-                <option value="Supervisora">Supervisora</option>
+                <option value="Supervisor Interno">Supervisor Interno</option>
+                <option value="Supervisor Cliente">Supervisor Cliente</option>
                 <option value="Coordinadora">Coordinadora</option>
               </select>
             </div>
@@ -249,16 +254,42 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
               </button>
             </div>
             
-            {user && (
+            {user && !showConfirmDelete && (
               <button
                 type="button"
-                onClick={handleDelete}
+                onClick={() => setShowConfirmDelete(true)}
                 disabled={loading || isDeleting}
                 className="w-full flex items-center justify-center px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50 transition-colors"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                {isDeleting ? 'Eliminando...' : 'Eliminar Usuario'}
+                Eliminar Usuario
               </button>
+            )}
+
+            {showConfirmDelete && (
+              <div className="p-4 bg-red-50 border border-red-100 rounded-lg space-y-3">
+                <p className="text-sm text-red-800 font-medium text-center">
+                  ¿Estás seguro de que deseas eliminar al usuario "{user?.name}"? Esta acción no se puede deshacer.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmDelete(false)}
+                    disabled={isDeleting}
+                    className="flex-1 px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {isDeleting ? 'Eliminando...' : 'Sí, eliminar'}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </form>

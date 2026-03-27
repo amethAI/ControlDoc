@@ -5,31 +5,234 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import archiver from 'archiver';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import multer from 'multer';
 
 const router = Router();
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  }
+});
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_for_development_only_12345';
+
+// Debug route for environment variables
+router.get('/debug-env', (req, res) => {
+  res.json({
+    VITE_SUPABASE_URL: !!process.env.VITE_SUPABASE_URL,
+    SUPABASE_URL: !!process.env.SUPABASE_URL,
+    VITE_SUPABASE_ANON_KEY: !!process.env.VITE_SUPABASE_ANON_KEY,
+    SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    NODE_ENV: process.env.NODE_ENV,
+    cwd: process.cwd()
+  });
+});
+
+if (!process.env.JWT_SECRET) {
+  console.warn('WARNING: JWT_SECRET environment variable is not set. Using insecure fallback key.');
+}
+
+// Middleware to check if user is authenticated
+const isAuthenticated = (req: any, res: any, next: any) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Token de autenticación no proporcionado' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+    if (err) {
+      return res.status(403).json({ error: 'Token inválido o expirado' });
+    }
+    req.user = user;
+    next();
+  });
+};
 
 // Middleware to check if user is Administrator
 const isAdmin = (req: any, res: any, next: any) => {
-  const role = req.headers['x-user-role'];
-  if (role !== 'Administrador') {
+  if (!req.user || req.user.role !== 'Administrador') {
     return res.status(403).json({ error: 'Acceso denegado. Solo el administrador puede realizar esta acción.' });
   }
   next();
 };
 
+// Middleware to check if user is Internal (Admin or Internal Supervisor)
+const isInternal = (req: any, res: any, next: any) => {
+  const internalRoles = ['Administrador', 'Supervisor Interno'];
+  const user = (req as any).user;
+  if (!user || !internalRoles.includes(user.role)) {
+    return res.status(403).json({ error: 'Acceso denegado. Esta sección es privada para el equipo interno.' });
+  }
+  next();
+};
+
+// Performance Routes
+router.get('/api/performance', isAuthenticated, isInternal, async (req, res) => {
+  const { date, club_id } = req.query;
+  
+  try {
+    let query = supabase
+      .from('daily_performance')
+      .select(`
+        *,
+        employee:employees(id, name)
+      `);
+    
+    if (date) query = query.eq('date', date);
+    if (club_id) query = query.eq('club_id', club_id);
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    console.error('Error fetching performance:', error);
+    res.status(500).json({ error: 'Error al obtener datos de rendimiento', details: error.message });
+  }
+});
+
+router.post('/api/performance', isAuthenticated, isInternal, async (req, res) => {
+  const records = Array.isArray(req.body) ? req.body : [req.body];
+  const user = (req as any).user;
+  
+  try {
+    const { data, error } = await supabase
+      .from('daily_performance')
+      .upsert(records.map((r: any) => ({
+        ...r,
+        created_by: user.id,
+        updated_at: new Date().toISOString()
+      })));
+    
+    if (error) throw error;
+    res.json({ message: 'Datos guardados correctamente', data });
+  } catch (error: any) {
+    console.error('Error saving performance:', error);
+    res.status(500).json({ error: 'Error al guardar datos de rendimiento', details: error.message });
+  }
+});
+
+router.get('/api/performance/stats', isAuthenticated, isInternal, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('daily_performance')
+      .select('meta, actual_sales, date');
+    
+    if (error) throw error;
+    
+    // Simple aggregation for dashboard
+    const stats = data.reduce((acc: any, curr: any) => {
+      acc.totalMeta += curr.meta || 0;
+      acc.totalVentas += curr.actual_sales || 0;
+      return acc;
+    }, { totalMeta: 0, totalVentas: 0 });
+    
+    res.json(stats);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Error al obtener estadísticas', details: error.message });
+  }
+});
+
+// Simple auth endpoint
+router.post('/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  console.log(`Intentando login para: ${email}`);
+  
+  // Hardcoded check for debugging
+  if (email === 'admin@psmt.com' && password === 'admin123') {
+    console.log(`Login exitoso (hardcoded) para: ${email}`);
+    const token = jwt.sign(
+      { id: 'admin-1', email: 'admin@psmt.com', name: 'Admin General', role: 'Administrador', club_id: null },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+    return res.json({
+      token,
+      user: {
+        id: 'admin-1',
+        email: 'admin@psmt.com',
+        name: 'Admin General',
+        role: 'Administrador',
+        club_id: null
+      }
+    });
+  }
+
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+    
+    if (error) {
+      if (error.message === 'Supabase not configured') {
+        return res.status(500).json({ error: 'La base de datos (Supabase) no está configurada. Por favor, verifica las variables de entorno.' });
+      }
+      if (error.code !== 'PGRST116') {
+        throw error;
+      }
+    }
+
+    // Check if user exists and verify password
+    const isValidPassword = user && (
+      // For backwards compatibility with plain text passwords during migration
+      user.password_hash === password || 
+      // For hashed passwords
+      (user.password_hash.startsWith('$2') && bcrypt.compareSync(password, user.password_hash))
+    );
+    
+    if (user && isValidPassword) {
+      console.log(`Login exitoso para: ${email}`);
+      
+      // Generate JWT
+      const token = jwt.sign(
+        { id: user.id, email: user.email, name: user.name, role: user.role, club_id: user.club_id },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+      
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          club_id: user.club_id
+        }
+      });
+    } else {
+      console.log(`Login fallido para: ${email} (Credenciales inválidas)`);
+      res.status(401).json({ error: 'Credenciales inválidas' });
+    }
+  } catch (error) {
+    console.error('Error en el proceso de login:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Apply authentication middleware to all routes below
+router.use(isAuthenticated);
+
 // Helper to log audit actions
 const logAudit = async (
-  userId: string,
-  userName: string,
+  req: any,
   actionType: string,
   actionDescription: string,
   entityType: string,
   entityId: string | null,
   entityName: string | null,
-  clubId: string | null,
-  req: any
+  clubId: string | null
 ) => {
   try {
+    const userId = req.user?.id || req.headers['x-user-id'] as string;
+    const userName = req.user?.name || req.headers['x-user-name'] as string;
     const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
     await supabase.from('audit_logs').insert({
       id: crypto.randomUUID(),
@@ -63,57 +266,6 @@ router.get('/audit-logs', isAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error fetching audit logs:', error);
     res.status(500).json({ error: 'Failed to fetch audit logs' });
-  }
-});
-
-// Simple mock auth
-router.post('/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  console.log(`Intentando login para: ${email}`);
-  
-  // Hardcoded check for debugging
-  if (email === 'admin@psmt.com' && password === 'admin123') {
-    console.log(`Login exitoso (hardcoded) para: ${email}`);
-    return res.json({
-      token: `mock-jwt-admin-1`,
-      user: {
-        id: 'admin-1',
-        email: 'admin@psmt.com',
-        name: 'Admin General',
-        role: 'Administrador',
-        club_id: null
-      }
-    });
-  }
-
-  try {
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .eq('password_hash', password)
-      .single();
-    
-    if (user && !error) {
-      console.log(`Login exitoso para: ${email}`);
-      // In a real app, use JWT. Here we just return user details.
-      res.json({
-        token: `mock-jwt-${user.id}`,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          club_id: user.club_id
-        }
-      });
-    } else {
-      console.log(`Login fallido para: ${email} (Credenciales inválidas)`);
-      res.status(401).json({ error: 'Credenciales inválidas' });
-    }
-  } catch (error) {
-    console.error('Error en el proceso de login:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 
@@ -154,13 +306,11 @@ router.post('/clubs', isAdmin, async (req, res) => {
     }
     
     // Log audit
-    const userId = req.headers['x-user-id'] as string;
-    const userName = req.headers['x-user-name'] as string;
     await logAudit(
-      userId, userName,
+      req,
       'Creación de club',
       `Club creado: ${name}`,
-      'Club', id, name, id, req
+      'Club', id, name, id
     );
     
     res.status(201).json(newClub);
@@ -217,13 +367,11 @@ router.post('/employees', isAdmin, async (req, res) => {
     }
     
     // Log audit
-    const userId = req.headers['x-user-id'] as string;
-    const userName = req.headers['x-user-name'] as string;
     await logAudit(
-      userId, userName,
+      req,
       'Creación de empleado',
       `Empleado creado: ${full_name} (${cedula})`,
-      'Empleado', id, full_name, club_id, req
+      'Empleado', id, full_name, club_id
     );
     
     res.status(201).json(newEmployee);
@@ -265,11 +413,61 @@ router.get('/employees/:id/documents', async (req, res) => {
 });
 
 // Create document (upload)
-router.post('/documents', isAdmin, async (req, res) => {
-  const { employee_id, document_type_id, file_name, expiry_date, status } = req.body;
+router.post('/documents', isAdmin, (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'El archivo es demasiado grande (límite 10MB)' });
+      }
+      return res.status(400).json({ error: `Error al subir archivo: ${err.message}` });
+    } else if (err) {
+      return res.status(500).json({ error: `Error desconocido: ${err.message}` });
+    }
+    next();
+  });
+}, async (req, res) => {
+  const { employee_id, document_type_id, expiry_date, status } = req.body;
+  const file = req.file;
+  
+  if (!file) {
+    return res.status(400).json({ error: 'No se ha proporcionado ningún archivo' });
+  }
+
+  const file_name = file.originalname;
+  const file_size_kb = Math.round(file.size / 1024);
   
   try {
     const id = `doc-${Date.now()}`;
+    
+    // Upload to Supabase Storage
+    const fileExt = file_name.split('.').pop();
+    const filePath = `${employee_id}/${id}.${fileExt}`;
+    
+    // Ensure bucket exists
+    const { data: buckets } = await supabase.storage.listBuckets();
+    if (!buckets?.find(b => b.name === 'documents')) {
+      await supabase.storage.createBucket('documents', { public: true });
+    }
+    
+    // Ensure bucket exists or just upload (Supabase will fail if bucket doesn't exist, 
+    // but we assume it's created or we can try to create it)
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.error('Supabase storage error:', uploadError);
+      throw new Error(`Error al subir archivo a storage: ${uploadError.message}`);
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from('documents')
+      .getPublicUrl(filePath);
+      
+    const file_url = publicUrlData.publicUrl;
     
     // Mark previous versions as not current
     await supabase
@@ -278,11 +476,11 @@ router.post('/documents', isAdmin, async (req, res) => {
       .eq('employee_id', employee_id)
       .eq('document_type_id', document_type_id);
     
-    // Mock file_url and file_size_kb
+    // Insert document record
     const { data: newDoc, error } = await supabase
       .from('employee_documents')
       .insert([{
-        id, employee_id, document_type_id, file_url: `/uploads/${file_name}`, file_name, file_size_kb: 1024, expiry_date, status
+        id, employee_id, document_type_id, file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status
       }])
       .select()
       .single();
@@ -290,13 +488,11 @@ router.post('/documents', isAdmin, async (req, res) => {
     if (error) throw error;
     
     // Log audit
-    const userId = req.headers['x-user-id'] as string;
-    const userName = req.headers['x-user-name'] as string;
     await logAudit(
-      userId, userName,
+      req,
       'Carga de documento',
       `Documento subido: ${file_name}`,
-      'Documento', id, file_name, null, req
+      'Documento', id, file_name, null
     );
     
     res.status(201).json(newDoc);
@@ -345,13 +541,11 @@ router.patch('/employees/:id/terminate', async (req, res) => {
     if (error) throw error;
     
     // Log audit
-    const userId = req.headers['x-user-id'] as string;
-    const userName = req.headers['x-user-name'] as string;
     await logAudit(
-      userId, userName,
+      req,
       'Baja de empleado',
       `Empleado dado de baja: ID ${req.params.id}`,
-      'Empleado', req.params.id, null, updatedEmployee.club_id, req
+      'Empleado', req.params.id, null, updatedEmployee.club_id
     );
 
     res.json(updatedEmployee);
@@ -382,13 +576,11 @@ router.patch('/employees/:id/reactivate', async (req, res) => {
     if (error) throw error;
     
     // Log audit
-    const userId = req.headers['x-user-id'] as string;
-    const userName = req.headers['x-user-name'] as string;
     await logAudit(
-      userId, userName,
+      req,
       'Reactivación de empleado',
       `Empleado reactivado: ID ${req.params.id}`,
-      'Empleado', req.params.id, null, updatedEmployee.club_id, req
+      'Empleado', req.params.id, null, updatedEmployee.club_id
     );
 
     res.json(updatedEmployee);
@@ -578,13 +770,33 @@ router.get('/dashboard', async (req, res) => {
       return { name: club.name, value: count };
     }) || [];
 
+    // 7. Performance Stats (Internal Only)
+    let performanceStats = null;
+    const internalRoles = ['Administrador', 'Supervisor Interno'];
+    const user = (req as any).user;
+    if (user && internalRoles.includes(user.role)) {
+      const { data: perfData } = await supabase
+        .from('daily_performance')
+        .select('meta, actual_sales')
+        .gte('date', todayStr);
+      
+      if (perfData) {
+        performanceStats = perfData.reduce((acc: any, curr: any) => {
+          acc.totalMeta += curr.meta || 0;
+          acc.totalVentas += curr.actual_sales || 0;
+          return acc;
+        }, { totalMeta: 0, totalVentas: 0 });
+      }
+    }
+
     res.json({
       totalEmployees: totalEmployees || 0,
       expiredDocuments,
       expiringSoonDocuments,
       incompleteEmployees,
       documentsUploadedToday,
-      clubDistribution
+      clubDistribution,
+      performanceStats
     });
   } catch (error: any) {
     console.error('Dashboard stats error:', error);
@@ -594,7 +806,7 @@ router.get('/dashboard', async (req, res) => {
 
 // User management routes
 router.get('/users', isAdmin, async (req, res) => {
-  const { data: users, error } = await supabase.from('users').select('id, email, password:password_hash, name, role, club_id, is_active');
+  const { data: users, error } = await supabase.from('users').select('id, email, name, role, club_id, is_active');
   if (error) return res.status(500).json({ error: error.message });
   res.json(users);
 });
@@ -603,22 +815,22 @@ router.post('/users', isAdmin, async (req, res) => {
   const { email, password, name, role, club_id } = req.body;
   try {
     const id = `user-${Date.now()}`;
+    const hashedPassword = bcrypt.hashSync(password, 10);
+    
     const { data: newUser, error } = await supabase
       .from('users')
-      .insert([{ id, email, password_hash: password, name, role, club_id: club_id || null }])
+      .insert([{ id, email, password_hash: hashedPassword, name, role, club_id: club_id || null }])
       .select('id, email, name, role, club_id, is_active')
       .single();
       
     if (error) throw error;
     
     // Log audit
-    const userId = req.headers['x-user-id'] as string;
-    const userName = req.headers['x-user-name'] as string;
     await logAudit(
-      userId, userName,
+      req,
       'Creación de usuario',
       `Usuario creado: ${name} (${email})`,
-      'Usuario', id, name, club_id, req
+      'Usuario', id, name, club_id
     );
     
     res.status(201).json(newUser);
@@ -631,17 +843,22 @@ router.post('/users', isAdmin, async (req, res) => {
 router.patch('/users/:id', isAdmin, async (req, res) => {
   const { email, password, name, role, club_id, is_active } = req.body;
   try {
+    const updateData: any = {
+      email, 
+      name, 
+      role, 
+      club_id: club_id || null, 
+      is_active: is_active === undefined ? 1 : is_active,
+      updated_at: new Date().toISOString()
+    };
+    
+    if (password) {
+      updateData.password_hash = bcrypt.hashSync(password, 10);
+    }
+    
     const { data: updatedUser, error } = await supabase
       .from('users')
-      .update({ 
-        email, 
-        password_hash: password, 
-        name, 
-        role, 
-        club_id: club_id || null, 
-        is_active: is_active === undefined ? 1 : is_active,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', req.params.id)
       .select('id, email, name, role, club_id, is_active')
       .single();
@@ -649,13 +866,11 @@ router.patch('/users/:id', isAdmin, async (req, res) => {
     if (error) throw error;
     
     // Log audit
-    const userId = req.headers['x-user-id'] as string;
-    const userName = req.headers['x-user-name'] as string;
     await logAudit(
-      userId, userName,
+      req,
       'Actualización de usuario',
       `Usuario actualizado: ${name} (${email})`,
-      'Usuario', req.params.id, name, club_id, req
+      'Usuario', req.params.id, name, club_id
     );
     
     res.json(updatedUser);
@@ -689,13 +904,11 @@ router.delete('/users/:id', isAdmin, async (req, res) => {
     if (error) throw error;
 
     // Log audit
-    const reqUserId = req.headers['x-user-id'] as string;
-    const reqUserName = req.headers['x-user-name'] as string;
     await logAudit(
-      reqUserId, reqUserName,
+      req,
       'Eliminación de usuario',
       `Usuario eliminado: ID ${userId}`,
-      'Usuario', userId, null, null, req
+      'Usuario', userId, null, null
     );
 
     res.json({ success: true });

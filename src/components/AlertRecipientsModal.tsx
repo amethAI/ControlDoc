@@ -1,6 +1,8 @@
+import { apiFetch } from '../lib/api';
 import React, { useState, useEffect } from 'react';
 import { X, Mail, Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 
 interface AlertRecipientsModalProps {
   isOpen: boolean;
@@ -44,7 +46,7 @@ export default function AlertRecipientsModal({ isOpen, onClose, onSuccess, club,
         finalEmails.push(newEmail);
       }
 
-      const res = await fetch('/api/alert-recipients', {
+      const res = await apiFetch('/api/alert-recipients', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -59,16 +61,17 @@ export default function AlertRecipientsModal({ isOpen, onClose, onSuccess, club,
       });
 
       if (res.ok) {
+        toast.success('Destinatarios guardados con éxito');
         onSuccess();
         onClose();
       } else {
         const errorData = await res.json();
         console.error('Error from server:', errorData);
-        alert(`Error al guardar destinatarios: ${errorData.error || 'Desconocido'}`);
+        toast.error(`Error al guardar destinatarios: ${errorData.error || 'Desconocido'}`);
       }
     } catch (error) {
       console.error('Network error:', error);
-      alert('Error de red');
+      toast.error('Error de red');
     } finally {
       setLoading(false);
     }

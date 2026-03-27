@@ -1,5 +1,7 @@
+import { apiFetch } from '../lib/api';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -90,9 +92,9 @@ export default function Attendance() {
       const end = format(monthEnd, 'yyyy-MM-dd');
       
       const [empRes, attRes, reqRes] = await Promise.all([
-        fetch(`/api/employees?club_id=${selectedClubId}&status=activo`),
-        fetch(`/api/attendance?club_id=${selectedClubId}&start_date=${start}&end_date=${end}`),
-        fetch(`/api/attendance-requests?club_id=${selectedClubId}&start_date=${start}&end_date=${end}`)
+        apiFetch(`/api/employees?club_id=${selectedClubId}&status=activo`),
+        apiFetch(`/api/attendance?club_id=${selectedClubId}&start_date=${start}&end_date=${end}`),
+        apiFetch(`/api/attendance-requests?club_id=${selectedClubId}&start_date=${start}&end_date=${end}`)
       ]);
 
       if (empRes.ok && attRes.ok && reqRes.ok) {
@@ -108,7 +110,7 @@ export default function Attendance() {
   }, [selectedClubId, currentMonth]);
 
   useEffect(() => {
-    fetch('/api/clubs').then(res => res.json()).then(setClubs);
+    apiFetch('/api/clubs').then(res => res.json()).then(setClubs);
   }, []);
 
   useEffect(() => {
@@ -135,7 +137,7 @@ export default function Attendance() {
     setSaving(true);
     try {
       // Save attendance records
-      const attRes = await fetch('/api/attendance', {
+      const attRes = await apiFetch('/api/attendance', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -147,7 +149,7 @@ export default function Attendance() {
       });
 
       // Save requests
-      const reqRes = await fetch('/api/attendance-requests', {
+      const reqRes = await apiFetch('/api/attendance-requests', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -161,10 +163,10 @@ export default function Attendance() {
       });
 
       if (attRes.ok && reqRes.ok) {
-        alert('Asistencia y solicitudes guardadas correctamente');
+        toast.success('Asistencia y solicitudes guardadas correctamente');
       }
     } catch (error) {
-      alert('Error al guardar datos');
+      toast.error('Error al guardar datos');
     } finally {
       setSaving(false);
     }

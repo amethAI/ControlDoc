@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -26,7 +27,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
   useEffect(() => {
     if (isOpen) {
       if (!clubId) {
-        fetch('/api/clubs')
+        apiFetch('/api/clubs')
           .then(res => res.json())
           .then(data => setClubs(data))
           .catch(err => console.error('Error fetching clubs:', err));
@@ -48,7 +49,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
     setLoading(true);
 
     try {
-      const res = await fetch('/api/employees', {
+      const res = await apiFetch('/api/employees', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

@@ -51,20 +51,34 @@ const createMockClient = (): SupabaseClient => {
       admin: {},
       signInWithPassword: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
     },
+    storage: {
+      from: () => ({
+        upload: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
+        getPublicUrl: () => ({ data: { publicUrl: '' } }),
+      }),
+      listBuckets: () => Promise.resolve({ data: [], error: null }),
+      createBucket: () => Promise.resolve({ data: null, error: null }),
+    },
     rpc: () => Promise.resolve({ data: null, error: null }),
   } as unknown as SupabaseClient;
 };
 
 export const getSupabase = (): SupabaseClient => {
   if (!supabaseInstance) {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
+    const supabaseUrl = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
     // Prioritize service_role key to bypass RLS, fallback to anon_key
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+    const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
 
+    console.log('--- Supabase Config Check ---');
+    console.log('URL present:', !!supabaseUrl);
+    console.log('Key present:', !!supabaseKey);
+    if (supabaseUrl) console.log('URL starts with:', supabaseUrl.substring(0, 15));
+    
     if (!supabaseUrl || !supabaseKey) {
       console.warn('⚠️ Supabase URL or Key is missing. Using mock client.');
       supabaseInstance = createMockClient();
     } else {
+      console.log('✅ Initializing real Supabase client');
       supabaseInstance = createClient(supabaseUrl, supabaseKey);
     }
   }
@@ -79,6 +93,7 @@ export const supabase = {
     get signInWithPassword() { return getSupabase().auth.signInWithPassword; },
     // Add other auth methods if needed
   },
+  get storage() { return getSupabase().storage; },
   rpc: (fn: string, args?: any) => getSupabase().rpc(fn, args),
 } as unknown as SupabaseClient;
 

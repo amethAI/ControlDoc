@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Users, AlertTriangle, FileWarning, UploadCloud, Building2, TrendingUp } from 'lucide-react';
@@ -24,7 +25,8 @@ export default function Dashboard() {
     expiringSoonDocuments: 0,
     incompleteEmployees: 0,
     documentsUploadedToday: 0,
-    clubDistribution: [] as { name: string, value: number }[]
+    clubDistribution: [] as { name: string, value: number }[],
+    performanceStats: null as { totalMeta: number, totalVentas: number } | null
   });
   const [loading, setLoading] = useState(true);
 
@@ -33,7 +35,7 @@ export default function Dashboard() {
       const url = user?.role === 'Coordinadora' 
         ? `/api/dashboard?club_id=${user.club_id}`
         : '/api/dashboard';
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -55,6 +57,20 @@ export default function Dashboard() {
     { name: 'Próximos a Vencer', value: stats.expiringSoonDocuments, icon: FileWarning, color: 'bg-amber-500', textColor: 'text-amber-600' },
     { name: 'Doc. Incompleta', value: stats.incompleteEmployees, icon: FileWarning, color: 'bg-orange-500', textColor: 'text-orange-600' },
   ];
+
+  if (stats.performanceStats) {
+    const compliance = stats.performanceStats.totalMeta > 0 
+      ? Math.round((stats.performanceStats.totalVentas / stats.performanceStats.totalMeta) * 100) 
+      : 0;
+    
+    kpis.push({ 
+      name: 'Cumplimiento de Ventas Hoy', 
+      value: `${compliance}%`, 
+      icon: TrendingUp, 
+      color: 'bg-emerald-500', 
+      textColor: 'text-emerald-600' 
+    });
+  }
 
   if (loading) {
     return (

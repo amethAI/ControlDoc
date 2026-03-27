@@ -6,6 +6,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { Toaster } from 'sonner';
 import Login from './pages/Login';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -14,6 +15,7 @@ import EmployeeProfile from './pages/EmployeeProfile';
 import Clubs from './pages/Clubs';
 import ClubDetail from './pages/ClubDetail';
 import Attendance from './pages/Attendance';
+import RendimientoVentas from './pages/RendimientoVentas';
 import Configuracion from './pages/Configuracion';
 import GestionUsuarios from './pages/GestionUsuarios';
 import DestinatariosAlertas from './pages/DestinatariosAlertas';
@@ -45,6 +47,7 @@ function AppRoutes() {
         <Route path="clubes" element={<Clubs />} />
         <Route path="clubes/:id" element={<ClubDetail />} />
         <Route path="asistencia" element={<Attendance />} />
+        <Route path="rendimiento" element={<RendimientoVentas />} />
         <Route path="configuracion" element={<Configuracion />} />
         <Route path="configuracion/usuarios" element={<GestionUsuarios />} />
         <Route path="configuracion/alertas" element={<DestinatariosAlertas />} />
@@ -60,6 +63,7 @@ export default function App() {
     <AuthProvider>
       <Router>
         <AppRoutes />
+        <Toaster position="top-right" richColors />
       </Router>
     </AuthProvider>
   );

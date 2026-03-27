@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +9,7 @@ import EditExpiryModal from '../components/EditExpiryModal';
 import TerminateEmployeeModal from '../components/TerminateEmployeeModal';
 import ReactivateEmployeeModal from '../components/ReactivateEmployeeModal';
 import JSZip from 'jszip';
+import { toast } from 'sonner';
 
 interface Employee {
   id: string;
@@ -58,9 +60,9 @@ export default function EmployeeProfile() {
   const fetchData = useCallback(async () => {
     try {
       const [empRes, typesRes, docsRes] = await Promise.all([
-        fetch(`/api/employees/${id}`),
-        fetch('/api/document-types'),
-        fetch(`/api/employees/${id}/documents`)
+        apiFetch(`/api/employees/${id}`),
+        apiFetch('/api/document-types'),
+        apiFetch(`/api/employees/${id}/documents`)
       ]);
 
       if (empRes.ok && typesRes.ok && docsRes.ok) {
@@ -129,7 +131,7 @@ export default function EmployeeProfile() {
 
       const downloadPromises = documents.map(async (doc) => {
         try {
-          const response = await fetch(getFileUrl(doc.file_url));
+          const response = await apiFetch(getFileUrl(doc.file_url));
           if (!response.ok) throw new Error(`Failed to fetch ${doc.file_name}`);
           
           const contentType = response.headers.get('content-type');
@@ -172,7 +174,7 @@ export default function EmployeeProfile() {
       }, 100);
     } catch (error) {
       console.error('Error generating ZIP:', error);
-      alert('Error al generar el archivo ZIP. Por favor intente de nuevo.');
+      toast.error('Error al generar el archivo ZIP. Por favor intente de nuevo.');
     } finally {
       setLoading(false);
     }

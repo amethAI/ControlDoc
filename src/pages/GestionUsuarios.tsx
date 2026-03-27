@@ -1,8 +1,10 @@
+import { apiFetch } from '../lib/api';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Users, Plus, Search } from 'lucide-react';
 import UserModal from '../components/UserModal';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 
 export default function GestionUsuarios() {
   const { user: currentUser } = useAuth();
@@ -15,10 +17,10 @@ export default function GestionUsuarios() {
   const fetchData = async () => {
     try {
       const [usersRes, clubsRes] = await Promise.all([
-        fetch('/api/users', {
+        apiFetch('/api/users', {
           headers: { 'x-user-role': currentUser?.role || '' }
         }),
-        fetch('/api/clubs')
+        apiFetch('/api/clubs')
       ]);
       const usersData = await usersRes.json();
       const clubsData = await clubsRes.json();
@@ -27,7 +29,7 @@ export default function GestionUsuarios() {
         setUsers(usersData);
       } else {
         console.error('Error fetching users:', usersData);
-        alert(`Error al cargar usuarios: ${usersData.error || 'Error desconocido'}`);
+        toast.error(`Error al cargar usuarios: ${usersData.error || 'Error desconocido'}`);
         setUsers([]);
       }
       
@@ -35,7 +37,7 @@ export default function GestionUsuarios() {
         setClubs(clubsData);
       } else {
         console.error('Error fetching clubs:', clubsData);
-        alert(`Error al cargar clubes: ${clubsData.error || 'Error desconocido'}`);
+        toast.error(`Error al cargar clubes: ${clubsData.error || 'Error desconocido'}`);
         setClubs([]);
       }
     } catch (error) {

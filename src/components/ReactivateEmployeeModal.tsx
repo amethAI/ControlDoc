@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 import React, { useState } from 'react';
 import { X, UserPlus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -30,7 +31,7 @@ export default function ReactivateEmployeeModal({
     setLoading(true);
 
     try {
-      const res = await fetch(`/api/employees/${employeeId}/reactivate`, {
+      const res = await apiFetch(`/api/employees/${employeeId}/reactivate`, {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',

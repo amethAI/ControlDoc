@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Building2, Plus, Search, X } from 'lucide-react';
@@ -23,7 +24,7 @@ export default function Clubs() {
 
   const fetchClubs = async () => {
     try {
-      const res = await fetch('/api/clubs');
+      const res = await apiFetch('/api/clubs');
       if (res.ok) {
         const data = await res.json();
         setClubs(data);
@@ -43,7 +44,7 @@ export default function Clubs() {
     setError('');
 
     try {
-      const res = await fetch('/api/clubs', {
+      const res = await apiFetch('/api/clubs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

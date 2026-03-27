@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Search, Plus, Filter, Upload } from 'lucide-react';
@@ -32,7 +33,7 @@ export default function Employees() {
         ? `/api/employees?club_id=${user.club_id}&status=${statusFilter}`
         : `/api/employees?status=${statusFilter}`;
       
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
         setEmployees(data);

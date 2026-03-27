@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Bell, Search, Shield } from 'lucide-react';
@@ -12,8 +13,8 @@ export default function DestinatariosAlertas() {
   const fetchData = async () => {
     try {
       const [clubsRes, recipientsRes] = await Promise.all([
-        fetch('/api/clubs'),
-        fetch('/api/alert-recipients')
+        apiFetch('/api/clubs'),
+        apiFetch('/api/alert-recipients')
       ]);
       const clubsData = await clubsRes.json();
       const recipientsData = await recipientsRes.json();

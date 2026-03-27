@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 import React from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -8,7 +9,8 @@ import {
   LogOut, 
   Shield,
   Building2,
-  CalendarCheck
+  CalendarCheck,
+  TrendingUp
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -26,6 +28,9 @@ export default function Layout() {
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Empleados', href: '/empleados', icon: Users },
     { name: 'Asistencia', href: '/asistencia', icon: CalendarCheck },
+    ...((user?.role === 'Administrador' || user?.role === 'Supervisor Interno') ? [
+      { name: 'Rendimiento', href: '/rendimiento', icon: TrendingUp }
+    ] : []),
     ...((user?.role === 'Administrador' || user?.role === 'Coordinadora') ? [
       { name: 'Clubes', href: '/clubes', icon: Building2 }
     ] : []),
@@ -39,7 +44,7 @@ export default function Layout() {
   React.useEffect(() => {
     const checkStatus = async () => {
       try {
-        const res = await fetch('/api/health');
+        const res = await apiFetch('/api/health');
         setIsOnline(res.ok);
       } catch (e) {
         setIsOnline(false);

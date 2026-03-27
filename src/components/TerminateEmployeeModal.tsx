@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/api';
 import React, { useState } from 'react';
 import { X, UserMinus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -31,7 +32,7 @@ export default function TerminateEmployeeModal({
     setLoading(true);
 
     try {
-      const res = await fetch(`/api/employees/${employeeId}/terminate`, {
+      const res = await apiFetch(`/api/employees/${employeeId}/terminate`, {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',

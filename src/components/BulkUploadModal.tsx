@@ -1,7 +1,9 @@
+import { apiFetch } from '../lib/api';
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Upload, FileText, Check, AlertCircle, Trash2, User, FileType } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 
 interface BulkUploadModalProps {
   isOpen: boolean;
@@ -38,8 +40,8 @@ export default function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUplo
 
   useEffect(() => {
     if (isOpen) {
-      fetch('/api/employees?status=activo').then(res => res.json()).then(setEmployees);
-      fetch('/api/document-types').then(res => res.json()).then(setDocTypes);
+      apiFetch('/api/employees?status=activo').then(res => res.json()).then(setEmployees);
+      apiFetch('/api/document-types').then(res => res.json()).then(setDocTypes);
     }
   }, [isOpen]);
 
@@ -92,7 +94,7 @@ export default function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUplo
     // Validation
     const invalidItems = pendingItems.filter(item => !item.employeeId || !item.documentTypeId);
     if (invalidItems.length > 0) {
-      alert('Por favor seleccione el empleado y tipo de documento para todos los archivos.');
+      toast.error('Por favor seleccione el empleado y tipo de documento para todos los archivos.');
       return;
     }
 
@@ -104,21 +106,19 @@ export default function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUplo
       updateItem(item.id, { status: 'uploading' });
       try {
         console.log(`Subiendo: ${item.file.name} para empleado ${item.employeeId}`);
-        const response = await fetch('/api/documents', {
+        
+        const formData = new FormData();
+        formData.append('file', item.file);
+        formData.append('employee_id', item.employeeId);
+        formData.append('document_type_id', item.documentTypeId);
+        if (item.expiryDate) {
+          formData.append('expiry_date', item.expiryDate);
+        }
+        formData.append('status', 'vigente');
+
+        const response = await apiFetch('/api/documents', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-user-role': user?.role || '',
-            'x-user-id': user?.id || '',
-            'x-user-name': user?.name || ''
-          },
-          body: JSON.stringify({
-            employee_id: item.employeeId,
-            document_type_id: item.documentTypeId,
-            file_name: item.file.name,
-            expiry_date: item.expiryDate || null,
-            status: 'vigente'
-          })
+          body: formData
         });
 
         if (response.ok) {
@@ -136,11 +136,14 @@ export default function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUplo
     setIsUploading(false);
     
     if (!hasError) {
+      toast.success('Documentos subidos exitosamente');
       setTimeout(() => {
         onSuccess();
         onClose();
         setUploadItems([]);
       }, 1000);
+    } else {
+      toast.warning('Se completó la carga con algunos errores');
     }
   };
 
