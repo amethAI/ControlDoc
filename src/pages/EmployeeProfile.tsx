@@ -379,6 +379,7 @@ export default function EmployeeProfile() {
           employeeId={employee.id}
           documentTypeId={selectedDocType.id}
           documentTypeName={selectedDocType.name}
+          availableDocTypes={docTypes.map(t => ({ id: t.id, name: t.name }))}
         />
       )}
 
