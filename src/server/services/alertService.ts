@@ -1,4 +1,4 @@
-import { supabase } from '../db.js';
+import { supabase } from '../db.ts';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import dns from 'dns';

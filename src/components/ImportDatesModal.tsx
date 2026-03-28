@@ -88,20 +88,34 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
 
         // Find the header row (the one that contains 'NOMBRE' or similar)
         let headerRowIndex = -1;
-        for (let i = 0; i < Math.min(rows.length, 20); i++) {
+        
+        // Scan up to 50 rows to find the header
+        for (let i = 0; i < Math.min(rows.length, 50); i++) {
           const row = rows[i] || [];
           
-          // Check if it's a single string (common in poorly formatted CSVs read by XLSX)
+          // Check every cell in the row
+          for (let j = 0; j < row.length; j++) {
+            const cellValue = String(row[j] || '').toLowerCase().trim();
+            
+            // If we find a cell that looks like 'nombre' or 'empleado'
+            if (cellValue === 'nombre' || cellValue === 'empleado' || cellValue === 'nombres' || cellValue.includes('nombre') || cellValue.includes('empleado')) {
+              headerRowIndex = i;
+              break; // Break inner loop
+            }
+          }
+          
+          if (headerRowIndex !== -1) {
+            break; // Break outer loop if found
+          }
+          
+          // Fallback for poorly formatted CSVs read as single string
           if (row.length === 1 && typeof row[0] === 'string') {
              const rowString = row[0].toLowerCase();
              if (rowString.includes('nombre') || rowString.includes('empleado')) {
-                // We need to split this row manually
-                // Try common separators
                 const separator = row[0].includes(';') ? ';' : (row[0].includes(',') ? ',' : '\t');
                 rows[i] = row[0].split(separator).map(s => s.trim());
                 headerRowIndex = i;
                 
-                // Also split subsequent rows
                 for(let k = i + 1; k < rows.length; k++) {
                   if (rows[k].length === 1 && typeof rows[k][0] === 'string') {
                     rows[k] = rows[k][0].split(separator).map(s => s.trim());
@@ -109,13 +123,6 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
                 }
                 break;
              }
-          } else {
-            // Normal array of cells
-            const rowString = row.map(cell => String(cell || '').toLowerCase().trim()).join(' | ');
-            if (rowString.includes('nombre') || rowString.includes('empleado')) {
-              headerRowIndex = i;
-              break;
-            }
           }
         }
 

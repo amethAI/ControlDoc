@@ -1,9 +1,9 @@
 import express from 'express';
 console.log('--- SERVER.TS IS EXECUTING ---');
 import { createServer as createViteServer } from 'vite';
-import apiRouter from './src/server/routes/index.js';
+import apiRouter from './src/server/routes/index.ts';
 import cron from 'node-cron';
-import { sendExpirationAlerts } from './src/server/services/alertService.js';
+import { sendExpirationAlerts } from './src/server/services/alertService.ts';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -389,10 +389,8 @@ async function startServer() {
       }
     });
   } else {
-    // Serve static files from dist with short cache for assets but no cache for index.html
-    // En Render, cuando se ejecuta "node dist/server.js", __dirname es /opt/render/project/src/dist
-    // Por lo tanto, la carpeta de archivos estáticos (el build de Vite) está en __dirname
-    const distPath = __dirname;
+    // Serve static files from dist
+    const distPath = path.join(process.cwd(), 'dist');
     console.log(`Serving static files from: ${distPath}`);
     
     app.use(express.static(distPath, {

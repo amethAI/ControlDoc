@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { supabase } from '../db.js';
-import { sendExpirationAlerts } from '../services/alertService.js';
+import { supabase } from '../db.ts';
+import { sendExpirationAlerts } from '../services/alertService.ts';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';

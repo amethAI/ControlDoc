@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "start": "node dist/server.js",
-    "build": "vite build && tsc server.ts --outDir dist --esModuleInterop --module NodeNext --moduleResolution NodeNext",
+    "start": "node server.ts",
+    "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
