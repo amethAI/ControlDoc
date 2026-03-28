@@ -90,12 +90,32 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
         let headerRowIndex = -1;
         for (let i = 0; i < Math.min(rows.length, 20); i++) {
           const row = rows[i] || [];
-          // Convert entire row to a single string for easier searching
-          const rowString = row.map(cell => String(cell || '').toLowerCase().trim()).join(' | ');
           
-          if (rowString.includes('nombre') || rowString.includes('empleado')) {
-            headerRowIndex = i;
-            break;
+          // Check if it's a single string (common in poorly formatted CSVs read by XLSX)
+          if (row.length === 1 && typeof row[0] === 'string') {
+             const rowString = row[0].toLowerCase();
+             if (rowString.includes('nombre') || rowString.includes('empleado')) {
+                // We need to split this row manually
+                // Try common separators
+                const separator = row[0].includes(';') ? ';' : (row[0].includes(',') ? ',' : '\t');
+                rows[i] = row[0].split(separator).map(s => s.trim());
+                headerRowIndex = i;
+                
+                // Also split subsequent rows
+                for(let k = i + 1; k < rows.length; k++) {
+                  if (rows[k].length === 1 && typeof rows[k][0] === 'string') {
+                    rows[k] = rows[k][0].split(separator).map(s => s.trim());
+                  }
+                }
+                break;
+             }
+          } else {
+            // Normal array of cells
+            const rowString = row.map(cell => String(cell || '').toLowerCase().trim()).join(' | ');
+            if (rowString.includes('nombre') || rowString.includes('empleado')) {
+              headerRowIndex = i;
+              break;
+            }
           }
         }
 
