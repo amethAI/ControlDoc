@@ -15,10 +15,17 @@ import {
   Pie
 } from 'recharts';
 
+import { Navigate } from 'react-router-dom';
+
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 export default function Dashboard() {
   const { user } = useAuth();
+  
+  if (user?.role === 'Supervisor Interno') {
+    return <Navigate to="/clubes" replace />;
+  }
+
   const [stats, setStats] = useState({
     totalEmployees: 0,
     expiredDocuments: 0,

@@ -94,7 +94,7 @@ export default function Clubs() {
           />
         </div>
         <div className="flex gap-3 items-center">
-          <span className="text-xs font-bold text-orange-600 mr-2 bg-orange-50 px-2 py-1 rounded">DEBUG: {user?.role || 'Sin Rol'}</span>
+          <span className="text-xs font-bold text-orange-600 mr-2 bg-orange-50 px-2 py-1 rounded">DEBUG: {user?.role || 'Sin Rol'} | Club: {user?.club_id || 'Ninguno'}</span>
           {user?.role === 'Administrador' && (
             <button 
               onClick={() => setIsModalOpen(true)}

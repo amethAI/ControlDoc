@@ -29,6 +29,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           setToken(storedToken);
           setUser(JSON.parse(storedUser));
+          
+          // Fetch latest user data
+          fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${storedToken}` }
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.user) {
+              setUser(data.user);
+              localStorage.setItem('user', JSON.stringify(data.user));
+            }
+          })
+          .catch(err => console.error('Error fetching latest user data', err));
         } catch (e) {
           console.error('Error parsing stored user', e);
           localStorage.removeItem('token');

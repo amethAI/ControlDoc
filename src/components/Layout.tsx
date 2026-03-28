@@ -26,7 +26,7 @@ export default function Layout() {
   };
 
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    ...(user?.role !== 'Supervisor Interno' ? [{ name: 'Dashboard', href: '/', icon: LayoutDashboard }] : []),
     ...(user?.role !== 'Supervisor Interno' ? [{ name: 'Empleados', href: '/empleados', icon: Users }] : []),
     { name: 'Vencimientos', href: '/vencimientos', icon: CalendarClock },
     { name: 'Asistencia', href: '/asistencia', icon: CalendarCheck },

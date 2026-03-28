@@ -36,7 +36,7 @@ if (!process.env.JWT_SECRET) {
 }
 
 // Middleware to check if user is authenticated
-const isAuthenticated = (req: any, res: any, next: any) => {
+const isAuthenticated = async (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -44,13 +44,26 @@ const isAuthenticated = (req: any, res: any, next: any) => {
     return res.status(401).json({ error: 'Token de autenticación no proporcionado' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-    if (err) {
-      return res.status(403).json({ error: 'Token inválido o expirado' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    
+    // Fetch latest user data from DB to ensure club_id is up to date
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, email, name, role, club_id')
+      .eq('id', decoded.id)
+      .single();
+      
+    if (user) {
+      req.user = user;
+    } else {
+      req.user = decoded;
     }
-    req.user = user;
+    
     next();
-  });
+  } catch (err) {
+    return res.status(403).json({ error: 'Token inválido o expirado' });
+  }
 };
 
 // Middleware to check if user is Administrator
@@ -69,6 +82,12 @@ const canViewData = (req: any, res: any, next: any) => {
   if (!user || !allowedRoles.includes(user.role)) {
     return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para ver esta sección.' });
   }
+
+  // Restriction: Supervisor Interno and Coordinadora must have a club assigned
+  if ((user.role === 'Supervisor Interno' || user.role === 'Coordinadora') && !user.club_id) {
+    return res.status(403).json({ error: 'Acceso denegado. No tiene un club asignado.' });
+  }
+
   next();
 };
 
@@ -80,6 +99,12 @@ const canModifyData = (req: any, res: any, next: any) => {
   if (!user || !allowedRoles.includes(user.role)) {
     return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para realizar modificaciones.' });
   }
+
+  // Restriction: Supervisor Interno must have a club assigned
+  if (user.role === 'Supervisor Interno' && !user.club_id) {
+    return res.status(403).json({ error: 'Acceso denegado. No tiene un club asignado.' });
+  }
+
   next();
 };
 
@@ -189,6 +214,11 @@ router.get('/api/performance/stats', isAuthenticated, isInternal, async (req, re
 });
 
 // Simple auth endpoint
+router.get('/auth/me', isAuthenticated, async (req, res) => {
+  const user = (req as any).user;
+  res.json({ user });
+});
+
 router.post('/auth/login', async (req, res) => {
   const { email, password } = req.body;
   console.log(`Intentando login para: ${email}`);
