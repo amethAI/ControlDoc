@@ -351,6 +351,8 @@ router.get('/audit-logs', isAdmin, async (req, res) => {
 
 // Get all clubs
 router.get('/clubs', async (req, res) => {
+  const user = (req as any).user;
+  console.log(`[API] /clubs called by ${user?.email} (Role: ${user?.role}, Club: ${user?.club_id})`);
   const { data: clubs, error } = await supabase.from('clubs').select('*');
   if (error) return res.status(500).json({ error: error.message });
   res.json(clubs ? clubs.filter(c => c.id !== 'global') : []);
@@ -1050,6 +1052,7 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
   const user = (req as any).user;
   
   const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
+  console.log(`[API] /reports/checklist called by ${user?.email} (Role: ${user?.role}, UserClub: ${user?.club_id}, QueryClub: ${queryClubId}, FinalClub: ${club_id})`);
   
   try {
     let query = supabase

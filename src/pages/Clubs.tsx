@@ -108,31 +108,43 @@ export default function Clubs() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredClubs.map((club) => (
-          <div key={club.id} className="bg-white overflow-hidden shadow-sm rounded-xl border border-slate-200">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="h-12 w-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-                  <Building2 className="h-6 w-6" />
+        {filteredClubs.length > 0 ? (
+          filteredClubs.map((club) => (
+            <div key={club.id} className="bg-white overflow-hidden shadow-sm rounded-xl border border-slate-200">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-12 w-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                    <Building2 className="h-6 w-6" />
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                    club.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'
+                  }`}>
+                    {club.is_active ? 'Activo' : 'Inactivo'}
+                  </span>
                 </div>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                  club.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'
-                }`}>
-                  {club.is_active ? 'Activo' : 'Inactivo'}
-                </span>
+                <h3 className="text-lg font-semibold text-slate-900">{club.name}</h3>
+                <p className="mt-1 text-sm text-slate-500 line-clamp-2">
+                  {club.description || 'Sin descripción'}
+                </p>
               </div>
-              <h3 className="text-lg font-semibold text-slate-900">{club.name}</h3>
-              <p className="mt-1 text-sm text-slate-500 line-clamp-2">
-                {club.description || 'Sin descripción'}
-              </p>
+              <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-end">
+                <Link to={`/clubes/${club.id}`} className="text-sm font-medium text-blue-600 hover:text-blue-800">
+                  Gestionar
+                </Link>
+              </div>
             </div>
-            <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-end">
-              <Link to={`/clubes/${club.id}`} className="text-sm font-medium text-blue-600 hover:text-blue-800">
-                Gestionar
-              </Link>
-            </div>
+          ))
+        ) : (
+          <div className="col-span-full text-center py-12 bg-white rounded-xl border border-slate-200">
+            <Building2 className="mx-auto h-12 w-12 text-slate-400" />
+            <h3 className="mt-2 text-sm font-medium text-slate-900">No hay clubes</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              {user?.role === 'Supervisor Interno' 
+                ? 'No tienes ningún club asignado actualmente.' 
+                : 'No se encontraron clubes con los filtros actuales.'}
+            </p>
           </div>
-        ))}
+        )}
       </div>
 
       {/* Modal Nuevo Club */}

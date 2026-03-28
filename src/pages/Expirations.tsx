@@ -48,7 +48,11 @@ export default function Expirations() {
 
       // Fetch checklist
       let url = '/api/reports/checklist?';
-      if (clubFilter !== 'all') url += `club_id=${clubFilter}&`;
+      if (user?.role === 'Supervisor Interno') {
+        url += `club_id=${user.club_id}&`;
+      } else if (clubFilter !== 'all') {
+        url += `club_id=${clubFilter}&`;
+      }
 
       const res = await apiFetch(url);
       if (res.ok) {
