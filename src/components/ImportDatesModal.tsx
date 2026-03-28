@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { apiFetch } from '../lib/api';
 
 interface ImportDatesModalProps {
@@ -10,11 +10,25 @@ interface ImportDatesModalProps {
   onSuccess: () => void;
 }
 
-const parseSpanishDate = (dateStr: string): string | null => {
-  if (!dateStr || dateStr.trim() === '') return null;
+const parseSpanishDate = (dateStr: string | number): string | null => {
+  if (dateStr === undefined || dateStr === null) return null;
+  
+  // Handle Excel serial dates (numbers)
+  if (typeof dateStr === 'number') {
+    // Excel dates are number of days since Jan 1, 1900
+    // 25569 is the offset between 1900-01-01 and 1970-01-01
+    const date = new Date((dateStr - 25569) * 86400 * 1000);
+    // Adjust for timezone offset to get the correct local date
+    const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+    const finalDate = new Date(date.getTime() + userTimezoneOffset);
+    return finalDate.toISOString().split('T')[0];
+  }
+
+  const str = String(dateStr).trim();
+  if (str === '') return null;
   
   // Try to match DD-MMM-YY (e.g., 30-Jul-28)
-  const parts = dateStr.trim().split('-');
+  const parts = str.split('-');
   if (parts.length === 3) {
     const day = parts[0].padStart(2, '0');
     const monthStr = parts[1].toLowerCase();
@@ -37,7 +51,7 @@ const parseSpanishDate = (dateStr: string): string | null => {
   }
 
   // Fallback: try standard Date parsing if it's already in a recognizable format
-  const d = new Date(dateStr);
+  const d = new Date(str);
   if (!isNaN(d.getTime())) {
     return d.toISOString().split('T')[0];
   }
@@ -54,114 +68,120 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
 
   const handleProcess = () => {
     if (!file) {
-      toast.error('Por favor selecciona un archivo CSV');
+      toast.error('Por favor selecciona un archivo Excel o CSV');
       return;
     }
 
     setLoading(true);
     setResults(null);
 
-    Papa.parse(file, {
-      header: false,
-      skipEmptyLines: true,
-      encoding: 'ISO-8859-1',
-      complete: async (results) => {
-        try {
-          const rows = results.data as string[][];
-          
-          // Find the header row (the one that contains 'NOMBRE' or similar)
-          let headerRowIndex = -1;
-          for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-            if (row.some(cell => cell && typeof cell === 'string' && ['nombre', 'empleado', 'demostradora'].some(kw => cell.toLowerCase().includes(kw)))) {
-              headerRowIndex = i;
-              break;
-            }
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to array of arrays
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+        // Find the header row (the one that contains 'NOMBRE' or similar)
+        let headerRowIndex = -1;
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i] || [];
+          if (row.some(cell => cell && typeof cell === 'string' && ['nombre', 'empleado', 'demostradora'].some(kw => cell.toLowerCase().includes(kw)))) {
+            headerRowIndex = i;
+            break;
           }
-
-          if (headerRowIndex === -1) {
-            toast.error('No se encontró la columna "NOMBRE" en el archivo.');
-            setLoading(false);
-            return;
-          }
-
-          const headers = rows[headerRowIndex].map(h => h ? h.toString().trim() : '');
-          
-          const rawRecords = [];
-          for (let i = headerRowIndex + 1; i < rows.length; i++) {
-            const row = rows[i];
-            const record: any = {};
-            for (let j = 0; j < headers.length; j++) {
-              if (headers[j]) {
-                record[headers[j]] = row[j];
-              }
-            }
-            rawRecords.push(record);
-          }
-
-          const records = rawRecords.map((row: any) => {
-            // Find columns dynamically (case insensitive)
-            const getCol = (keywords: string[]) => {
-              const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
-              return key ? row[key] : null;
-            };
-
-            const name = getCol(['nombre', 'empleado', 'demostradora']);
-            const carnetVerdeRaw = getCol(['verde', 'salud']);
-            const carnetBlancoRaw = getCol(['blanco', 'adestramiento', 'adiestramiento']);
-            const tipoContratoRaw = getCol(['tipo de contrato', 'tipo de contratos']);
-            const fechaTerminacionContratoRaw = getCol(['fecha de terminación de contrato', 'terminación de contrato', 'terminacion de contrato', 'fecha de terminación d']);
-
-            return {
-              name,
-              carnetVerde: carnetVerdeRaw ? parseSpanishDate(carnetVerdeRaw) : null,
-              carnetBlanco: carnetBlancoRaw ? parseSpanishDate(carnetBlancoRaw) : null,
-              tipoContrato: tipoContratoRaw ? tipoContratoRaw.trim().toUpperCase() : null,
-              fechaTerminacionContrato: fechaTerminacionContratoRaw ? parseSpanishDate(fechaTerminacionContratoRaw) : null
-            };
-          }).filter(r => r.name); // Only keep rows with a name
-
-          if (records.length === 0) {
-            toast.error('No se encontraron registros válidos en el archivo. Verifica que tenga una columna "NOMBRE".');
-            setLoading(false);
-            return;
-          }
-
-          const res = await apiFetch('/api/import-document-dates', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ records })
-          });
-
-          const data = await res.json();
-          
-          if (res.ok) {
-            setResults(data);
-            if (data.errors.length === 0) {
-              toast.success('Importación completada con éxito');
-              setTimeout(() => {
-                onSuccess();
-                onClose();
-              }, 2000);
-            } else {
-              toast.warning('Importación completada con algunas advertencias');
-              onSuccess();
-            }
-          } else {
-            toast.error(data.error || 'Error al procesar la importación');
-          }
-        } catch (error) {
-          console.error('Error:', error);
-          toast.error('Error al procesar el archivo');
-        } finally {
-          setLoading(false);
         }
-      },
-      error: (error) => {
-        toast.error(`Error al leer el archivo: ${error.message}`);
+
+        if (headerRowIndex === -1) {
+          toast.error('No se encontró la columna "NOMBRE" en el archivo.');
+          setLoading(false);
+          return;
+        }
+
+        const headers = rows[headerRowIndex].map(h => h ? h.toString().trim() : '');
+        
+        const rawRecords = [];
+        for (let i = headerRowIndex + 1; i < rows.length; i++) {
+          const row = rows[i] || [];
+          const record: any = {};
+          for (let j = 0; j < headers.length; j++) {
+            if (headers[j]) {
+              record[headers[j]] = row[j];
+            }
+          }
+          rawRecords.push(record);
+        }
+
+        const records = rawRecords.map((row: any) => {
+          // Find columns dynamically (case insensitive)
+          const getCol = (keywords: string[]) => {
+            const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
+            return key ? row[key] : null;
+          };
+
+          const name = getCol(['nombre', 'empleado', 'demostradora']);
+          const carnetVerdeRaw = getCol(['verde', 'salud']);
+          const carnetBlancoRaw = getCol(['blanco', 'adestramiento', 'adiestramiento']);
+          const tipoContratoRaw = getCol(['tipo de contrato', 'tipo de contratos']);
+          const fechaTerminacionContratoRaw = getCol(['fecha de terminación de contrato', 'terminación de contrato', 'terminacion de contrato', 'fecha de terminación d']);
+
+          return {
+            name,
+            carnetVerde: carnetVerdeRaw ? parseSpanishDate(carnetVerdeRaw) : null,
+            carnetBlanco: carnetBlancoRaw ? parseSpanishDate(carnetBlancoRaw) : null,
+            tipoContrato: tipoContratoRaw ? String(tipoContratoRaw).trim().toUpperCase() : null,
+            fechaTerminacionContrato: fechaTerminacionContratoRaw ? parseSpanishDate(fechaTerminacionContratoRaw) : null
+          };
+        }).filter(r => r.name); // Only keep rows with a name
+
+        if (records.length === 0) {
+          toast.error('No se encontraron registros válidos en el archivo. Verifica que tenga una columna "NOMBRE".');
+          setLoading(false);
+          return;
+        }
+
+        const res = await apiFetch('/api/import-document-dates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ records })
+        });
+
+        const responseData = await res.json();
+        
+        if (res.ok) {
+          setResults(responseData);
+          if (responseData.errors.length === 0) {
+            toast.success('Importación completada con éxito');
+            setTimeout(() => {
+              onSuccess();
+              onClose();
+            }, 2000);
+          } else {
+            toast.warning('Importación completada con algunas advertencias');
+            onSuccess();
+          }
+        } else {
+          toast.error(responseData.error || 'Error al procesar el archivo');
+          setResults({ success: false, message: 'Error', errors: [responseData.error || 'Error desconocido'] });
+        }
+      } catch (error) {
+        console.error('Error parsing file:', error);
+        toast.error('Error al leer el archivo. Asegúrate de que sea un Excel (.xlsx) o CSV válido.');
+      } finally {
         setLoading(false);
       }
-    });
+    };
+
+    reader.onerror = () => {
+      toast.error('Error al leer el archivo');
+      setLoading(false);
+    };
+
+    reader.readAsArrayBuffer(file);
   };
 
   return (
@@ -188,7 +208,7 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-blue-800">
                   <p className="font-medium mb-1">Instrucciones:</p>
                   <ul className="list-disc pl-5 space-y-1">
-                    <li>Sube un archivo en formato <strong>CSV</strong>.</li>
+                    <li>Sube un archivo en formato <strong>Excel (.xlsx)</strong> o <strong>CSV</strong>.</li>
                     <li>Debe contener una columna llamada <strong>"NOMBRE"</strong>.</li>
                     <li>Debe contener columnas para <strong>"CARNET VERDE"</strong> y <strong>"CARNET BLANCO"</strong>.</li>
                     <li>Las fechas deben estar en formato <strong>DD-MMM-YY</strong> (ej. 30-Jul-28) o <strong>YYYY-MM-DD</strong>.</li>
@@ -204,16 +224,16 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
                       <Upload className="mx-auto h-12 w-12 text-slate-400" />
                       <div className="flex text-sm text-slate-600 justify-center">
                         <span className="relative cursor-pointer rounded-md font-medium text-green-600 hover:text-green-500">
-                          {file ? file.name : 'Seleccionar archivo CSV'}
+                          {file ? file.name : 'Seleccionar archivo Excel o CSV'}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500">Solo archivos .csv</p>
+                      <p className="text-xs text-slate-500">Archivos .xlsx o .csv</p>
                     </div>
                     <input 
                       id="csv-upload" 
                       type="file" 
                       className="sr-only" 
-                      accept=".csv"
+                      accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                       onChange={(e) => setFile(e.target.files?.[0] || null)}
                     />
                   </div>

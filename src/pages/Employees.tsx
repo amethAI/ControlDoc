@@ -1,7 +1,7 @@
 import { apiFetch } from '../lib/api';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Search, Plus, Filter, Upload, FileSpreadsheet } from 'lucide-react';
+import { Search, Plus, Filter, Upload, FileSpreadsheet, ClipboardList } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import NewEmployeeModal from '../components/NewEmployeeModal';
 import BulkUploadModal from '../components/BulkUploadModal';
@@ -45,11 +45,9 @@ export default function Employees() {
       // Coordinadora and Supervisor Interno are restricted to their club
       const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
       
-      const apiStatus = statusFilter === '1_year' ? 'activo' : statusFilter;
-      
       let url = isRestricted 
-        ? `/api/employees?club_id=${user?.club_id}&status=${apiStatus}`
-        : `/api/employees?status=${apiStatus}`;
+        ? `/api/employees?club_id=${user?.club_id}&status=${statusFilter}`
+        : `/api/employees?status=${statusFilter}`;
       
       const res = await apiFetch(url);
       if (res.ok) {
@@ -65,13 +63,10 @@ export default function Employees() {
     fetchEmployees();
   }, [fetchEmployees]);
 
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || emp.cedula.includes(searchTerm);
-    if (statusFilter === '1_year') {
-      return matchesSearch && emp.contract_type === '1 año';
-    }
-    return matchesSearch;
-  });
+  const filteredEmployees = employees.filter(emp => 
+    emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.cedula.includes(searchTerm)
+  );
 
   return (
     <div className="space-y-6">
@@ -97,16 +92,13 @@ export default function Employees() {
           >
             Inactivos (Historial)
           </button>
-          <button
-            onClick={() => setStatusFilter('1_year')}
-            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-              statusFilter === '1_year' 
-                ? 'bg-white text-blue-600 shadow-sm' 
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
+          <Link
+            to="/checklist-contratos"
+            className="px-4 py-1.5 text-sm font-medium rounded-md transition-all text-slate-500 hover:text-slate-700 flex items-center gap-2"
           >
-            Contratos 1 Año
-          </button>
+            <ClipboardList className="h-4 w-4" />
+            Checklist 1 Año
+          </Link>
         </div>
 
         <div className="flex gap-3">
