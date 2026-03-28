@@ -214,7 +214,7 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
             </div>
           </div>
 
-          {formData.role === 'Coordinadora' && (
+          {['Coordinadora', 'Supervisor Interno', 'Supervisor Cliente'].includes(formData.role) && (
             <div className="space-y-1">
               <label className="text-sm font-medium text-slate-700">Club Asignado</label>
               <div className="relative">
