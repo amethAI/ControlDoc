@@ -15,6 +15,7 @@ interface Employee {
   position: string;
   status: string;
   club_id: string;
+  contract_type?: string;
   termination_reason?: string;
   termination_date?: string;
 }
@@ -44,9 +45,11 @@ export default function Employees() {
       // Coordinadora and Supervisor Interno are restricted to their club
       const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
       
+      const apiStatus = statusFilter === '1_year' ? 'activo' : statusFilter;
+      
       let url = isRestricted 
-        ? `/api/employees?club_id=${user?.club_id}&status=${statusFilter}`
-        : `/api/employees?status=${statusFilter}`;
+        ? `/api/employees?club_id=${user?.club_id}&status=${apiStatus}`
+        : `/api/employees?status=${apiStatus}`;
       
       const res = await apiFetch(url);
       if (res.ok) {
@@ -62,10 +65,13 @@ export default function Employees() {
     fetchEmployees();
   }, [fetchEmployees]);
 
-  const filteredEmployees = employees.filter(emp => 
-    emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.cedula.includes(searchTerm)
-  );
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || emp.cedula.includes(searchTerm);
+    if (statusFilter === '1_year') {
+      return matchesSearch && emp.contract_type === '1 año';
+    }
+    return matchesSearch;
+  });
 
   return (
     <div className="space-y-6">
@@ -90,6 +96,16 @@ export default function Employees() {
             }`}
           >
             Inactivos (Historial)
+          </button>
+          <button
+            onClick={() => setStatusFilter('1_year')}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+              statusFilter === '1_year' 
+                ? 'bg-white text-blue-600 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Contratos 1 Año
           </button>
         </div>
 
@@ -217,7 +233,7 @@ export default function Employees() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                       {/* Mock document status indicators */}
                       <div className="flex gap-1">
-                        <div className="w-3 h-3 rounded-full bg-green-500" title="Vigente"></div>
+                        <div className="w-3 h-3 rounded-full bg-slate-400" title="Cargado"></div>
                         <div className="w-3 h-3 rounded-full bg-amber-500" title="Próximo a vencer"></div>
                         <div className="w-3 h-3 rounded-full bg-orange-500" title="Faltante"></div>
                       </div>

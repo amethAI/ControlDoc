@@ -11,7 +11,8 @@ import {
   Building2,
   CalendarCheck,
   TrendingUp,
-  CalendarClock
+  CalendarClock,
+  ClipboardList
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -29,6 +30,7 @@ export default function Layout() {
     ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' ? [{ name: 'Dashboard', href: '/', icon: LayoutDashboard }] : []),
     ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' && user?.role !== 'Supervisor Cliente' ? [{ name: 'Empleados', href: '/empleados', icon: Users }] : []),
     { name: 'Vencimientos', href: '/vencimientos', icon: CalendarClock },
+    { name: 'Checklist Contratos', href: '/checklist-contratos', icon: ClipboardList },
     ...(user?.role !== 'Supervisor Cliente' && user?.role !== 'Coordinadora' ? [{ name: 'Asistencia', href: '/asistencia', icon: CalendarCheck }] : []),
     ...((user?.role === 'Administrador' || user?.role === 'Supervisor Interno') ? [
       { name: 'Rendimiento', href: '/rendimiento', icon: TrendingUp }

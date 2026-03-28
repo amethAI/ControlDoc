@@ -21,6 +21,7 @@ import GestionUsuarios from './pages/GestionUsuarios';
 import DestinatariosAlertas from './pages/DestinatariosAlertas';
 import LogAuditoria from './pages/LogAuditoria';
 import Expirations from './pages/Expirations';
+import ChecklistContratos from './pages/ChecklistContratos';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
@@ -45,6 +46,7 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="empleados" element={<Employees />} />
         <Route path="empleados/:id" element={<EmployeeProfile />} />
+        <Route path="checklist-contratos" element={<ChecklistContratos />} />
         <Route path="clubes" element={<Clubs />} />
         <Route path="clubes/:id" element={<ClubDetail />} />
         <Route path="asistencia" element={<Attendance />} />

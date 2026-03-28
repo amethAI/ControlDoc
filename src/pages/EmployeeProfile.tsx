@@ -205,7 +205,7 @@ export default function EmployeeProfile() {
 
   const getStatusIcon = (status: string | undefined) => {
     switch (status) {
-      case 'vigente': return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+      case 'vigente': return <CheckCircle2 className="h-5 w-5 text-slate-400" />;
       case 'proximo_vencer': return <Clock className="h-5 w-5 text-amber-500" />;
       case 'vencido': return <AlertCircle className="h-5 w-5 text-red-500" />;
       case 'sin_fecha': return <CheckCircle2 className="h-5 w-5 text-slate-400" />;
@@ -215,7 +215,7 @@ export default function EmployeeProfile() {
 
   const getStatusColor = (status: string | undefined) => {
     switch (status) {
-      case 'vigente': return 'bg-green-50 border-green-200 text-green-700';
+      case 'vigente': return 'bg-slate-50 border-slate-200 text-slate-700';
       case 'proximo_vencer': return 'bg-amber-50 border-amber-200 text-amber-700';
       case 'vencido': return 'bg-red-50 border-red-200 text-red-700';
       case 'sin_fecha': return 'bg-slate-50 border-slate-200 text-slate-700';
@@ -225,7 +225,7 @@ export default function EmployeeProfile() {
 
   const getStatusText = (status: string | undefined) => {
     switch (status) {
-      case 'vigente': return 'Vigente';
+      case 'vigente': return 'Cargado';
       case 'proximo_vencer': return 'Próximo a vencer';
       case 'vencido': return 'Vencido';
       case 'sin_fecha': return 'Cargado';
@@ -345,12 +345,8 @@ export default function EmployeeProfile() {
               
               if (isContractTiedDoc && doc) {
                 if (employee?.contract_type?.toUpperCase() === 'INDEFINIDA' || employee?.contract_type?.toUpperCase() === 'INDEFINIDO') {
-                  status = 'vigente';
-                  expiryDisplay = (
-                    <span className="flex-shrink-0 text-xs font-medium text-slate-500">
-                      Vigente (Indefinido)
-                    </span>
-                  );
+                  status = 'sin_fecha';
+                  expiryDisplay = null;
                 } else if (employee?.contract_end) {
                   const end = new Date(employee.contract_end);
                   const now = new Date();
