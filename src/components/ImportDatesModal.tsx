@@ -84,25 +84,28 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
         const worksheet = workbook.Sheets[firstSheetName];
         
         // Convert to array of arrays
-        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][];
 
         // Find the header row (the one that contains 'NOMBRE' or similar)
         let headerRowIndex = -1;
-        for (let i = 0; i < rows.length; i++) {
+        for (let i = 0; i < Math.min(rows.length, 20); i++) {
           const row = rows[i] || [];
-          if (row.some(cell => cell && typeof cell === 'string' && ['nombre', 'empleado', 'demostradora'].some(kw => cell.toLowerCase().includes(kw)))) {
+          // Convert entire row to a single string for easier searching
+          const rowString = row.map(cell => String(cell || '').toLowerCase().trim()).join(' | ');
+          
+          if (rowString.includes('nombre') || rowString.includes('empleado')) {
             headerRowIndex = i;
             break;
           }
         }
 
         if (headerRowIndex === -1) {
-          toast.error('No se encontró la columna "NOMBRE" en el archivo.');
+          toast.error('No se encontró la columna "NOMBRE". Asegúrate de que el archivo tenga los encabezados correctos.');
           setLoading(false);
           return;
         }
 
-        const headers = rows[headerRowIndex].map(h => h ? h.toString().trim() : '');
+        const headers = rows[headerRowIndex].map(h => String(h || '').trim());
         
         const rawRecords = [];
         for (let i = headerRowIndex + 1; i < rows.length; i++) {
@@ -113,7 +116,10 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
               record[headers[j]] = row[j];
             }
           }
-          rawRecords.push(record);
+          // Only push if the row has some actual data
+          if (Object.values(record).some(val => val !== '' && val !== null && val !== undefined)) {
+            rawRecords.push(record);
+          }
         }
 
         const records = rawRecords.map((row: any) => {
