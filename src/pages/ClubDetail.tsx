@@ -2,8 +2,10 @@ import { apiFetch } from '../lib/api';
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Building2, Users, Search, Plus } from 'lucide-react';
+import { ArrowLeft, Building2, Users, Search, Plus, Upload } from 'lucide-react';
 import NewEmployeeModal from '../components/NewEmployeeModal';
+import BulkUploadModal from '../components/BulkUploadModal';
+import BulkEmployeeModal from '../components/BulkEmployeeModal';
 
 interface Club {
   id: string;
@@ -29,9 +31,11 @@ export default function ClubDetail() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isBulkEmployeeModalOpen, setIsBulkEmployeeModalOpen] = useState(false);
 
   const fetchClubData = async () => {
-    if (user?.role === 'Coordinadora' && id !== user.club_id) {
+    if ((user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno') && id !== user.club_id) {
       setLoading(false);
       return;
     }
@@ -60,7 +64,7 @@ export default function ClubDetail() {
 
   if (loading) return <div className="p-8 text-center text-slate-500">Cargando club...</div>;
 
-  if (user?.role === 'Coordinadora' && id !== user.club_id) {
+  if ((user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno') && id !== user.club_id) {
     return (
       <div className="p-8 text-center">
         <div className="bg-red-50 text-red-700 p-4 rounded-lg inline-block">
@@ -130,15 +134,33 @@ export default function ClubDetail() {
             <Users className="h-5 w-5 mr-2 text-slate-500" />
             Empleados del Club ({employees.length})
           </h3>
-          {user?.role === 'Administrador' && (
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-            >
-              <Plus className="h-4 w-4 mr-1.5" />
-              Nuevo Empleado
-            </button>
-          )}
+          <div className="flex gap-2">
+            {(user?.role === 'Administrador' || user?.role === 'Supervisor Interno') && (
+              <>
+                <button 
+                  onClick={() => setIsBulkEmployeeModalOpen(true)}
+                  className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50"
+                >
+                  <Plus className="h-4 w-4 mr-1.5 text-slate-500" />
+                  Carga Masiva Empleados
+                </button>
+                <button 
+                  onClick={() => setIsBulkModalOpen(true)}
+                  className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50"
+                >
+                  <Upload className="h-4 w-4 mr-1.5 text-slate-500" />
+                  Carga Masiva Docs
+                </button>
+                <button 
+                  onClick={() => setIsModalOpen(true)}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Nuevo Empleado
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 max-w-lg relative">
@@ -212,6 +234,19 @@ export default function ClubDetail() {
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchClubData}
         clubId={id!}
+      />
+
+      <BulkEmployeeModal
+        isOpen={isBulkEmployeeModalOpen}
+        onClose={() => setIsBulkEmployeeModalOpen(false)}
+        onSuccess={fetchClubData}
+        clubId={id!}
+      />
+
+      <BulkUploadModal
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        onSuccess={fetchClubData}
       />
     </div>
   );

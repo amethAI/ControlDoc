@@ -27,13 +27,13 @@ export default function Layout() {
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Empleados', href: '/empleados', icon: Users },
+    ...(user?.role !== 'Supervisor Interno' ? [{ name: 'Empleados', href: '/empleados', icon: Users }] : []),
     { name: 'Vencimientos', href: '/vencimientos', icon: CalendarClock },
     { name: 'Asistencia', href: '/asistencia', icon: CalendarCheck },
     ...((user?.role === 'Administrador' || user?.role === 'Supervisor Interno') ? [
       { name: 'Rendimiento', href: '/rendimiento', icon: TrendingUp }
     ] : []),
-    ...((user?.role === 'Administrador' || user?.role === 'Coordinadora') ? [
+    ...((user?.role === 'Administrador' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno') ? [
       { name: 'Clubes', href: '/clubes', icon: Building2 }
     ] : []),
     ...(user?.role === 'Administrador' ? [

@@ -62,12 +62,44 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
     setResults(null);
 
     Papa.parse(file, {
-      header: true,
+      header: false,
       skipEmptyLines: true,
       encoding: 'ISO-8859-1',
       complete: async (results) => {
         try {
-          const records = results.data.map((row: any) => {
+          const rows = results.data as string[][];
+          
+          // Find the header row (the one that contains 'NOMBRE' or similar)
+          let headerRowIndex = -1;
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            if (row.some(cell => cell && typeof cell === 'string' && ['nombre', 'empleado', 'demostradora'].some(kw => cell.toLowerCase().includes(kw)))) {
+              headerRowIndex = i;
+              break;
+            }
+          }
+
+          if (headerRowIndex === -1) {
+            toast.error('No se encontró la columna "NOMBRE" en el archivo.');
+            setLoading(false);
+            return;
+          }
+
+          const headers = rows[headerRowIndex].map(h => h ? h.toString().trim() : '');
+          
+          const rawRecords = [];
+          for (let i = headerRowIndex + 1; i < rows.length; i++) {
+            const row = rows[i];
+            const record: any = {};
+            for (let j = 0; j < headers.length; j++) {
+              if (headers[j]) {
+                record[headers[j]] = row[j];
+              }
+            }
+            rawRecords.push(record);
+          }
+
+          const records = rawRecords.map((row: any) => {
             // Find columns dynamically (case insensitive)
             const getCol = (keywords: string[]) => {
               const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
@@ -77,8 +109,8 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
             const name = getCol(['nombre', 'empleado', 'demostradora']);
             const carnetVerdeRaw = getCol(['verde', 'salud']);
             const carnetBlancoRaw = getCol(['blanco', 'adestramiento', 'adiestramiento']);
-            const tipoContratoRaw = getCol(['tipo de contrato']);
-            const fechaTerminacionContratoRaw = getCol(['fecha de terminación de contrato', 'terminación de contrato', 'terminacion de contrato']);
+            const tipoContratoRaw = getCol(['tipo de contrato', 'tipo de contratos']);
+            const fechaTerminacionContratoRaw = getCol(['fecha de terminación de contrato', 'terminación de contrato', 'terminacion de contrato', 'fecha de terminación d']);
 
             return {
               name,

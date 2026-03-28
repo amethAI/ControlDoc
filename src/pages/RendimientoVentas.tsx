@@ -46,11 +46,15 @@ export default function RendimientoVentas() {
         const clubsData = await clubsRes.json();
         const employeesData = await employeesRes.json();
         
-        setClubs(clubsData);
+        const filteredClubs = user?.role === 'Supervisor Interno' 
+          ? clubsData.filter((c: any) => c.id === user.club_id)
+          : clubsData;
+
+        setClubs(filteredClubs);
         setEmployees(employeesData);
         
-        if (clubsData.length > 0) {
-          setSelectedClub(clubsData[0].id);
+        if (filteredClubs.length > 0) {
+          setSelectedClub(user?.role === 'Supervisor Interno' ? user.club_id : filteredClubs[0].id);
         }
       } catch (error) {
         console.error('Error fetching initial data:', error);

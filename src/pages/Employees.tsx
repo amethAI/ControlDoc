@@ -29,6 +29,16 @@ export default function Employees() {
   const [isBulkEmployeeModalOpen, setIsBulkEmployeeModalOpen] = useState(false);
   const [isImportDatesModalOpen, setIsImportDatesModalOpen] = useState(false);
 
+  if (user?.role === 'Supervisor Interno') {
+    return (
+      <div className="p-8 text-center">
+        <div className="bg-red-50 text-red-700 p-4 rounded-lg inline-block">
+          No tienes permiso para acceder a esta sección. Por favor, utiliza la sección de Clubes.
+        </div>
+      </div>
+    );
+  }
+
   const fetchEmployees = useCallback(async () => {
     try {
       // Coordinadora and Supervisor Interno are restricted to their club
