@@ -77,6 +77,11 @@ export default function EmployeeProfile() {
           return;
         }
 
+        if (user?.role === 'Supervisor Cliente') {
+          navigate('/clubes');
+          return;
+        }
+
         const typesData = await typesRes.json();
         const docsData = await docsRes.json();
         

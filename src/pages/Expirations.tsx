@@ -38,7 +38,7 @@ export default function Expirations() {
     setLoading(true);
     try {
       // Fetch clubs for filter
-      if (user?.role !== 'Supervisor Interno') {
+      if (user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora') {
         const clubsRes = await apiFetch('/api/clubs');
         if (clubsRes.ok) {
           const clubsData = await clubsRes.json();
@@ -48,7 +48,7 @@ export default function Expirations() {
 
       // Fetch checklist
       let url = '/api/reports/checklist?';
-      if (user?.role === 'Supervisor Interno') {
+      if (user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora') {
         url += `club_id=${user.club_id}&`;
       } else if (clubFilter !== 'all') {
         url += `club_id=${clubFilter}&`;
@@ -156,7 +156,7 @@ export default function Expirations() {
           </div>
           
           <div className="flex gap-2">
-            {user?.role !== 'Supervisor Interno' && (
+            {user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' && (
               <div className="relative">
                 <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <select

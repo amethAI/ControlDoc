@@ -69,7 +69,17 @@ export default function Attendance() {
   const [selectedClubId, setSelectedClubId] = useState(user?.club_id || '');
   const [viewHalf, setViewHalf] = useState<'1' | '2' | 'full'>('full');
 
-  const isReadOnly = user?.role === 'Supervisora' || user?.role === 'Coordinadora';
+  if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
+    return (
+      <div className="p-8 text-center">
+        <div className="bg-red-50 text-red-700 p-4 rounded-lg inline-block">
+          No tienes permiso para acceder a esta sección.
+        </div>
+      </div>
+    );
+  }
+
+  const isReadOnly = user?.role !== 'Administrador' && user?.role !== 'Supervisor Interno';
   const isRestricted = user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora';
 
   const monthStart = startOfMonth(currentMonth);
@@ -280,11 +290,11 @@ export default function Attendance() {
             </button>
           </div>
 
-          {(!isRestricted || user?.role === 'Supervisor Interno' || user?.role === 'Supervisora') && (
+          {(!isRestricted || user?.role === 'Supervisor Interno') && (
             <select
               value={selectedClubId}
               onChange={(e) => setSelectedClubId(e.target.value)}
-              disabled={isRestricted && user?.role !== 'Supervisora'}
+              disabled={isRestricted}
               className="rounded-lg border-slate-300 text-sm focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Seleccionar Club</option>

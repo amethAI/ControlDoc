@@ -76,7 +76,7 @@ const isAdmin = (req: any, res: any, next: any) => {
 
 // Middleware to check if user can view data (Employees, Attendance, Dashboard)
 const canViewData = (req: any, res: any, next: any) => {
-  const allowedRoles = ['Administrador', 'Supervisor Interno', 'Supervisora', 'Coordinadora'];
+  const allowedRoles = ['Administrador', 'Supervisor Interno', 'Supervisora', 'Coordinadora', 'Supervisor Cliente'];
   const user = (req as any).user;
   
   if (!user || !allowedRoles.includes(user.role)) {
@@ -126,7 +126,7 @@ const isInternal = (req: any, res: any, next: any) => {
 };
 
 // Performance Routes
-router.get('/api/performance', isAuthenticated, isInternal, async (req, res) => {
+router.get('/performance', isAuthenticated, isInternal, async (req, res) => {
   const { date, club_id: queryClubId } = req.query;
   const user = (req as any).user;
   
@@ -154,7 +154,7 @@ router.get('/api/performance', isAuthenticated, isInternal, async (req, res) => 
   }
 });
 
-router.post('/api/performance', isAuthenticated, isInternal, async (req, res) => {
+router.post('/performance', isAuthenticated, isInternal, async (req, res) => {
   const records = Array.isArray(req.body) ? req.body : [req.body];
   const user = (req as any).user;
   
@@ -183,7 +183,7 @@ router.post('/api/performance', isAuthenticated, isInternal, async (req, res) =>
   }
 });
 
-router.get('/api/performance/stats', isAuthenticated, isInternal, async (req, res) => {
+router.get('/performance/stats', isAuthenticated, isInternal, async (req, res) => {
   const user = (req as any).user;
   
   try {
@@ -407,8 +407,12 @@ router.get('/employees', canViewData, async (req, res) => {
   const { club_id: queryClubId, status } = req.query;
   const user = (req as any).user;
   
-  // If user is Supervisor Interno, they can only see their club
-  const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
+  if (user.role === 'Supervisor Cliente') {
+    return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para ver empleados.' });
+  }
+
+  // If user is Supervisor Interno or Coordinadora, they can only see their club
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
   
   // Debug check
   const isMock = !process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY;
@@ -895,8 +899,12 @@ router.get('/attendance', canViewData, async (req, res) => {
   const { club_id: queryClubId, start_date, end_date } = req.query;
   const user = (req as any).user;
   
-  // If user is Supervisor Interno, they can only see their club
-  const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
+  if (user.role === 'Supervisor Cliente') {
+    return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para ver asistencia.' });
+  }
+
+  // If user is Supervisor Interno or Coordinadora, they can only see their club
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
   
   if (!club_id) {
     return res.status(400).json({ error: 'Se requiere club_id' });
@@ -928,8 +936,9 @@ router.get('/attendance', canViewData, async (req, res) => {
   }
 });
 
-router.post('/attendance', async (req, res) => {
+router.post('/attendance', canModifyData, async (req, res) => {
   const { records } = req.body; // Array of { employee_id, date, status }
+  const user = (req as any).user;
   
   try {
     const upsertData = records.map((record: any) => ({
@@ -953,8 +962,16 @@ router.post('/attendance', async (req, res) => {
 });
 
 // Attendance Requests routes
-router.get('/attendance-requests', async (req, res) => {
-  const { club_id, start_date, end_date } = req.query;
+router.get('/attendance-requests', canViewData, async (req, res) => {
+  const { club_id: queryClubId, start_date, end_date } = req.query;
+  const user = (req as any).user;
+  
+  if (user.role === 'Supervisor Cliente') {
+    return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para ver asistencia.' });
+  }
+
+  // If user is Supervisor Interno or Coordinadora, they can only see their club
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
   
   try {
     const { data: requests, error } = await supabase
@@ -971,8 +988,17 @@ router.get('/attendance-requests', async (req, res) => {
   }
 });
 
-router.post('/attendance-requests', async (req, res) => {
+router.post('/attendance-requests', canModifyData, async (req, res) => {
   const { records } = req.body; // Array of { club_id, date, requested_count }
+  const user = (req as any).user;
+  
+  // Supervisor Interno can only modify their own club
+  if (user.role === 'Supervisor Interno') {
+    const invalidRecord = records.find((r: any) => r.club_id !== user.club_id);
+    if (invalidRecord) {
+      return res.status(403).json({ error: 'Acceso denegado. Solo puede modificar su club asignado.' });
+    }
+  }
   
   try {
     const upsertData = records.map((record: any) => ({
@@ -1000,8 +1026,8 @@ router.get('/documents/expirations', canViewData, async (req, res) => {
   const { club_id: queryClubId, status } = req.query;
   const user = (req as any).user;
   
-  // If user is Supervisor Interno, they can only see their club
-  const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
+  // If user is Supervisor Interno or Coordinadora, they can only see their club
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
   
   try {
     let query = supabase
@@ -1051,7 +1077,7 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
   const { club_id: queryClubId } = req.query;
   const user = (req as any).user;
   
-  const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
   console.log(`[API] /reports/checklist called by ${user?.email} (Role: ${user?.role}, UserClub: ${user?.club_id}, QueryClub: ${queryClubId}, FinalClub: ${club_id})`);
   
   try {
@@ -1134,8 +1160,8 @@ router.get('/dashboard', canViewData, async (req, res) => {
   const { club_id: queryClubId } = req.query;
   const user = (req as any).user;
   
-  // If user is Supervisor Interno, they can only see their club
-  const club_id = user.role === 'Supervisor Interno' ? user.club_id : queryClubId;
+  // If user is Supervisor Interno or Coordinadora, they can only see their club
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
   
   try {
     // 1. Total Employees

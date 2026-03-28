@@ -36,6 +36,16 @@ export default function RendimientoVentas() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
+    return (
+      <div className="p-8 text-center">
+        <div className="bg-red-50 text-red-700 p-4 rounded-lg inline-block">
+          No tienes permiso para acceder a esta sección.
+        </div>
+      </div>
+    );
+  }
+
   useEffect(() => {
     const fetchInitialData = async () => {
       try {

@@ -139,7 +139,7 @@ export default function Clubs() {
             <Building2 className="mx-auto h-12 w-12 text-slate-400" />
             <h3 className="mt-2 text-sm font-medium text-slate-900">No hay clubes</h3>
             <p className="mt-1 text-sm text-slate-500">
-              {user?.role === 'Supervisor Interno' 
+              {(user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora') 
                 ? 'No tienes ningún club asignado actualmente.' 
                 : 'No se encontraron clubes con los filtros actuales.'}
             </p>

@@ -22,7 +22,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 export default function Dashboard() {
   const { user } = useAuth();
   
-  if (user?.role === 'Supervisor Interno') {
+  if (user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora') {
     return <Navigate to="/clubes" replace />;
   }
 
