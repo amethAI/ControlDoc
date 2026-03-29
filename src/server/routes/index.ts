@@ -1279,8 +1279,9 @@ router.get('/dashboard', canViewData, async (req, res) => {
     // Fetch expired employee documents
     let expiredDocsQuery = supabase
       .from('employee_documents')
-      .select('id, expiry_date, document_types(name), employees!inner(id, full_name, club_id, status)')
+      .select('id, expiry_date, document_types!inner(name, has_expiry), employees!inner(id, full_name, club_id, status)')
       .eq('is_current', 1)
+      .eq('document_types.has_expiry', 1)
       .not('expiry_date', 'is', null)
       .lt('expiry_date', todayStr)
       .eq('employees.status', 'activo');
@@ -1292,7 +1293,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
     // Fetch expired contracts
     let expiredContractsQuery = supabase
       .from('employees')
-      .select('id, full_name, contract_end')
+      .select('id, full_name, contract_end, contract_type')
       .eq('status', 'activo')
       .not('contract_end', 'is', null)
       .lt('contract_end', todayStr);
@@ -1309,7 +1310,9 @@ router.get('/dashboard', canViewData, async (req, res) => {
         date: d.expiry_date,
         status: 'expired'
       })),
-      ...(expiredContractsData || []).map(e => ({
+      ...(expiredContractsData || [])
+        .filter(e => e.contract_type?.toLowerCase() !== 'indefinido')
+        .map(e => ({
         id: `contract-${e.id}`,
         employee_name: e.full_name,
         type: 'Contrato',
@@ -1328,8 +1331,9 @@ router.get('/dashboard', canViewData, async (req, res) => {
     // Fetch expiring employee documents
     let expiringDocsQuery = supabase
       .from('employee_documents')
-      .select('id, expiry_date, document_types(name), employees!inner(id, full_name, club_id, status)')
+      .select('id, expiry_date, document_types!inner(name, has_expiry), employees!inner(id, full_name, club_id, status)')
       .eq('is_current', 1)
+      .eq('document_types.has_expiry', 1)
       .gte('expiry_date', todayStr)
       .lte('expiry_date', dateStr)
       .eq('employees.status', 'activo');
@@ -1341,7 +1345,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
     // Fetch expiring contracts
     let expiringContractsQuery = supabase
       .from('employees')
-      .select('id, full_name, contract_end')
+      .select('id, full_name, contract_end, contract_type')
       .eq('status', 'activo')
       .gte('contract_end', todayStr)
       .lte('contract_end', dateStr);
@@ -1358,7 +1362,9 @@ router.get('/dashboard', canViewData, async (req, res) => {
         date: d.expiry_date,
         status: 'expiring'
       })),
-      ...(expiringContractsData || []).map(e => ({
+      ...(expiringContractsData || [])
+        .filter(e => e.contract_type?.toLowerCase() !== 'indefinido')
+        .map(e => ({
         id: `contract-${e.id}`,
         employee_name: e.full_name,
         type: 'Contrato',

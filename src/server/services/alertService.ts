@@ -23,8 +23,9 @@ export async function sendExpirationAlerts(isTest = false) {
       .select(`
         *,
         employees!inner(full_name, club_id),
-        document_types!inner(name)
+        document_types!inner(name, has_expiry)
       `)
+      .eq('document_types.has_expiry', 1)
       .not('expiry_date', 'is', null)
       .eq('is_current', 1);
 
@@ -46,7 +47,7 @@ export async function sendExpirationAlerts(isTest = false) {
     // Fetch active employees to check contract and probationary periods
     const { data: activeEmployees, error: empError } = await supabase
       .from('employees')
-      .select('id, full_name, club_id, contract_start, contract_end')
+      .select('id, full_name, club_id, contract_start, contract_end, contract_type')
       .eq('status', 'activo');
 
     if (empError) throw empError;
@@ -87,7 +88,7 @@ export async function sendExpirationAlerts(isTest = false) {
         const clubName = clubMap.get(clubId) || 'Desconocido';
 
         // Check contract_end
-        if (emp.contract_end) {
+        if (emp.contract_end && emp.contract_type?.toLowerCase() !== 'indefinido') {
           const contractEnd = new Date(emp.contract_end);
           if (contractEnd <= targetThreshold) {
             if (!alertsByClub[clubId]) {
