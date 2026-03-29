@@ -769,24 +769,26 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
       }
       
       // Update Contract Type and End Date
+      const updateData: any = {};
+      
       if (record.tipoContrato) {
-        const updateData: any = {
-          contract_type: record.tipoContrato
-        };
-        
-        if (record.tipoContrato.toUpperCase() === 'INDEFINIDA' || record.tipoContrato.toUpperCase() === 'INDEFINIDO') {
-          updateData.contract_end = null;
-        } else if (record.fechaTerminacionContrato) {
-          updateData.contract_end = record.fechaTerminacionContrato;
-        } else if (record.tipoContrato.toUpperCase() === '1 AÑO' || record.tipoContrato.toUpperCase() === '1 ANO') {
-          // Auto-calculate 1 year from contract_start if not provided
-          if (employee.contract_start) {
-            const start = new Date(employee.contract_start);
-            start.setFullYear(start.getFullYear() + 1);
-            updateData.contract_end = start.toISOString().split('T')[0];
-          }
+        updateData.contract_type = record.tipoContrato;
+      }
+      
+      if (record.tipoContrato && (record.tipoContrato.toUpperCase() === 'INDEFINIDA' || record.tipoContrato.toUpperCase() === 'INDEFINIDO')) {
+        updateData.contract_end = null;
+      } else if (record.fechaTerminacionContrato) {
+        updateData.contract_end = record.fechaTerminacionContrato;
+      } else if (record.tipoContrato && (record.tipoContrato.toUpperCase() === '1 AÑO' || record.tipoContrato.toUpperCase() === '1 ANO')) {
+        // Auto-calculate 1 year from contract_start if not provided
+        if (employee.contract_start) {
+          const start = new Date(employee.contract_start);
+          start.setFullYear(start.getFullYear() + 1);
+          updateData.contract_end = start.toISOString().split('T')[0];
         }
+      }
 
+      if (Object.keys(updateData).length > 0) {
         await supabase
           .from('employees')
           .update(updateData)
@@ -851,7 +853,7 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
       { name: 'Carta de ingreso', value: carta_ingreso, isBoolean: true },
       { name: 'Carnet Verde', value: carnet_verde, isBoolean: false },
       { name: 'Carnet Blanco', value: carnet_blanco, isBoolean: false },
-      { name: 'Aviso de entrada', value: aviso_css, isBoolean: false }
+      { name: 'Afiliación CSS', value: aviso_css, isBoolean: false }
     ];
 
     for (const docUpdate of docUpdates) {
@@ -865,26 +867,28 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
 
         if (docType) {
           // Check if document exists
-          const { data: existingDoc } = await supabase
+          const { data: existingDocs } = await supabase
             .from('employee_documents')
-            .select('id')
+            .select('id, is_current')
             .eq('employee_id', id)
             .eq('document_type_id', docType.id)
-            .eq('is_current', 1)
-            .single();
+            .order('created_at', { ascending: false })
+            .limit(1);
+            
+          const existingDoc = existingDocs && existingDocs.length > 0 ? existingDocs[0] : null;
 
           if (existingDoc) {
             // Update existing document
             const updatePayload: any = { updated_at: new Date().toISOString() };
             if (docUpdate.isBoolean) {
-              // For boolean types like Carta de ingreso, we don't have a boolean field, 
-              // but we can set status or just leave it if it exists.
-              // If they set to NO, maybe we delete it? Or set is_current = 0?
               if (docUpdate.value === 'NO') {
                 await supabase.from('employee_documents').update({ is_current: 0 }).eq('id', existingDoc.id);
+              } else if (docUpdate.value === 'SÍ' || docUpdate.value === 'SI') {
+                await supabase.from('employee_documents').update({ is_current: 1 }).eq('id', existingDoc.id);
               }
             } else {
               updatePayload.expiry_date = docUpdate.value || null;
+              updatePayload.is_current = 1; // Ensure it's active if we're updating its date
               await supabase.from('employee_documents').update(updatePayload).eq('id', existingDoc.id);
             }
           } else if (docUpdate.value && docUpdate.value !== 'NO') {
