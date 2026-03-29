@@ -420,7 +420,7 @@ router.get('/employees', canViewData, async (req, res) => {
     console.warn('⚠️ API /employees called but Supabase is NOT configured. Using mock data or returning empty.');
   }
   
-  let query = supabase.from('employees').select('*');
+  let query = supabase.from('employees').select('*').order('full_name', { ascending: true });
   
   if (club_id) {
     query = query.eq('club_id', club_id);
@@ -1100,7 +1100,8 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
           document_types ( id, name )
         )
       `)
-      .eq('status', 'activo');
+      .eq('status', 'activo')
+      .order('full_name', { ascending: true });
 
     if (club_id && club_id !== 'all') {
       query = query.eq('club_id', club_id);
@@ -1487,7 +1488,8 @@ router.get('/backup/employees-csv', async (req, res) => {
   try {
     const { data: employees, error } = await supabase
       .from('employees')
-      .select('full_name, cedula, position, status, contract_type, contract_start, clubs(name)');
+      .select('full_name, cedula, position, status, contract_type, contract_start, clubs(name)')
+      .order('full_name', { ascending: true });
 
     if (error) throw error;
 

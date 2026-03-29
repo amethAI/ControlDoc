@@ -320,7 +320,6 @@ export default function EmployeeProfile() {
           {docTypes.map((type) => {
             let doc;
             let status;
-            let expiryDisplay = null;
             const isContractTiedDoc = ['Afiliación CSS', 'Contrato firmado', 'Solicitud de entrada al club', 'Aviso de entrada'].some(name => type.name.includes(name));
 
             if (type.id === 'doc-personal-combined') {
@@ -332,12 +331,6 @@ export default function EmployeeProfile() {
                 else if (combinedDocs.some(d => d.status === 'proximo_vencer')) status = 'proximo_vencer';
                 else if (combinedDocs.some(d => d.status === 'vigente')) status = 'vigente';
                 else status = 'sin_fecha';
-                
-                expiryDisplay = (
-                  <span className="flex-shrink-0 text-xs font-medium text-slate-500">
-                    Fechas en Excel
-                  </span>
-                );
               }
             } else {
               doc = documents.find(d => d.document_type_id === type.id);
@@ -346,7 +339,6 @@ export default function EmployeeProfile() {
               if (isContractTiedDoc && doc) {
                 if (employee?.contract_type?.toUpperCase() === 'INDEFINIDA' || employee?.contract_type?.toUpperCase() === 'INDEFINIDO') {
                   status = 'sin_fecha';
-                  expiryDisplay = null;
                 } else if (employee?.contract_end) {
                   const end = new Date(employee.contract_end);
                   const now = new Date();
@@ -355,26 +347,9 @@ export default function EmployeeProfile() {
                   if (diffDays < 0) status = 'vencido';
                   else if (diffDays <= 30) status = 'proximo_vencer';
                   else status = 'vigente';
-                  
-                  expiryDisplay = (
-                    <span className="flex-shrink-0 text-xs font-medium text-slate-500">
-                      {end.toLocaleDateString()}
-                    </span>
-                  );
                 } else {
                   status = 'sin_fecha';
-                  expiryDisplay = (
-                    <span className="flex-shrink-0 text-xs font-medium text-slate-500">
-                      
-                    </span>
-                  );
                 }
-              } else if (doc?.expiry_date) {
-                expiryDisplay = (
-                  <span className="flex-shrink-0 text-xs font-medium text-slate-500">
-                    {new Date(doc.expiry_date).toLocaleDateString()}
-                  </span>
-                );
               }
             }
             
@@ -413,7 +388,6 @@ export default function EmployeeProfile() {
                       </a>
                     </div>
                     <div className="flex items-center gap-2">
-                      {expiryDisplay}
                       <div className="flex items-center gap-1">
                         <a 
                           href={getFileUrl(doc.file_url)} 
