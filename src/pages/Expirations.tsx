@@ -186,6 +186,35 @@ export default function Expirations() {
     }));
   };
 
+  const handleSave = async (id: string, field: string, value: any) => {
+    if (id.startsWith('manual-')) return; // Don't save manual rows to DB
+
+    try {
+      // Map field names to the ones expected by the API
+      let apiField = field;
+      if (field.startsWith('doc_')) {
+        apiField = field.replace('doc_', '');
+      }
+
+      const res = await apiFetch(`/api/employees/${id}/checklist`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || '',
+          'x-user-id': user?.id || '',
+          'x-user-name': user?.name || ''
+        },
+        body: JSON.stringify({ [apiField]: value })
+      });
+
+      if (!res.ok) {
+        console.error('Error saving checklist field');
+      }
+    } catch (error) {
+      console.error('Error saving checklist field:', error);
+    }
+  };
+
   const getVal = (emp: ChecklistEmployee, field: string) => {
     if (localEdits[emp.id] && localEdits[emp.id][field] !== undefined) {
       return localEdits[emp.id][field];
@@ -354,18 +383,24 @@ export default function Expirations() {
                         <td className="px-2 py-2 border-r border-slate-200">
                           <input 
                             type="text" value={getVal(emp, 'full_name')} onChange={(e) => handleEdit(emp.id, 'full_name', e.target.value)}
+                            onBlur={(e) => handleSave(emp.id, 'full_name', e.target.value)}
                             className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" placeholder="Nombre..."
                           />
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
                           <input 
                             type="text" value={getVal(emp, 'cedula')} onChange={(e) => handleEdit(emp.id, 'cedula', e.target.value)}
+                            onBlur={(e) => handleSave(emp.id, 'cedula', e.target.value)}
                             className="w-20 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" placeholder="Cédula..."
                           />
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
                           <select 
-                            value={getVal(emp, 'doc_carta_ingreso')} onChange={(e) => handleEdit(emp.id, 'doc_carta_ingreso', e.target.value)}
+                            value={getVal(emp, 'doc_carta_ingreso')} 
+                            onChange={(e) => {
+                              handleEdit(emp.id, 'doc_carta_ingreso', e.target.value);
+                              handleSave(emp.id, 'doc_carta_ingreso', e.target.value);
+                            }}
                             className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
                           >
                             <option value="SÍ">SÍ</option>
@@ -375,42 +410,48 @@ export default function Expirations() {
                         <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_carnet_verde'))}`}>
                           <input 
                             type="date" value={getVal(emp, 'doc_carnet_verde')} onChange={(e) => handleEdit(emp.id, 'doc_carnet_verde', e.target.value)}
+                            onBlur={(e) => handleSave(emp.id, 'doc_carnet_verde', e.target.value)}
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                           />
                         </td>
                         <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_carnet_blanco'))}`}>
                           <input 
                             type="date" value={getVal(emp, 'doc_carnet_blanco')} onChange={(e) => handleEdit(emp.id, 'doc_carnet_blanco', e.target.value)}
+                            onBlur={(e) => handleSave(emp.id, 'doc_carnet_blanco', e.target.value)}
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                           />
                         </td>
                         <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_aviso_css'))}`}>
                           <input 
                             type="date" value={getVal(emp, 'doc_aviso_css')} onChange={(e) => handleEdit(emp.id, 'doc_aviso_css', e.target.value)}
+                            onBlur={(e) => handleSave(emp.id, 'doc_aviso_css', e.target.value)}
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                           />
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
                           <input 
                             type="date" value={getVal(emp, 'contract_start')} onChange={(e) => handleEdit(emp.id, 'contract_start', e.target.value)}
+                            onBlur={(e) => handleSave(emp.id, 'contract_start', e.target.value)}
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                           />
                         </td>
-                        <td className="px-2 py-2 border-r border-slate-200">
-                          <input 
-                            type="date" value={getVal(emp, 'probatorio_end')} onChange={(e) => handleEdit(emp.id, 'probatorio_end', e.target.value)}
-                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
-                          />
+                        <td className="px-2 py-2 border-r border-slate-200 text-center text-slate-500">
+                          {getVal(emp, 'probatorio_end')}
                         </td>
                         <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'contract_end'))}`}>
                           <input 
                             type="date" value={getVal(emp, 'contract_end')} onChange={(e) => handleEdit(emp.id, 'contract_end', e.target.value)}
+                            onBlur={(e) => handleSave(emp.id, 'contract_end', e.target.value)}
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                           />
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
                           <select 
-                            value={getVal(emp, 'contract_type')} onChange={(e) => handleEdit(emp.id, 'contract_type', e.target.value)}
+                            value={getVal(emp, 'contract_type')} 
+                            onChange={(e) => {
+                              handleEdit(emp.id, 'contract_type', e.target.value);
+                              handleSave(emp.id, 'contract_type', e.target.value);
+                            }}
                             className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
                           >
                             <option value="">Seleccionar...</option>

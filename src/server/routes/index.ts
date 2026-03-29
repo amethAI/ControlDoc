@@ -825,6 +825,92 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
   }
 });
 
+// Update employee checklist data
+router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
+  const { id } = req.params;
+  const { full_name, cedula, contract_type, contract_start, contract_end, carta_ingreso, carnet_verde, carnet_blanco, aviso_css } = req.body;
+  
+  try {
+    // 1. Update employee basic info
+    const updateData: any = { updated_at: new Date().toISOString() };
+    if (full_name !== undefined) updateData.full_name = full_name;
+    if (cedula !== undefined) updateData.cedula = cedula;
+    if (contract_type !== undefined) updateData.contract_type = contract_type;
+    if (contract_start !== undefined) updateData.contract_start = contract_start || null;
+    if (contract_end !== undefined) updateData.contract_end = contract_end || null;
+
+    const { error: empError } = await supabase
+      .from('employees')
+      .update(updateData)
+      .eq('id', id);
+
+    if (empError) throw empError;
+
+    // 2. Update documents if provided
+    const docUpdates = [
+      { name: 'Carta de ingreso', value: carta_ingreso, isBoolean: true },
+      { name: 'Carnet Verde', value: carnet_verde, isBoolean: false },
+      { name: 'Carnet Blanco', value: carnet_blanco, isBoolean: false },
+      { name: 'Aviso de entrada', value: aviso_css, isBoolean: false }
+    ];
+
+    for (const docUpdate of docUpdates) {
+      if (docUpdate.value !== undefined) {
+        // Find document type ID
+        const { data: docType } = await supabase
+          .from('document_types')
+          .select('id')
+          .ilike('name', `%${docUpdate.name}%`)
+          .single();
+
+        if (docType) {
+          // Check if document exists
+          const { data: existingDoc } = await supabase
+            .from('employee_documents')
+            .select('id')
+            .eq('employee_id', id)
+            .eq('document_type_id', docType.id)
+            .eq('is_current', 1)
+            .single();
+
+          if (existingDoc) {
+            // Update existing document
+            const updatePayload: any = { updated_at: new Date().toISOString() };
+            if (docUpdate.isBoolean) {
+              // For boolean types like Carta de ingreso, we don't have a boolean field, 
+              // but we can set status or just leave it if it exists.
+              // If they set to NO, maybe we delete it? Or set is_current = 0?
+              if (docUpdate.value === 'NO') {
+                await supabase.from('employee_documents').update({ is_current: 0 }).eq('id', existingDoc.id);
+              }
+            } else {
+              updatePayload.expiry_date = docUpdate.value || null;
+              await supabase.from('employee_documents').update(updatePayload).eq('id', existingDoc.id);
+            }
+          } else if (docUpdate.value && docUpdate.value !== 'NO') {
+            // Create new document record
+            await supabase.from('employee_documents').insert([{
+              id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              employee_id: id,
+              document_type_id: docType.id,
+              expiry_date: docUpdate.isBoolean ? null : (docUpdate.value || null),
+              status: 'vigente',
+              is_current: 1,
+              file_url: '', // Empty file URL since it's manually added
+              file_name: `Agregado manualmente - ${docUpdate.name}`
+            }]);
+          }
+        }
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Error updating checklist:', error);
+    res.status(500).json({ error: 'Error al actualizar checklist' });
+  }
+});
+
 // Terminate employee
 router.patch('/employees/:id/terminate', canModifyData, async (req, res) => {
   const { termination_reason, termination_date } = req.body;

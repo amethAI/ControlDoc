@@ -112,6 +112,29 @@ export default function ChecklistContratos() {
     }));
   };
 
+  const handleSave = async (id: string, field: string, value: any) => {
+    if (id.startsWith('manual-')) return; // Don't save manual rows to DB
+
+    try {
+      const res = await apiFetch(`/api/employees/${id}/checklist`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': user?.role || '',
+          'x-user-id': user?.id || '',
+          'x-user-name': user?.name || ''
+        },
+        body: JSON.stringify({ [field]: value })
+      });
+
+      if (!res.ok) {
+        console.error('Error saving checklist field');
+      }
+    } catch (error) {
+      console.error('Error saving checklist field:', error);
+    }
+  };
+
   const getVal = (emp: EmployeeChecklist, field: string) => {
     if (localEdits[emp.id] && localEdits[emp.id][field] !== undefined) {
       return localEdits[emp.id][field];
@@ -261,18 +284,24 @@ export default function ChecklistContratos() {
                       <td className="px-2 py-2 border-r border-slate-200">
                         <input 
                           type="text" value={getVal(emp, 'full_name')} onChange={(e) => handleEdit(emp.id, 'full_name', e.target.value)}
+                          onBlur={(e) => handleSave(emp.id, 'full_name', e.target.value)}
                           className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" placeholder="Nombre..."
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
                         <input 
                           type="text" value={getVal(emp, 'cedula')} onChange={(e) => handleEdit(emp.id, 'cedula', e.target.value)}
+                          onBlur={(e) => handleSave(emp.id, 'cedula', e.target.value)}
                           className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" placeholder="Cédula..."
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200 text-center">
                         <select 
-                          value={getVal(emp, 'carta_ingreso')} onChange={(e) => handleEdit(emp.id, 'carta_ingreso', e.target.value)}
+                          value={getVal(emp, 'carta_ingreso')} 
+                          onChange={(e) => {
+                            handleEdit(emp.id, 'carta_ingreso', e.target.value);
+                            handleSave(emp.id, 'carta_ingreso', e.target.value);
+                          }}
                           className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                         >
                           <option value="SÍ">SÍ</option>
@@ -282,24 +311,28 @@ export default function ChecklistContratos() {
                       <td className="px-2 py-2 border-r border-slate-200">
                         <input 
                           type="date" value={getVal(emp, 'carnet_verde')} onChange={(e) => handleEdit(emp.id, 'carnet_verde', e.target.value)}
+                          onBlur={(e) => handleSave(emp.id, 'carnet_verde', e.target.value)}
                           className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
                         <input 
                           type="date" value={getVal(emp, 'carnet_blanco')} onChange={(e) => handleEdit(emp.id, 'carnet_blanco', e.target.value)}
+                          onBlur={(e) => handleSave(emp.id, 'carnet_blanco', e.target.value)}
                           className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
                         <input 
                           type="date" value={getVal(emp, 'aviso_css')} onChange={(e) => handleEdit(emp.id, 'aviso_css', e.target.value)}
+                          onBlur={(e) => handleSave(emp.id, 'aviso_css', e.target.value)}
                           className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
                         <input 
                           type="date" value={getVal(emp, 'contract_start')} onChange={(e) => handleEdit(emp.id, 'contract_start', e.target.value)}
+                          onBlur={(e) => handleSave(emp.id, 'contract_start', e.target.value)}
                           className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                         />
                       </td>
@@ -309,12 +342,17 @@ export default function ChecklistContratos() {
                       <td className="px-2 py-2 border-r border-slate-200">
                         <input 
                           type="date" value={getVal(emp, 'contract_end')} onChange={(e) => handleEdit(emp.id, 'contract_end', e.target.value)}
+                          onBlur={(e) => handleSave(emp.id, 'contract_end', e.target.value)}
                           className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                         />
                       </td>
                       <td className="px-2 py-2 border-slate-200">
                         <select 
-                          value={getVal(emp, 'contract_type')} onChange={(e) => handleEdit(emp.id, 'contract_type', e.target.value)}
+                          value={getVal(emp, 'contract_type')} 
+                          onChange={(e) => {
+                            handleEdit(emp.id, 'contract_type', e.target.value);
+                            handleSave(emp.id, 'contract_type', e.target.value);
+                          }}
                           className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
                         >
                           <option value="">Seleccionar...</option>
