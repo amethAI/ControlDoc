@@ -23,6 +23,7 @@ export default function ChecklistContratos() {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<EmployeeChecklist[]>([]);
   const [manualRows, setManualRows] = useState<EmployeeChecklist[]>([]);
+  const [localEdits, setLocalEdits] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -101,45 +102,83 @@ export default function ChecklistContratos() {
     setManualRows(manualRows.filter(row => row.id !== id));
   };
 
+  const handleEdit = (id: string, field: string, value: any) => {
+    setLocalEdits(prev => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || {}),
+        [field]: value
+      }
+    }));
+  };
+
+  const getVal = (emp: EmployeeChecklist, field: string) => {
+    if (localEdits[emp.id] && localEdits[emp.id][field] !== undefined) {
+      return localEdits[emp.id][field];
+    }
+    
+    if (emp.isManual) {
+      if (field === 'full_name') return emp.full_name;
+      if (field === 'cedula') return emp.cedula;
+      if (field === 'contract_start') return emp.contract_start || '';
+      if (field === 'carta_ingreso') return emp.carta_ingreso || 'NO';
+      if (field === 'carnet_verde') return emp.carnet_verde || '';
+      if (field === 'carnet_blanco') return emp.carnet_blanco || '';
+      if (field === 'aviso_css') return emp.aviso_css || '';
+    }
+
+    if (field === 'full_name') return emp.full_name;
+    if (field === 'cedula') return emp.cedula;
+    if (field === 'contract_start') return emp.contract_start ? emp.contract_start.split('T')[0] : '';
+    
+    if (field === 'carta_ingreso') return hasDoc(emp.documents, 'Carta de ingreso') === 'SÍ' ? 'SÍ' : 'NO';
+    if (field === 'carnet_verde') {
+      const doc = emp.documents.find(d => d.document_types?.name?.includes('Carnet Verde'));
+      return doc?.expiry_date ? doc.expiry_date.split('T')[0] : '';
+    }
+    if (field === 'carnet_blanco') {
+      const doc = emp.documents.find(d => d.document_types?.name?.includes('Carnet Blanco'));
+      return doc?.expiry_date ? doc.expiry_date.split('T')[0] : '';
+    }
+    if (field === 'aviso_css') {
+      const doc = emp.documents.find(d => d.document_types?.name?.includes('Aviso de entrada'));
+      return doc?.expiry_date ? doc.expiry_date.split('T')[0] : '';
+    }
+    
+    return '';
+  };
+
   const exportToExcel = () => {
     const allData = [...employees, ...manualRows];
     
     const dataToExport = allData.map((emp, index) => {
-      let contractStartStr = '';
+      let contractStartStr = getVal(emp, 'contract_start');
       let probatoryEndStr = '';
-      let contractEndStr = '';
 
-      if (emp.isManual) {
-        contractStartStr = emp.contract_start ? new Date(emp.contract_start).toLocaleDateString('es-PA') : '';
-        contractEndStr = emp.contract_end ? new Date(emp.contract_end).toLocaleDateString('es-PA') : '';
-        // Try to calculate probatory period if start date is valid YYYY-MM-DD
-        if (emp.contract_start && emp.contract_start.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          const date = new Date(emp.contract_start);
-          date.setMonth(date.getMonth() + 3);
-          probatoryEndStr = date.toLocaleDateString('es-PA');
-        }
-      } else {
-        contractStartStr = emp.contract_start ? new Date(emp.contract_start).toLocaleDateString('es-PA') : '';
-        contractEndStr = emp.contract_end ? new Date(emp.contract_end).toLocaleDateString('es-PA') : '';
-        if (emp.contract_start) {
-          const date = new Date(emp.contract_start);
-          date.setMonth(date.getMonth() + 3);
-          probatoryEndStr = date.toLocaleDateString('es-PA');
-        }
+      if (contractStartStr && contractStartStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const date = new Date(contractStartStr);
+        date.setMonth(date.getMonth() + 3);
+        probatoryEndStr = date.toLocaleDateString('es-PA');
       }
+
+      const formatDateForExcel = (dateStr: string) => {
+        if (!dateStr) return '';
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          return new Date(dateStr).toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
+        }
+        return dateStr;
+      };
 
       return {
         'No.': index + 1,
-        'NOMBRE': emp.full_name,
-        'CÉDULA': emp.cedula,
-        'CARTA DE INGRESO': emp.isManual ? emp.carta_ingreso : hasDoc(emp.documents, 'Carta de ingreso'),
-        'CARNET VERDE': emp.isManual ? (emp.carnet_verde ? new Date(emp.carnet_verde).toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '') : '') : getDocDate(emp.documents, 'Carnet Verde'),
-        'CARNET BLANCO': emp.isManual ? (emp.carnet_blanco ? new Date(emp.carnet_blanco).toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '') : '') : getDocDate(emp.documents, 'Carnet Blanco'),
-        'FECHA DE AVISO CSS': emp.isManual ? (emp.aviso_css ? new Date(emp.aviso_css).toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '') : '') : getDocDate(emp.documents, 'Aviso de entrada'),
-        'FECHA DE INICIO DE CONTRATO': contractStartStr,
-        'FECHA DE TERMINACION DE PERIODO PROBATORIO': probatoryEndStr,
-        'FECHA DE TERMINACIÓN DE CONTRATO': contractEndStr,
-        'TIPO DE CONTRATOS': emp.contract_type || '1 año'
+        'NOMBRE': getVal(emp, 'full_name'),
+        'CÉDULA': getVal(emp, 'cedula'),
+        'CARTA DE INGRESO': getVal(emp, 'carta_ingreso'),
+        'CARNET VERDE': formatDateForExcel(getVal(emp, 'carnet_verde')),
+        'CARNET BLANCO': formatDateForExcel(getVal(emp, 'carnet_blanco')),
+        'FECHA DE AVISO CSS': formatDateForExcel(getVal(emp, 'aviso_css')),
+        'FECHA DE INICIO DE CONTRATO': formatDateForExcel(contractStartStr),
+        'FECHA DE TERMINACION DE PERIODO PROBATORIO': probatoryEndStr
       };
     });
 
@@ -190,149 +229,173 @@ export default function ChecklistContratos() {
               <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">CARNET BLANCO</th>
               <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">FECHA DE AVISO CSS</th>
               <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">FECHA DE INICIO DE CONTRATO</th>
-              <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">FECHA DE TERMINACION DE PERIODO PROBATORIO</th>
-              <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">FECHA DE TERMINACIÓN DE CONTRATO</th>
-              <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">TIPO DE CONTRATOS</th>
-              <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs">ACCIONES</th>
+              <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs">FECHA DE TERMINACION DE PERIODO PROBATORIO</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
             {employees.length === 0 && manualRows.length === 0 ? (
               <tr>
-                <td colSpan={12} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                   No se encontraron empleados con contrato de 1 año.
                 </td>
               </tr>
             ) : (
               <>
                 {/* Database Rows */}
-                {employees.map((emp, index) => (
-                  <tr key={emp.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 whitespace-nowrap text-slate-500 border-r border-slate-200 text-center">{index + 1}</td>
-                    <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-900 border-r border-slate-200">{emp.full_name}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-slate-500 border-r border-slate-200">{emp.cedula}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200 font-medium text-blue-600">{hasDoc(emp.documents, 'Carta de ingreso')}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">{getDocDate(emp.documents, 'Carnet Verde')}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">{getDocDate(emp.documents, 'Carnet Blanco')}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">{getDocDate(emp.documents, 'Aviso de entrada')}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
-                      {emp.contract_start ? new Date(emp.contract_start).toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '') : ''}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
-                      {emp.contract_start ? (() => {
-                        const date = new Date(emp.contract_start);
-                        date.setMonth(date.getMonth() + 3);
-                        return date.toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
-                      })() : ''}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
-                      {emp.contract_end ? new Date(emp.contract_end).toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '') : ''}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center text-slate-500 uppercase border-r border-slate-200">{emp.contract_type}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center text-slate-500"></td>
-                  </tr>
-                ))}
+                {employees.map((emp, index) => {
+                  let probatoryEndStr = '';
+                  const contractStartStr = getVal(emp, 'contract_start');
+                  if (contractStartStr && contractStartStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    const date = new Date(contractStartStr);
+                    date.setMonth(date.getMonth() + 3);
+                    probatoryEndStr = date.toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
+                  }
+
+                  return (
+                    <tr key={emp.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 whitespace-nowrap text-slate-500 border-r border-slate-200 text-center">{index + 1}</td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input 
+                          type="text" value={getVal(emp, 'full_name')} onChange={(e) => handleEdit(emp.id, 'full_name', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" placeholder="Nombre..."
+                        />
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input 
+                          type="text" value={getVal(emp, 'cedula')} onChange={(e) => handleEdit(emp.id, 'cedula', e.target.value)}
+                          className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" placeholder="Cédula..."
+                        />
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200 text-center">
+                        <select 
+                          value={getVal(emp, 'carta_ingreso')} onChange={(e) => handleEdit(emp.id, 'carta_ingreso', e.target.value)}
+                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        >
+                          <option value="SÍ">SÍ</option>
+                          <option value="NO">NO</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input 
+                          type="date" value={getVal(emp, 'carnet_verde')} onChange={(e) => handleEdit(emp.id, 'carnet_verde', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        />
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input 
+                          type="date" value={getVal(emp, 'carnet_blanco')} onChange={(e) => handleEdit(emp.id, 'carnet_blanco', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        />
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input 
+                          type="date" value={getVal(emp, 'aviso_css')} onChange={(e) => handleEdit(emp.id, 'aviso_css', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        />
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input 
+                          type="date" value={getVal(emp, 'contract_start')} onChange={(e) => handleEdit(emp.id, 'contract_start', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center border-slate-200">
+                        {probatoryEndStr}
+                      </td>
+                    </tr>
+                  );
+                })}
                 
                 {/* Manual Rows */}
-                {manualRows.map((row, index) => (
-                  <tr key={row.id} className="bg-blue-50 hover:bg-blue-100 transition-colors">
-                    <td className="px-2 py-2 whitespace-nowrap text-slate-500 border-r border-slate-200 text-center">
-                      {employees.length + index + 1}
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                      <input 
-                        type="text" 
-                        value={row.full_name} 
-                        onChange={(e) => updateManualRow(row.id, 'full_name', e.target.value)}
-                        placeholder="Nombre..."
-                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                      <input 
-                        type="text" 
-                        value={row.cedula} 
-                        onChange={(e) => updateManualRow(row.id, 'cedula', e.target.value)}
-                        placeholder="Cédula..."
-                        className="w-24 bg-white border border-slate-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200 text-center">
-                      <select 
-                        value={row.carta_ingreso} 
-                        onChange={(e) => updateManualRow(row.id, 'carta_ingreso', e.target.value)}
-                        className="bg-white border border-slate-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="SÍ">SÍ</option>
-                        <option value="NO">NO</option>
-                      </select>
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                      <input 
-                        type="date" 
-                        value={row.carnet_verde} 
-                        onChange={(e) => updateManualRow(row.id, 'carnet_verde', e.target.value)}
-                        className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center"
-                      />
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                      <input 
-                        type="date" 
-                        value={row.carnet_blanco} 
-                        onChange={(e) => updateManualRow(row.id, 'carnet_blanco', e.target.value)}
-                        className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center"
-                      />
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                      <input 
-                        type="date" 
-                        value={row.aviso_css} 
-                        onChange={(e) => updateManualRow(row.id, 'aviso_css', e.target.value)}
-                        className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center"
-                      />
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                      <input 
-                        type="date" 
-                        value={row.contract_start} 
-                        onChange={(e) => updateManualRow(row.id, 'contract_start', e.target.value)}
-                        className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200 text-center text-slate-500">
-                      {row.contract_start ? (() => {
-                        const date = new Date(row.contract_start);
-                        date.setMonth(date.getMonth() + 3);
-                        return date.toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
-                      })() : 'Auto'}
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                      <input 
-                        type="date" 
-                        value={row.contract_end} 
-                        onChange={(e) => updateManualRow(row.id, 'contract_end', e.target.value)}
-                        className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                      <input 
-                        type="text" 
-                        value={row.contract_type} 
-                        onChange={(e) => updateManualRow(row.id, 'contract_type', e.target.value)}
-                        className="w-24 bg-white border border-slate-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center uppercase"
-                      />
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap text-center">
-                      <button 
-                        onClick={() => removeManualRow(row.id)}
-                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
-                        title="Eliminar fila manual"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {manualRows.map((row, index) => {
+                  let probatoryEndStr = '';
+                  const contractStartStr = getVal(row, 'contract_start');
+                  if (contractStartStr && contractStartStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    const date = new Date(contractStartStr);
+                    date.setMonth(date.getMonth() + 3);
+                    probatoryEndStr = date.toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
+                  }
+
+                  return (
+                    <tr key={row.id} className="bg-blue-50 hover:bg-blue-100 transition-colors">
+                      <td className="px-2 py-2 whitespace-nowrap text-slate-500 border-r border-slate-200 text-center">
+                        {employees.length + index + 1}
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
+                        <input 
+                          type="text" 
+                          value={getVal(row, 'full_name')} 
+                          onChange={(e) => handleEdit(row.id, 'full_name', e.target.value)}
+                          placeholder="Nombre..."
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
+                        />
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
+                        <input 
+                          type="text" 
+                          value={getVal(row, 'cedula')} 
+                          onChange={(e) => handleEdit(row.id, 'cedula', e.target.value)}
+                          placeholder="Cédula..."
+                          className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
+                        />
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200 text-center">
+                        <select 
+                          value={getVal(row, 'carta_ingreso')} 
+                          onChange={(e) => handleEdit(row.id, 'carta_ingreso', e.target.value)}
+                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        >
+                          <option value="SÍ">SÍ</option>
+                          <option value="NO">NO</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
+                        <input 
+                          type="date" 
+                          value={getVal(row, 'carnet_verde')} 
+                          onChange={(e) => handleEdit(row.id, 'carnet_verde', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        />
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
+                        <input 
+                          type="date" 
+                          value={getVal(row, 'carnet_blanco')} 
+                          onChange={(e) => handleEdit(row.id, 'carnet_blanco', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        />
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
+                        <input 
+                          type="date" 
+                          value={getVal(row, 'aviso_css')} 
+                          onChange={(e) => handleEdit(row.id, 'aviso_css', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        />
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
+                        <input 
+                          type="date" 
+                          value={getVal(row, 'contract_start')} 
+                          onChange={(e) => handleEdit(row.id, 'contract_start', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center border-slate-200">
+                        <div className="flex items-center justify-center gap-2">
+                          <span>{probatoryEndStr}</span>
+                          <button 
+                            onClick={() => removeManualRow(row.id)} 
+                            className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                            title="Eliminar fila"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </>
             )}
           </tbody>

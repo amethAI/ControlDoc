@@ -4,7 +4,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'Administrador' | 'Supervisora' | 'Coordinadora' | 'Supervisor Interno';
+  role: 'Administrador' | 'Supervisora' | 'Coordinadora' | 'Supervisor Interno' | 'Supervisor Cliente';
   club_id?: string;
 }
 

@@ -358,21 +358,21 @@ export default function EmployeeProfile() {
                   
                   expiryDisplay = (
                     <span className="flex-shrink-0 text-xs font-medium text-slate-500">
-                      Vence (Contrato): {end.toLocaleDateString()}
+                      {end.toLocaleDateString()}
                     </span>
                   );
                 } else {
                   status = 'sin_fecha';
                   expiryDisplay = (
                     <span className="flex-shrink-0 text-xs font-medium text-slate-500">
-                      Falta fecha de contrato
+                      
                     </span>
                   );
                 }
               } else if (doc?.expiry_date) {
                 expiryDisplay = (
                   <span className="flex-shrink-0 text-xs font-medium text-slate-500">
-                    Vence: {new Date(doc.expiry_date).toLocaleDateString()}
+                    {new Date(doc.expiry_date).toLocaleDateString()}
                   </span>
                 );
               }

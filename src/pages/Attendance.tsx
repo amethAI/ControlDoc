@@ -80,7 +80,7 @@ export default function Attendance() {
   }
 
   const isReadOnly = user?.role !== 'Administrador' && user?.role !== 'Supervisor Interno';
-  const isRestricted = user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora';
+  const isRestricted = user?.role === 'Supervisor Interno';
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);

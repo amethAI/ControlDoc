@@ -102,7 +102,7 @@ export default function Employees() {
         </div>
 
         <div className="flex gap-3">
-          {(user?.role === 'Administrador' || user?.role === 'Supervisor Interno') && (
+          {user?.role === 'Administrador' && (
             <>
               {user?.role === 'Administrador' && (
                 <button 
@@ -253,7 +253,7 @@ export default function Employees() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchEmployees}
-        clubId={user?.role === 'Coordinadora' ? user.club_id : undefined}
+        clubId={undefined}
       />
 
       <BulkUploadModal 
@@ -266,7 +266,7 @@ export default function Employees() {
         isOpen={isBulkEmployeeModalOpen}
         onClose={() => setIsBulkEmployeeModalOpen(false)}
         onSuccess={fetchEmployees}
-        clubId={user?.role === 'Coordinadora' ? user.club_id : undefined}
+        clubId={undefined}
       />
 
       <ImportDatesModal
