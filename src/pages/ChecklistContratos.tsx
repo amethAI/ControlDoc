@@ -179,7 +179,7 @@ export default function ChecklistContratos() {
       let probatoryEndStr = '';
 
       if (contractStartStr && contractStartStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        const date = new Date(contractStartStr);
+        const date = new Date(`${contractStartStr}T12:00:00`);
         date.setMonth(date.getMonth() + 3);
         probatoryEndStr = date.toLocaleDateString('es-PA');
       }
@@ -187,7 +187,7 @@ export default function ChecklistContratos() {
       const formatDateForExcel = (dateStr: string) => {
         if (!dateStr) return '';
         if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          return new Date(dateStr).toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
+          return new Date(`${dateStr}T12:00:00`).toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
         }
         return dateStr;
       };
@@ -199,7 +199,7 @@ export default function ChecklistContratos() {
         'CARTA DE INGRESO': getVal(emp, 'carta_ingreso'),
         'CARNET VERDE': formatDateForExcel(getVal(emp, 'carnet_verde')),
         'CARNET BLANCO': formatDateForExcel(getVal(emp, 'carnet_blanco')),
-        'FECHA DE AVISO CSS': formatDateForExcel(getVal(emp, 'aviso_css')),
+        'FECHA DE AVISO CSS': formatDateForExcel(contractStartStr),
         'FECHA DE INICIO DE CONTRATO': formatDateForExcel(contractStartStr),
         'FECHA DE TERMINACION DE PERIODO PROBATORIO': probatoryEndStr,
         'FECHA DE TERMINACION DE CONTRATO': formatDateForExcel(getVal(emp, 'contract_end')),
@@ -273,7 +273,7 @@ export default function ChecklistContratos() {
                   let probatoryEndStr = '';
                   const contractStartStr = getVal(emp, 'contract_start');
                   if (contractStartStr && contractStartStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                    const date = new Date(contractStartStr);
+                    const date = new Date(`${contractStartStr}T12:00:00`);
                     date.setMonth(date.getMonth() + 3);
                     probatoryEndStr = date.toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
                   }
@@ -322,12 +322,8 @@ export default function ChecklistContratos() {
                           className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                         />
                       </td>
-                      <td className="px-2 py-2 border-r border-slate-200">
-                        <input 
-                          type="date" value={getVal(emp, 'aviso_css')} onChange={(e) => handleEdit(emp.id, 'aviso_css', e.target.value)}
-                          onBlur={(e) => handleSave(emp.id, 'aviso_css', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
-                        />
+                      <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
+                        {getVal(emp, 'contract_start')}
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
                         <input 
@@ -370,7 +366,7 @@ export default function ChecklistContratos() {
                   let probatoryEndStr = '';
                   const contractStartStr = getVal(row, 'contract_start');
                   if (contractStartStr && contractStartStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                    const date = new Date(contractStartStr);
+                    const date = new Date(`${contractStartStr}T12:00:00`);
                     date.setMonth(date.getMonth() + 3);
                     probatoryEndStr = date.toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
                   }

@@ -99,7 +99,13 @@ export default function Expirations() {
     // If it's a manual string like DD-MMM-YY, return as is
     if (dateString.match(/^\d{2}-[a-zA-Z]{3}-\d{2}$/)) return dateString;
     
-    const date = new Date(dateString);
+    // Fix timezone issue for YYYY-MM-DD
+    let dateToParse = dateString;
+    if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      dateToParse = `${dateString}T12:00:00`;
+    }
+    
+    const date = new Date(dateToParse);
     if (isNaN(date.getTime())) return dateString; // Fallback for manual text
     
     // Format as DD-MMM-YY (e.g., 30-Jul-28)
@@ -110,7 +116,12 @@ export default function Expirations() {
   const getCellColorClass = (expiryDate: string | null) => {
     if (!expiryDate) return '';
     
-    const end = new Date(expiryDate);
+    let dateToParse = expiryDate;
+    if (expiryDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      dateToParse = `${expiryDate}T12:00:00`;
+    }
+    
+    const end = new Date(dateToParse);
     if (isNaN(end.getTime())) return ''; // Don't color manual text that isn't a date
     
     const now = new Date();
@@ -259,7 +270,7 @@ export default function Expirations() {
       'CARTA DE INGRESO': getVal(emp, 'doc_carta_ingreso'),
       'CARNET VERDE': formatDate(getVal(emp, 'doc_carnet_verde')),
       'CARNET BLANCO': formatDate(getVal(emp, 'doc_carnet_blanco')),
-      'FECHA DE AVISO CSS': formatDate(getVal(emp, 'doc_aviso_css')),
+      'FECHA DE AVISO CSS': formatDate(getVal(emp, 'contract_start')),
       'FECHA DE INICIO DE CONTRATO': formatDate(getVal(emp, 'contract_start')),
       'FECHA DE TERMINACION DE PERIODO PROBATORIO': formatDate(getVal(emp, 'probatorio_end')),
       'FECHA DE TERMINACION DE CONTRATO': formatDate(getVal(emp, 'contract_end')),
@@ -421,12 +432,8 @@ export default function Expirations() {
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                           />
                         </td>
-                        <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_aviso_css'))}`}>
-                          <input 
-                            type="date" value={getVal(emp, 'doc_aviso_css')} onChange={(e) => handleEdit(emp.id, 'doc_aviso_css', e.target.value)}
-                            onBlur={(e) => handleSave(emp.id, 'doc_aviso_css', e.target.value)}
-                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
-                          />
+                        <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
+                          {formatDate(getVal(emp, 'contract_start'))}
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
                           <input 
@@ -435,8 +442,8 @@ export default function Expirations() {
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                           />
                         </td>
-                        <td className="px-2 py-2 border-r border-slate-200 text-center text-slate-500">
-                          {getVal(emp, 'probatorio_end')}
+                        <td className={`px-4 py-3 whitespace-nowrap text-center border-r border-slate-200 ${getCellColorClass(getVal(emp, 'probatorio_end'))}`}>
+                          {formatDate(getVal(emp, 'probatorio_end'))}
                         </td>
                         <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'contract_end'))}`}>
                           <input 
