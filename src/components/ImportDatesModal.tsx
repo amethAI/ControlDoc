@@ -79,7 +79,15 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
     reader.onload = async (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'array' });
+        const isCSV = file.name.toLowerCase().endsWith('.csv');
+        
+        let workbook;
+        if (isCSV && typeof data === 'string') {
+          workbook = XLSX.read(data, { type: 'string' });
+        } else {
+          workbook = XLSX.read(data, { type: 'array' });
+        }
+        
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         
@@ -214,7 +222,13 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
       setLoading(false);
     };
 
-    reader.readAsArrayBuffer(file);
+    const isCSV = file.name.toLowerCase().endsWith('.csv');
+    
+    if (isCSV) {
+      reader.readAsText(file, 'windows-1252'); // Handle Spanish characters in CSV
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
   };
 
   return (

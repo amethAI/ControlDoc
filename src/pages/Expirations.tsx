@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Filter, Search, FileSpreadsheet } from 'lucide-react';
+import { Filter, Search, FileSpreadsheet, Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import * as XLSX from 'xlsx';
@@ -14,17 +14,19 @@ interface ChecklistEmployee {
   contract_type: string;
   probatorio_end: string | null;
   contratos_count: number;
+  isManual?: boolean;
   documents: {
-    carta_ingreso: { exists: boolean; file_url?: string };
-    carnet_verde: { expiry_date: string | null; file_url: string } | null;
-    carnet_blanco: { expiry_date: string | null; file_url: string } | null;
-    aviso_css: { expiry_date: string | null; file_url: string } | null;
+    carta_ingreso: { exists: boolean; file_url?: string; manualValue?: string };
+    carnet_verde: { expiry_date: string | null; file_url: string; manualValue?: string } | null;
+    carnet_blanco: { expiry_date: string | null; file_url: string; manualValue?: string } | null;
+    aviso_css: { expiry_date: string | null; file_url: string; manualValue?: string } | null;
   };
 }
 
 export default function Expirations() {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<ChecklistEmployee[]>([]);
+  const [manualRows, setManualRows] = useState<ChecklistEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [clubFilter, setClubFilter] = useState<string>('all');
@@ -82,9 +84,23 @@ export default function Expirations() {
     return acc;
   }, {} as Record<string, ChecklistEmployee[]>);
 
+  // Add manual rows to their respective clubs or a "Manuales" group
+  manualRows.forEach(row => {
+    const clubName = row.club_name || 'Agregados Manualmente';
+    if (!groupedEmployees[clubName]) {
+      groupedEmployees[clubName] = [];
+    }
+    groupedEmployees[clubName].push(row);
+  });
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '';
+    // If it's a manual string like DD-MMM-YY, return as is
+    if (dateString.match(/^\d{2}-[a-zA-Z]{3}-\d{2}$/)) return dateString;
+    
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString; // Fallback for manual text
+    
     // Format as DD-MMM-YY (e.g., 30-Jul-28)
     const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: '2-digit' };
     return date.toLocaleDateString('es-ES', options).replace(/ /g, '-').replace('.', '');
@@ -94,6 +110,8 @@ export default function Expirations() {
     if (!expiryDate) return '';
     
     const end = new Date(expiryDate);
+    if (isNaN(end.getTime())) return ''; // Don't color manual text that isn't a date
+    
     const now = new Date();
     const diffDays = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     
@@ -102,15 +120,73 @@ export default function Expirations() {
     return 'bg-emerald-100 text-emerald-800 font-medium';
   };
 
+  const addManualRow = () => {
+    const newRow: ChecklistEmployee = {
+      id: `manual-${Date.now()}`,
+      full_name: '',
+      cedula: '',
+      club_name: clubFilter !== 'all' ? (clubs.find(c => c.id === clubFilter)?.name || 'Agregados Manualmente') : 'Agregados Manualmente',
+      contract_start: '',
+      contract_end: '',
+      contract_type: 'Indefinido',
+      probatorio_end: '',
+      contratos_count: 1,
+      isManual: true,
+      documents: {
+        carta_ingreso: { exists: false, manualValue: 'NO' },
+        carnet_verde: { expiry_date: '', file_url: '', manualValue: '' },
+        carnet_blanco: { expiry_date: '', file_url: '', manualValue: '' },
+        aviso_css: { expiry_date: '', file_url: '', manualValue: '' }
+      }
+    };
+    setManualRows([...manualRows, newRow]);
+  };
+
+  const updateManualRow = (id: string, field: string, value: any) => {
+    setManualRows(manualRows.map(row => {
+      if (row.id !== id) return row;
+      
+      if (field.startsWith('doc_')) {
+        const docType = field.replace('doc_', '') as keyof typeof row.documents;
+        if (docType === 'carta_ingreso') {
+           return {
+             ...row,
+             documents: {
+               ...row.documents,
+               carta_ingreso: { ...row.documents.carta_ingreso, manualValue: value }
+             }
+           };
+        } else {
+           return {
+             ...row,
+             documents: {
+               ...row.documents,
+               [docType]: { ...row.documents[docType], expiry_date: value, manualValue: value }
+             }
+           };
+        }
+      }
+      
+      return { ...row, [field]: value };
+    }));
+  };
+
+  const removeManualRow = (id: string) => {
+    setManualRows(manualRows.filter(row => row.id !== id));
+  };
+
   const exportToExcel = () => {
-    const dataToExport = filteredEmployees.map((emp, index) => ({
+    const allData = [...filteredEmployees, ...manualRows];
+    
+    const dataToExport = allData.map((emp, index) => ({
       'No.': index + 1,
       'NOMBRE': emp.full_name,
       'CÉDULA': emp.cedula,
-      'CARTA DE INGRESO': emp.documents.carta_ingreso.exists ? 'SI' : 'NO',
-      'CARNET VERDE': formatDate(emp.documents.carnet_verde?.expiry_date || null),
-      'CARNET BLANCO': formatDate(emp.documents.carnet_blanco?.expiry_date || null),
-      'FECHA DE AVISO CSS': formatDate(emp.documents.aviso_css?.expiry_date || null),
+      'CLUB': emp.club_name,
+      'CARTA DE INGRESO': emp.isManual ? emp.documents.carta_ingreso.manualValue : (emp.documents.carta_ingreso.exists ? 'SI' : 'NO'),
+      'CARNET VERDE': emp.isManual ? formatDate(emp.documents.carnet_verde?.manualValue || null) : formatDate(emp.documents.carnet_verde?.expiry_date || null),
+      'CARNET BLANCO': emp.isManual ? formatDate(emp.documents.carnet_blanco?.manualValue || null) : formatDate(emp.documents.carnet_blanco?.expiry_date || null),
+      'FECHA DE AVISO CSS': emp.isManual ? formatDate(emp.documents.aviso_css?.manualValue || null) : formatDate(emp.documents.aviso_css?.expiry_date || null),
       'FECHA DE INICIO DE CONTRATO': formatDate(emp.contract_start),
       'FECHA DE TERMINACION DE PERIODO PROBATORIO': formatDate(emp.probatorio_end),
       'FECHA DE TERMINACIÓN DE CONTRATO': formatDate(emp.contract_end),
@@ -133,13 +209,22 @@ export default function Expirations() {
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Check List de Empleados</h1>
           <p className="text-slate-500 mt-1">Vista consolidada de documentos y fechas de vencimiento.</p>
         </div>
-        <button
-          onClick={exportToExcel}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium shadow-sm"
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          Exportar a Excel
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={addManualRow}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+            Agregar Fila Manual
+          </button>
+          <button
+            onClick={exportToExcel}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium shadow-sm"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Exportar a Excel
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -179,17 +264,17 @@ export default function Expirations() {
             {loading ? (
               <tbody>
                 <tr>
-                  <td colSpan={12} className="px-6 py-12 text-center">
+                  <td colSpan={13} className="px-6 py-12 text-center">
                     <div className="flex justify-center items-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                     </div>
                   </td>
                 </tr>
               </tbody>
-            ) : filteredEmployees.length === 0 ? (
+            ) : Object.keys(groupedEmployees).length === 0 ? (
               <tbody>
                 <tr>
-                  <td colSpan={12} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={13} className="px-6 py-12 text-center text-slate-500">
                     <p className="text-lg font-medium text-slate-900">No hay datos</p>
                     <p>No se encontraron empleados con los filtros seleccionados.</p>
                   </td>
@@ -200,7 +285,7 @@ export default function Expirations() {
                 <React.Fragment key={clubName}>
                   <thead className="bg-red-600 text-white font-bold">
                     <tr>
-                      <th colSpan={12} className="px-4 py-3 text-lg tracking-wider uppercase">
+                      <th colSpan={13} className="px-4 py-3 text-lg tracking-wider uppercase">
                         CHECK LIST {clubName}
                       </th>
                     </tr>
@@ -216,54 +301,138 @@ export default function Expirations() {
                       <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACION DE<br/>PERIODO<br/>PROBATORIO</th>
                       <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACIÓN DE<br/>CONTRATO</th>
                       <th className="px-4 py-3 border-r border-slate-300">TIPO DE<br/>CONTRATOS</th>
-                      <th className="px-4 py-3">CANTIDAD DE<br/>CONTRATOS</th>
+                      <th className="px-4 py-3 border-r border-slate-300">CANTIDAD DE<br/>CONTRATOS</th>
+                      <th className="px-4 py-3">ACCIONES</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white">
                     {employeesInClub.map((emp, index) => (
-                      <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
+                      <tr key={emp.id} className={`${emp.isManual ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-slate-50'} transition-colors`}>
                         <td className="px-3 py-2 border-r border-slate-200 font-medium">{index + 1}</td>
-                        <td className="px-4 py-2 border-r border-slate-200 text-left font-bold text-slate-800">
-                          <a href={`/employees/${emp.id}`} className="hover:text-blue-600 hover:underline">
-                            {emp.full_name}
-                          </a>
-                        </td>
-                        <td className="px-4 py-2 border-r border-slate-200 font-medium">{emp.cedula}</td>
-                        <td className="px-4 py-2 border-r border-slate-200 font-bold">
-                          {emp.documents.carta_ingreso.exists ? (
-                            <a href={emp.documents.carta_ingreso.file_url || '#'} target="_blank" rel="noopener noreferrer" className="text-slate-800 hover:text-blue-600">SI</a>
-                          ) : (
-                            <span className="text-slate-400">NO</span>
-                          )}
-                        </td>
-                        <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.carnet_verde?.expiry_date || null)}`}>
-                          {emp.documents.carnet_verde ? (
-                            <a href={emp.documents.carnet_verde.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                              {formatDate(emp.documents.carnet_verde.expiry_date)}
-                            </a>
-                          ) : ''}
-                        </td>
-                        <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.carnet_blanco?.expiry_date || null)}`}>
-                          {emp.documents.carnet_blanco ? (
-                            <a href={emp.documents.carnet_blanco.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                              {formatDate(emp.documents.carnet_blanco.expiry_date)}
-                            </a>
-                          ) : ''}
-                        </td>
-                        <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.aviso_css?.expiry_date || null)}`}>
-                          {emp.documents.aviso_css ? (
-                            <a href={emp.documents.aviso_css.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                              {formatDate(emp.documents.aviso_css.expiry_date)}
-                            </a>
-                          ) : ''}
-                        </td>
-                        <td className="px-4 py-2 border-r border-slate-200">{formatDate(emp.contract_start)}</td>
-                        <td className="px-4 py-2 border-r border-slate-200">{formatDate(emp.probatorio_end)}</td>
-                        <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.contract_end)}`}>
-                          {formatDate(emp.contract_end)}
-                        </td>
-                        <td className="px-4 py-2 border-r border-slate-200 font-medium">{emp.contract_type}</td>
-                        <td className="px-4 py-2 font-medium">{emp.contratos_count}</td>
+                        
+                        {emp.isManual ? (
+                          <>
+                            <td className="px-2 py-2 border-r border-slate-200">
+                              <input 
+                                type="text" value={emp.full_name} onChange={(e) => updateManualRow(emp.id, 'full_name', e.target.value)}
+                                className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs" placeholder="Nombre..."
+                              />
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200">
+                              <input 
+                                type="text" value={emp.cedula} onChange={(e) => updateManualRow(emp.id, 'cedula', e.target.value)}
+                                className="w-20 bg-white border border-slate-300 rounded px-2 py-1 text-xs" placeholder="Cédula..."
+                              />
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200">
+                              <select 
+                                value={emp.documents.carta_ingreso.manualValue} onChange={(e) => updateManualRow(emp.id, 'doc_carta_ingreso', e.target.value)}
+                                className="bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+                              >
+                                <option value="SÍ">SÍ</option>
+                                <option value="NO">NO</option>
+                              </select>
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200">
+                              <input 
+                                type="date" value={emp.documents.carnet_verde?.manualValue || ''} onChange={(e) => updateManualRow(emp.id, 'doc_carnet_verde', e.target.value)}
+                                className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-xs text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200">
+                              <input 
+                                type="date" value={emp.documents.carnet_blanco?.manualValue || ''} onChange={(e) => updateManualRow(emp.id, 'doc_carnet_blanco', e.target.value)}
+                                className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-xs text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200">
+                              <input 
+                                type="date" value={emp.documents.aviso_css?.manualValue || ''} onChange={(e) => updateManualRow(emp.id, 'doc_aviso_css', e.target.value)}
+                                className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-xs text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200">
+                              <input 
+                                type="date" value={emp.contract_start || ''} onChange={(e) => updateManualRow(emp.id, 'contract_start', e.target.value)}
+                                className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-xs text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200">
+                              <input 
+                                type="date" value={emp.probatorio_end || ''} onChange={(e) => updateManualRow(emp.id, 'probatorio_end', e.target.value)}
+                                className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-xs text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200">
+                              <input 
+                                type="date" value={emp.contract_end || ''} onChange={(e) => updateManualRow(emp.id, 'contract_end', e.target.value)}
+                                className="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-xs text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200">
+                              <input 
+                                type="text" value={emp.contract_type} onChange={(e) => updateManualRow(emp.id, 'contract_type', e.target.value)}
+                                className="w-20 bg-white border border-slate-300 rounded px-2 py-1 text-xs text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 border-r border-slate-200">
+                              <input 
+                                type="number" value={emp.contratos_count} onChange={(e) => updateManualRow(emp.id, 'contratos_count', parseInt(e.target.value) || 0)}
+                                className="w-16 bg-white border border-slate-300 rounded px-2 py-1 text-xs text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              <button onClick={() => removeManualRow(emp.id)} className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-4 py-2 border-r border-slate-200 text-left font-bold text-slate-800">
+                              <a href={`/employees/${emp.id}`} className="hover:text-blue-600 hover:underline">
+                                {emp.full_name}
+                              </a>
+                            </td>
+                            <td className="px-4 py-2 border-r border-slate-200 font-medium">{emp.cedula}</td>
+                            <td className="px-4 py-2 border-r border-slate-200 font-bold">
+                              {emp.documents.carta_ingreso.exists ? (
+                                <a href={emp.documents.carta_ingreso.file_url || '#'} target="_blank" rel="noopener noreferrer" className="text-slate-800 hover:text-blue-600">SI</a>
+                              ) : (
+                                <span className="text-slate-400">NO</span>
+                              )}
+                            </td>
+                            <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.carnet_verde?.expiry_date || null)}`}>
+                              {emp.documents.carnet_verde ? (
+                                <a href={emp.documents.carnet_verde.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                  {formatDate(emp.documents.carnet_verde.expiry_date)}
+                                </a>
+                              ) : ''}
+                            </td>
+                            <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.carnet_blanco?.expiry_date || null)}`}>
+                              {emp.documents.carnet_blanco ? (
+                                <a href={emp.documents.carnet_blanco.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                  {formatDate(emp.documents.carnet_blanco.expiry_date)}
+                                </a>
+                              ) : ''}
+                            </td>
+                            <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.documents.aviso_css?.expiry_date || null)}`}>
+                              {emp.documents.aviso_css ? (
+                                <a href={emp.documents.aviso_css.file_url || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                  {formatDate(emp.documents.aviso_css.expiry_date)}
+                                </a>
+                              ) : ''}
+                            </td>
+                            <td className="px-4 py-2 border-r border-slate-200">{formatDate(emp.contract_start)}</td>
+                            <td className="px-4 py-2 border-r border-slate-200">{formatDate(emp.probatorio_end)}</td>
+                            <td className={`px-4 py-2 border-r border-slate-200 ${getCellColorClass(emp.contract_end)}`}>
+                              {formatDate(emp.contract_end)}
+                            </td>
+                            <td className="px-4 py-2 border-r border-slate-200 font-medium">{emp.contract_type}</td>
+                            <td className="px-4 py-2 border-r border-slate-200 font-medium">{emp.contratos_count}</td>
+                            <td className="px-4 py-2"></td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>

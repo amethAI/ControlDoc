@@ -43,6 +43,14 @@ export async function sendExpirationAlerts(isTest = false) {
 
     if (error) throw error;
 
+    // Fetch active employees to check contract and probationary periods
+    const { data: activeEmployees, error: empError } = await supabase
+      .from('employees')
+      .select('id, full_name, club_id, contract_start, contract_end')
+      .eq('status', 'activo');
+
+    if (empError) throw empError;
+
     // We need to fetch clubs separately to get their names
     const { data: clubs } = await supabase.from('clubs').select('id, name');
     const clubMap = new Map(clubs?.map(c => [c.id, c.name]) || []);
@@ -50,6 +58,7 @@ export async function sendExpirationAlerts(isTest = false) {
     // Agrupar por club
     const alertsByClub: Record<string, any> = {};
     
+    // Process expiring documents
     if (expiringDocs && expiringDocs.length > 0) {
       for (const doc of expiringDocs) {
         const clubId = (doc.employees as any).club_id;
@@ -66,6 +75,53 @@ export async function sendExpirationAlerts(isTest = false) {
           full_name: (doc.employees as any).full_name,
           doc_name: (doc.document_types as any).name
         });
+      }
+    }
+
+    // Process expiring contracts and probationary periods
+    if (activeEmployees && activeEmployees.length > 0) {
+      const targetThreshold = isTest ? new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000) : thresholdDate;
+      
+      for (const emp of activeEmployees) {
+        const clubId = emp.club_id;
+        const clubName = clubMap.get(clubId) || 'Desconocido';
+
+        // Check contract_end
+        if (emp.contract_end) {
+          const contractEnd = new Date(emp.contract_end);
+          if (contractEnd <= targetThreshold) {
+            if (!alertsByClub[clubId]) {
+              alertsByClub[clubId] = { club_name: clubName, docs: [] };
+            }
+            alertsByClub[clubId].docs.push({
+              full_name: emp.full_name,
+              doc_name: 'Terminación de Contrato',
+              expiry_date: emp.contract_end
+            });
+          }
+        }
+
+        // Check probatorio_end (contract_start + 3 months)
+        if (emp.contract_start) {
+          const probatorioEnd = new Date(emp.contract_start);
+          probatorioEnd.setMonth(probatorioEnd.getMonth() + 3);
+          
+          // Only alert for probationary periods that are upcoming or recently expired (within last 15 days)
+          // to avoid spamming for employees who have been working for years.
+          const fifteenDaysAgo = new Date(today);
+          fifteenDaysAgo.setDate(today.getDate() - 15);
+          
+          if (probatorioEnd <= targetThreshold && probatorioEnd >= fifteenDaysAgo) {
+            if (!alertsByClub[clubId]) {
+              alertsByClub[clubId] = { club_name: clubName, docs: [] };
+            }
+            alertsByClub[clubId].docs.push({
+              full_name: emp.full_name,
+              doc_name: 'Terminación de Periodo Probatorio',
+              expiry_date: probatorioEnd.toISOString().split('T')[0]
+            });
+          }
+        }
       }
     }
 
