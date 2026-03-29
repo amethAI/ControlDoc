@@ -178,7 +178,9 @@ export default function ChecklistContratos() {
         'CARNET BLANCO': formatDateForExcel(getVal(emp, 'carnet_blanco')),
         'FECHA DE AVISO CSS': formatDateForExcel(getVal(emp, 'aviso_css')),
         'FECHA DE INICIO DE CONTRATO': formatDateForExcel(contractStartStr),
-        'FECHA DE TERMINACION DE PERIODO PROBATORIO': probatoryEndStr
+        'FECHA DE TERMINACION DE PERIODO PROBATORIO': probatoryEndStr,
+        'FECHA DE TERMINACION DE CONTRATO': formatDateForExcel(getVal(emp, 'contract_end')),
+        'TIPO DE CONTRATOS': getVal(emp, 'contract_type')
       };
     });
 
@@ -229,13 +231,15 @@ export default function ChecklistContratos() {
               <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">CARNET BLANCO</th>
               <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">FECHA DE AVISO CSS</th>
               <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">FECHA DE INICIO DE CONTRATO</th>
-              <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs">FECHA DE TERMINACION DE PERIODO PROBATORIO</th>
+              <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">FECHA DE TERMINACION DE PERIODO PROBATORIO</th>
+              <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">FECHA DE TERMINACION DE CONTRATO</th>
+              <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs">TIPO DE CONTRATOS</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
             {employees.length === 0 && manualRows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={11} className="px-4 py-8 text-center text-slate-500">
                   No se encontraron empleados con contrato de 1 año.
                 </td>
               </tr>
@@ -299,8 +303,25 @@ export default function ChecklistContratos() {
                           className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                         />
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-center border-slate-200">
+                      <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
                         {probatoryEndStr}
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input 
+                          type="date" value={getVal(emp, 'contract_end')} onChange={(e) => handleEdit(emp.id, 'contract_end', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        />
+                      </td>
+                      <td className="px-2 py-2 border-slate-200">
+                        <select 
+                          value={getVal(emp, 'contract_type')} onChange={(e) => handleEdit(emp.id, 'contract_type', e.target.value)}
+                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
+                        >
+                          <option value="">Seleccionar...</option>
+                          <option value="Definido">Definido</option>
+                          <option value="Indefinido">Indefinido</option>
+                          <option value="Servicios Profesionales">Servicios Profesionales</option>
+                        </select>
                       </td>
                     </tr>
                   );
@@ -381,9 +402,29 @@ export default function ChecklistContratos() {
                           className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                         />
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-center border-slate-200">
-                        <div className="flex items-center justify-center gap-2">
-                          <span>{probatoryEndStr}</span>
+                      <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
+                        {probatoryEndStr}
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
+                        <input 
+                          type="date" 
+                          value={getVal(row, 'contract_end')} 
+                          onChange={(e) => handleEdit(row.id, 'contract_end', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        />
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap border-slate-200">
+                        <div className="flex items-center justify-between gap-2">
+                          <select 
+                            value={getVal(row, 'contract_type')} 
+                            onChange={(e) => handleEdit(row.id, 'contract_type', e.target.value)}
+                            className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="Definido">Definido</option>
+                            <option value="Indefinido">Indefinido</option>
+                            <option value="Servicios Profesionales">Servicios Profesionales</option>
+                          </select>
                           <button 
                             onClick={() => removeManualRow(row.id)} 
                             className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"

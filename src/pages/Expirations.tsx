@@ -232,7 +232,9 @@ export default function Expirations() {
       'CARNET BLANCO': formatDate(getVal(emp, 'doc_carnet_blanco')),
       'FECHA DE AVISO CSS': formatDate(getVal(emp, 'doc_aviso_css')),
       'FECHA DE INICIO DE CONTRATO': formatDate(getVal(emp, 'contract_start')),
-      'FECHA DE TERMINACION DE PERIODO PROBATORIO': formatDate(getVal(emp, 'probatorio_end'))
+      'FECHA DE TERMINACION DE PERIODO PROBATORIO': formatDate(getVal(emp, 'probatorio_end')),
+      'FECHA DE TERMINACION DE CONTRATO': formatDate(getVal(emp, 'contract_end')),
+      'TIPO DE CONTRATOS': getVal(emp, 'contract_type')
     }));
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -326,7 +328,7 @@ export default function Expirations() {
                 <React.Fragment key={clubName}>
                   <thead className="bg-red-600 text-white font-bold">
                     <tr>
-                      <th colSpan={11} className="px-4 py-3 text-lg tracking-wider uppercase">
+                      <th colSpan={13} className="px-4 py-3 text-lg tracking-wider uppercase">
                         CHECK LIST {clubName}
                       </th>
                     </tr>
@@ -340,6 +342,8 @@ export default function Expirations() {
                       <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>AVISO CSS</th>
                       <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>INICIO DE<br/>CONTRATO</th>
                       <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACION DE<br/>PERIODO<br/>PROBATORIO</th>
+                      <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACION DE<br/>CONTRATO</th>
+                      <th className="px-4 py-3 border-r border-slate-300">TIPO DE<br/>CONTRATOS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white">
@@ -397,6 +401,23 @@ export default function Expirations() {
                             type="date" value={getVal(emp, 'probatorio_end')} onChange={(e) => handleEdit(emp.id, 'probatorio_end', e.target.value)}
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                           />
+                        </td>
+                        <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'contract_end'))}`}>
+                          <input 
+                            type="date" value={getVal(emp, 'contract_end')} onChange={(e) => handleEdit(emp.id, 'contract_end', e.target.value)}
+                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                          />
+                        </td>
+                        <td className="px-2 py-2 border-r border-slate-200">
+                          <select 
+                            value={getVal(emp, 'contract_type')} onChange={(e) => handleEdit(emp.id, 'contract_type', e.target.value)}
+                            className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
+                          >
+                            <option value="">Seleccionar...</option>
+                            <option value="Definido">Definido</option>
+                            <option value="Indefinido">Indefinido</option>
+                            <option value="Servicios Profesionales">Servicios Profesionales</option>
+                          </select>
                         </td>
                       </tr>
                     ))}
