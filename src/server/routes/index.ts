@@ -1172,20 +1172,22 @@ router.get('/dashboard', canViewData, async (req, res) => {
     // 2. Expired Documents
     const todayStr = new Date().toISOString().split('T')[0];
     
-    let expiredQuery = supabase.from('employee_documents').select('id', { count: 'exact', head: true })
+    let expiredQuery = supabase.from('employee_documents').select('id, employees!inner(status)', { count: 'exact', head: true })
       .eq('is_current', 1)
       .not('expiry_date', 'is', null)
-      .lt('expiry_date', todayStr);
+      .lt('expiry_date', todayStr)
+      .eq('employees.status', 'activo');
     
     if (club_id) {
       // Need to join with employees to filter by club_id
       const { data: expiredDocs } = await supabase
         .from('employee_documents')
-        .select('id, employees!inner(club_id)')
+        .select('id, employees!inner(club_id, status)')
         .eq('is_current', 1)
         .not('expiry_date', 'is', null)
         .lt('expiry_date', todayStr)
-        .eq('employees.club_id', club_id);
+        .eq('employees.club_id', club_id)
+        .eq('employees.status', 'activo');
       var expiredDocuments = expiredDocs?.length || 0;
     } else {
       const { count } = await expiredQuery;
@@ -1197,19 +1199,21 @@ router.get('/dashboard', canViewData, async (req, res) => {
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
     const dateStr = thirtyDaysFromNow.toISOString().split('T')[0];
     
-    let expiringQuery = supabase.from('employee_documents').select('id', { count: 'exact', head: true })
+    let expiringQuery = supabase.from('employee_documents').select('id, employees!inner(status)', { count: 'exact', head: true })
       .eq('is_current', 1)
       .gte('expiry_date', todayStr)
-      .lte('expiry_date', dateStr);
+      .lte('expiry_date', dateStr)
+      .eq('employees.status', 'activo');
       
     if (club_id) {
       const { data: expiringDocs } = await supabase
         .from('employee_documents')
-        .select('id, employees!inner(club_id)')
+        .select('id, employees!inner(club_id, status)')
         .eq('is_current', 1)
         .gte('expiry_date', todayStr)
         .lte('expiry_date', dateStr)
-        .eq('employees.club_id', club_id);
+        .eq('employees.club_id', club_id)
+        .eq('employees.status', 'activo');
       var expiringSoonDocuments = expiringDocs?.length || 0;
     } else {
       const { count } = await expiringQuery;

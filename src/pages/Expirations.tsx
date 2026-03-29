@@ -334,7 +334,7 @@ export default function Expirations() {
                     </tr>
                     <tr className="bg-slate-200 text-slate-800 border-b border-slate-300">
                       <th className="px-3 py-3 border-r border-slate-300">No.</th>
-                      <th className="px-4 py-3 border-r border-slate-300 text-left">NOMBRE</th>
+                      <th className="px-4 py-3 border-r border-slate-300 text-left min-w-[250px]">NOMBRE</th>
                       <th className="px-4 py-3 border-r border-slate-300">CÉDULA</th>
                       <th className="px-4 py-3 border-r border-slate-300">CARTA DE<br/>INGRESO</th>
                       <th className="px-4 py-3 border-r border-slate-300">CARNET<br/>VERDE</th>

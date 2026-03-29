@@ -224,7 +224,7 @@ export default function ChecklistContratos() {
           <thead className="bg-[#E50000] text-white">
             <tr>
               <th scope="col" className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs border-r border-red-700">No.</th>
-              <th scope="col" className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs border-r border-red-700">NOMBRE</th>
+              <th scope="col" className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs border-r border-red-700 min-w-[250px]">NOMBRE</th>
               <th scope="col" className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs border-r border-red-700">CÉDULA</th>
               <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">CARTA DE INGRESO</th>
               <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-red-700">CARNET VERDE</th>
