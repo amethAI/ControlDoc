@@ -773,6 +773,10 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
       // Update Contract Type and End Date
       const updateData: any = {};
       
+      if (record.fechaInicioContrato) {
+        updateData.contract_start = record.fechaInicioContrato;
+      }
+
       if (record.tipoContrato) {
         updateData.contract_type = record.tipoContrato;
       }
@@ -783,8 +787,9 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
         updateData.contract_end = record.fechaTerminacionContrato;
       } else if (record.tipoContrato && (record.tipoContrato.toUpperCase() === '1 AÑO' || record.tipoContrato.toUpperCase() === '1 ANO')) {
         // Auto-calculate 1 year from contract_start if not provided
-        if (employee.contract_start) {
-          const start = new Date(employee.contract_start);
+        const startToUse = record.fechaInicioContrato || employee.contract_start;
+        if (startToUse) {
+          const start = new Date(startToUse);
           start.setFullYear(start.getFullYear() + 1);
           updateData.contract_end = start.toISOString().split('T')[0];
         }

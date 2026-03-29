@@ -168,13 +168,15 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
           const carnetVerdeRaw = getCol(['verde', 'salud', 'carnet verde']);
           const carnetBlancoRaw = getCol(['blanco', 'adestramiento', 'adiestramiento', 'carnet blanco']);
           const tipoContratoRaw = getCol(['tipo de contrato', 'tipo de contratos', 'contrato']);
-          const fechaTerminacionContratoRaw = getCol(['fecha de terminacion de contrato', 'fecha de terminación de contrato', 'terminación de contrato', 'terminacion de contrato', 'fecha de terminación d', 'fecha de terminacion', 'fecha de terminacion de c']);
+          const fechaInicioContratoRaw = getCol(['inicio de contrato', 'inicio contrato', 'fecha de inicio']);
+          const fechaTerminacionContratoRaw = getCol(['terminacion de contrato', 'terminación de contrato', 'fin de contrato']);
 
           return {
             name,
             carnetVerde: carnetVerdeRaw ? parseSpanishDate(carnetVerdeRaw) : null,
             carnetBlanco: carnetBlancoRaw ? parseSpanishDate(carnetBlancoRaw) : null,
             tipoContrato: tipoContratoRaw ? String(tipoContratoRaw).trim().toUpperCase() : null,
+            fechaInicioContrato: fechaInicioContratoRaw ? parseSpanishDate(fechaInicioContratoRaw) : null,
             fechaTerminacionContrato: fechaTerminacionContratoRaw ? parseSpanishDate(fechaTerminacionContratoRaw) : null
           };
         }).filter(r => r.name); // Only keep rows with a name
