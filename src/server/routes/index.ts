@@ -737,6 +737,8 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
     for (const record of records) {
       if (!record.name) continue;
       
+      console.log('Processing record:', record);
+      
       // Find employee by name (case-insensitive, trim spaces)
       const employee = employees.find(e => 
         e.full_name.toLowerCase().trim() === record.name.toLowerCase().trim()
@@ -789,6 +791,7 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
       }
 
       if (Object.keys(updateData).length > 0) {
+        console.log(`Updating employee ${employee.id} with:`, updateData);
         await supabase
           .from('employees')
           .update(updateData)

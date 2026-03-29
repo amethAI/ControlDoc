@@ -165,10 +165,10 @@ export default function ImportDatesModal({ isOpen, onClose, onSuccess }: ImportD
           };
 
           const name = getCol(['nombre', 'empleado', 'demostradora']);
-          const carnetVerdeRaw = getCol(['verde', 'salud']);
-          const carnetBlancoRaw = getCol(['blanco', 'adestramiento', 'adiestramiento']);
-          const tipoContratoRaw = getCol(['tipo de contrato', 'tipo de contratos']);
-          const fechaTerminacionContratoRaw = getCol(['fecha de terminación de contrato', 'terminación de contrato', 'terminacion de contrato', 'fecha de terminación d', 'fecha de terminacion']);
+          const carnetVerdeRaw = getCol(['verde', 'salud', 'carnet verde']);
+          const carnetBlancoRaw = getCol(['blanco', 'adestramiento', 'adiestramiento', 'carnet blanco']);
+          const tipoContratoRaw = getCol(['tipo de contrato', 'tipo de contratos', 'contrato']);
+          const fechaTerminacionContratoRaw = getCol(['fecha de terminacion de contrato', 'fecha de terminación de contrato', 'terminación de contrato', 'terminacion de contrato', 'fecha de terminación d', 'fecha de terminacion', 'fecha de terminacion de c']);
 
           return {
             name,
