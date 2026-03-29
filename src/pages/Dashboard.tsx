@@ -33,7 +33,9 @@ export default function Dashboard() {
     incompleteEmployees: 0,
     documentsUploadedToday: 0,
     clubDistribution: [] as { name: string, value: number }[],
-    performanceStats: null as { totalMeta: number, totalVentas: number } | null
+    performanceStats: null as { totalMeta: number, totalVentas: number } | null,
+    expiredList: [] as { id: string, employee_name: string, type: string, date: string, status: string }[],
+    expiringList: [] as { id: string, employee_name: string, type: string, date: string, status: string }[]
   });
   const [loading, setLoading] = useState(true);
 
@@ -208,40 +210,63 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Alertas de Documentación */}
-        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-lg font-bold text-slate-800">Alertas Críticas</h3>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">
-              {stats.expiredDocuments} Pendientes
-            </span>
+        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden flex flex-col h-[400px]">
+          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+            <h3 className="text-lg font-bold text-slate-800">Alertas de Documentos</h3>
+            <div className="flex gap-2">
+              {stats.expiredDocuments > 0 && (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                  {stats.expiredDocuments} Vencidos
+                </span>
+              )}
+              {stats.expiringSoonDocuments > 0 && (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+                  {stats.expiringSoonDocuments} Próximos
+                </span>
+              )}
+            </div>
           </div>
-          <div className="divide-y divide-slate-100">
-            {stats.expiredDocuments > 0 ? (
-              <div className="p-6 flex items-start gap-4 hover:bg-slate-50 transition-colors">
-                <div className="p-2 bg-red-50 text-red-600 rounded-lg">
-                  <AlertTriangle className="h-5 w-5" />
+          <div className="divide-y divide-slate-100 overflow-y-auto flex-1">
+            {stats.expiredList.length > 0 || stats.expiringList.length > 0 ? (
+              [...stats.expiredList, ...stats.expiringList].map((doc, idx) => (
+                <div key={`${doc.id}-${idx}`} className="p-4 flex items-start gap-4 hover:bg-slate-50 transition-colors">
+                  <div className={`p-2 rounded-lg shrink-0 ${doc.status === 'expired' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
+                    {doc.status === 'expired' ? <AlertTriangle className="h-5 w-5" /> : <FileWarning className="h-5 w-5" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex justify-between items-start gap-2">
+                      <p className="text-sm font-bold text-slate-900 truncate">{doc.employee_name}</p>
+                      <span className={`text-xs font-bold whitespace-nowrap ${doc.status === 'expired' ? 'text-red-600' : 'text-amber-600'}`}>
+                        {new Date(doc.date).toLocaleDateString('es-PA', { timeZone: 'UTC' })}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-500 mt-0.5 truncate">{doc.type}</p>
+                    <p className={`text-xs mt-1 font-medium ${doc.status === 'expired' ? 'text-red-500' : 'text-amber-500'}`}>
+                      {doc.status === 'expired' ? 'Vencido' : 'Próximo a vencer'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-900">Documentos Vencidos Detectados</p>
-                  <p className="text-sm text-slate-500 mt-1">Hay {stats.expiredDocuments} documentos que requieren renovación inmediata para evitar multas.</p>
-                </div>
-              </div>
+              ))
             ) : (
-              <div className="p-12 text-center text-slate-500">
-                No hay alertas críticas en este momento.
+              <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center h-full">
+                <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-3">
+                  <FileWarning className="h-6 w-6" />
+                </div>
+                <p className="font-medium text-slate-900">Todo al día</p>
+                <p className="text-sm mt-1">No hay alertas críticas en este momento.</p>
               </div>
             )}
           </div>
         </div>
 
         {/* Actividad Reciente */}
-        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100">
+        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden flex flex-col h-[400px]">
+          <div className="px-6 py-5 border-b border-slate-100 shrink-0">
             <h3 className="text-lg font-bold text-slate-800">Actividad Reciente</h3>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 overflow-y-auto flex-1">
             <div className="p-6 flex items-start gap-4 hover:bg-slate-50 transition-colors">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0">
                 <UploadCloud className="h-5 w-5" />
               </div>
               <div>

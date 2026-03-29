@@ -901,16 +901,21 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
             }
           } else if (docUpdate.value && docUpdate.value !== 'NO') {
             // Create new document record
-            await supabase.from('employee_documents').insert([{
+            const { error: insertError } = await supabase.from('employee_documents').insert([{
               id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               employee_id: id,
               document_type_id: docType.id,
               expiry_date: docUpdate.isBoolean ? null : (docUpdate.value || null),
               status: 'vigente',
               is_current: 1,
-              file_url: '', // Empty file URL since it's manually added
-              file_name: `Agregado manualmente - ${docUpdate.name}`
+              file_url: 'manual_entry', // Empty file URL since it's manually added
+              file_name: `Agregado manualmente - ${docUpdate.name}`,
+              file_size_kb: 0
             }]);
+            
+            if (insertError) {
+              console.error('Error inserting document:', insertError);
+            }
           }
         }
       }
@@ -1271,53 +1276,98 @@ router.get('/dashboard', canViewData, async (req, res) => {
     // 2. Expired Documents
     const todayStr = new Date().toISOString().split('T')[0];
     
-    let expiredQuery = supabase.from('employee_documents').select('id, employees!inner(status)', { count: 'exact', head: true })
+    // Fetch expired employee documents
+    let expiredDocsQuery = supabase
+      .from('employee_documents')
+      .select('id, expiry_date, document_types(name), employees!inner(id, full_name, club_id, status)')
       .eq('is_current', 1)
       .not('expiry_date', 'is', null)
       .lt('expiry_date', todayStr)
       .eq('employees.status', 'activo');
+      
+    if (club_id) expiredDocsQuery = expiredDocsQuery.eq('employees.club_id', club_id);
     
-    if (club_id) {
-      // Need to join with employees to filter by club_id
-      const { data: expiredDocs } = await supabase
-        .from('employee_documents')
-        .select('id, employees!inner(club_id, status)')
-        .eq('is_current', 1)
-        .not('expiry_date', 'is', null)
-        .lt('expiry_date', todayStr)
-        .eq('employees.club_id', club_id)
-        .eq('employees.status', 'activo');
-      var expiredDocuments = expiredDocs?.length || 0;
-    } else {
-      const { count } = await expiredQuery;
-      var expiredDocuments = count || 0;
-    }
+    const { data: expiredDocsData } = await expiredDocsQuery;
+    
+    // Fetch expired contracts
+    let expiredContractsQuery = supabase
+      .from('employees')
+      .select('id, full_name, contract_end')
+      .eq('status', 'activo')
+      .not('contract_end', 'is', null)
+      .lt('contract_end', todayStr);
+      
+    if (club_id) expiredContractsQuery = expiredContractsQuery.eq('club_id', club_id);
+    
+    const { data: expiredContractsData } = await expiredContractsQuery;
+    
+    const expiredList = [
+      ...(expiredDocsData || []).map(d => ({
+        id: d.id,
+        employee_name: (d.employees as any).full_name,
+        type: (d.document_types as any).name,
+        date: d.expiry_date,
+        status: 'expired'
+      })),
+      ...(expiredContractsData || []).map(e => ({
+        id: `contract-${e.id}`,
+        employee_name: e.full_name,
+        type: 'Contrato',
+        date: e.contract_end,
+        status: 'expired'
+      }))
+    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    const expiredDocuments = expiredList.length;
 
     // 3. Expiring Soon
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
     const dateStr = thirtyDaysFromNow.toISOString().split('T')[0];
     
-    let expiringQuery = supabase.from('employee_documents').select('id, employees!inner(status)', { count: 'exact', head: true })
+    // Fetch expiring employee documents
+    let expiringDocsQuery = supabase
+      .from('employee_documents')
+      .select('id, expiry_date, document_types(name), employees!inner(id, full_name, club_id, status)')
       .eq('is_current', 1)
       .gte('expiry_date', todayStr)
       .lte('expiry_date', dateStr)
       .eq('employees.status', 'activo');
       
-    if (club_id) {
-      const { data: expiringDocs } = await supabase
-        .from('employee_documents')
-        .select('id, employees!inner(club_id, status)')
-        .eq('is_current', 1)
-        .gte('expiry_date', todayStr)
-        .lte('expiry_date', dateStr)
-        .eq('employees.club_id', club_id)
-        .eq('employees.status', 'activo');
-      var expiringSoonDocuments = expiringDocs?.length || 0;
-    } else {
-      const { count } = await expiringQuery;
-      var expiringSoonDocuments = count || 0;
-    }
+    if (club_id) expiringDocsQuery = expiringDocsQuery.eq('employees.club_id', club_id);
+    
+    const { data: expiringDocsData } = await expiringDocsQuery;
+    
+    // Fetch expiring contracts
+    let expiringContractsQuery = supabase
+      .from('employees')
+      .select('id, full_name, contract_end')
+      .eq('status', 'activo')
+      .gte('contract_end', todayStr)
+      .lte('contract_end', dateStr);
+      
+    if (club_id) expiringContractsQuery = expiringContractsQuery.eq('club_id', club_id);
+    
+    const { data: expiringContractsData } = await expiringContractsQuery;
+    
+    const expiringList = [
+      ...(expiringDocsData || []).map(d => ({
+        id: d.id,
+        employee_name: (d.employees as any).full_name,
+        type: (d.document_types as any).name,
+        date: d.expiry_date,
+        status: 'expiring'
+      })),
+      ...(expiringContractsData || []).map(e => ({
+        id: `contract-${e.id}`,
+        employee_name: e.full_name,
+        type: 'Contrato',
+        date: e.contract_end,
+        status: 'expiring'
+      }))
+    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    const expiringSoonDocuments = expiringList.length;
 
     // 4. Incomplete Employees (Simplified for Supabase without complex SQL)
     // For now, we'll just return 0 to avoid complex RPC calls, 
@@ -1374,7 +1424,9 @@ router.get('/dashboard', canViewData, async (req, res) => {
       incompleteEmployees,
       documentsUploadedToday,
       clubDistribution,
-      performanceStats
+      performanceStats,
+      expiredList,
+      expiringList
     });
   } catch (error: any) {
     console.error('Dashboard stats error:', error);
