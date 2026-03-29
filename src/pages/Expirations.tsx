@@ -229,6 +229,17 @@ export default function Expirations() {
   };
 
   const getVal = (emp: ChecklistEmployee, field: string) => {
+    if (field === 'probatorio_end') {
+      const currentStart = getVal(emp, 'contract_start');
+      if (currentStart) {
+        const start = new Date(currentStart);
+        // Add 3 months
+        start.setMonth(start.getMonth() + 3);
+        return start.toISOString().split('T')[0];
+      }
+      return '';
+    }
+
     if (localEdits[emp.id] && localEdits[emp.id][field] !== undefined) {
       return localEdits[emp.id][field];
     }
@@ -237,7 +248,6 @@ export default function Expirations() {
       if (field === 'full_name') return emp.full_name;
       if (field === 'cedula') return emp.cedula;
       if (field === 'contract_start') return emp.contract_start || '';
-      if (field === 'probatorio_end') return emp.probatorio_end || '';
       if (field === 'contract_end') return emp.contract_end || '';
       if (field === 'contract_type') return emp.contract_type || '';
       if (field === 'doc_carta_ingreso') return emp.documents.carta_ingreso?.manualValue || 'NO';
@@ -249,7 +259,6 @@ export default function Expirations() {
     if (field === 'full_name') return emp.full_name;
     if (field === 'cedula') return emp.cedula;
     if (field === 'contract_start') return emp.contract_start ? emp.contract_start.split('T')[0] : '';
-    if (field === 'probatorio_end') return emp.probatorio_end ? emp.probatorio_end.split('T')[0] : '';
     if (field === 'contract_end') return emp.contract_end ? emp.contract_end.split('T')[0] : '';
     if (field === 'contract_type') return emp.contract_type || '';
     
