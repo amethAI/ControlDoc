@@ -880,14 +880,14 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
             .select('id, is_current')
             .eq('employee_id', id)
             .eq('document_type_id', docType.id)
-            .order('created_at', { ascending: false })
+            .order('uploaded_at', { ascending: false })
             .limit(1);
             
           const existingDoc = existingDocs && existingDocs.length > 0 ? existingDocs[0] : null;
 
           if (existingDoc) {
             // Update existing document
-            const updatePayload: any = { updated_at: new Date().toISOString() };
+            const updatePayload: any = {};
             if (docUpdate.isBoolean) {
               if (docUpdate.value === 'NO') {
                 await supabase.from('employee_documents').update({ is_current: 0 }).eq('id', existingDoc.id);
