@@ -12,7 +12,8 @@ import {
   CalendarCheck,
   TrendingUp,
   CalendarClock,
-  ClipboardList
+  ClipboardList,
+  Info
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -38,6 +39,7 @@ export default function Layout() {
     ...((user?.role === 'Administrador' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente') ? [
       { name: 'Clubes', href: '/clubes', icon: Building2 }
     ] : []),
+    { name: 'Roles y Permisos', href: '/roles', icon: Info },
     ...(user?.role === 'Administrador' ? [
       { name: 'Configuración', href: '/configuracion', icon: Settings }
     ] : [])

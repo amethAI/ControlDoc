@@ -303,6 +303,9 @@ export default function Expirations() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Check List de Empleados</h1>
           <p className="text-slate-500 mt-1">Vista consolidada de documentos y fechas de vencimiento.</p>
+          {canEdit && (
+            <p className="text-xs text-amber-600 mt-1 font-medium">Nota: Las filas agregadas manualmente son temporales y solo sirven para exportar a Excel.</p>
+          )}
         </div>
         <div className="flex gap-3">
           {canEdit && (

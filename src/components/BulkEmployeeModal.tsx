@@ -154,7 +154,7 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
             cedula: row.cedula,
             position: row.position,
             club_id: row.club_id,
-            contract_type: 'indefinido',
+            contract_type: 'Indefinido',
             contract_start: new Date().toISOString().split('T')[0],
             status: 'activo'
           })

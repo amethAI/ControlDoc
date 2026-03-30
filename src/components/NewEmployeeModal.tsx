@@ -16,7 +16,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
     full_name: '',
     cedula: '',
     position: '',
-    contract_type: 'indefinido',
+    contract_type: 'Indefinido',
     contract_start: new Date().toISOString().split('T')[0],
     contract_end: '',
     club_id: clubId || ''
@@ -73,7 +73,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
           full_name: '',
           cedula: '',
           position: '',
-          contract_type: 'indefinido',
+          contract_type: 'Indefinido',
           contract_start: new Date().toISOString().split('T')[0],
           contract_end: '',
           club_id: clubId || ''
@@ -172,11 +172,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
                       const newType = e.target.value;
                       let newEnd = formData.contract_end;
                       
-                      if (newType === '1 año' && formData.contract_start) {
-                        const start = new Date(formData.contract_start);
-                        start.setFullYear(start.getFullYear() + 1);
-                        newEnd = start.toISOString().split('T')[0];
-                      } else if (newType === 'indefinido') {
+                      if (newType === 'Indefinido') {
                         newEnd = '';
                       }
                       
@@ -188,10 +184,9 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
                     }}
                     className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
                   >
-                    <option value="indefinido">Indefinido</option>
-                    <option value="definido">Definido</option>
-                    <option value="1 año">Definido (1 año)</option>
-                    <option value="servicios">Servicios Profesionales</option>
+                    <option value="Indefinido">Indefinido</option>
+                    <option value="Definido">Definido</option>
+                    <option value="Servicios Profesionales">Servicios Profesionales</option>
                   </select>
                 </div>
                 <div>
@@ -204,7 +199,8 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
                       const newStart = e.target.value;
                       let newEnd = formData.contract_end;
                       
-                      if (formData.contract_type === '1 año' && newStart) {
+                      if (formData.contract_type === 'Definido' && newStart && !newEnd) {
+                        // Optional: auto-set end date to 1 year for Definido if empty
                         const start = new Date(newStart);
                         start.setFullYear(start.getFullYear() + 1);
                         newEnd = start.toISOString().split('T')[0];
@@ -220,15 +216,14 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
                   />
                 </div>
 
-                {formData.contract_type !== 'indefinido' && (
+                {formData.contract_type !== 'Indefinido' && (
                   <div>
                     <label className="block text-sm font-medium text-slate-700">Fecha de Terminación de Contrato</label>
                     <input
                       type="date"
-                      required={formData.contract_type !== 'indefinido'}
+                      required={formData.contract_type !== 'Indefinido'}
                       value={formData.contract_end}
                       onChange={e => setFormData({...formData, contract_end: e.target.value})}
-                      disabled={formData.contract_type === '1 año'}
                       className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm disabled:bg-slate-100 disabled:text-slate-500"
                     />
                   </div>

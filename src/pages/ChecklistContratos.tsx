@@ -30,11 +30,11 @@ export default function ChecklistContratos() {
   useEffect(() => {
     const fetchChecklistData = async () => {
       try {
-        // Fetch employees with 1 year contract
+        // Fetch employees with Definido contract
         const res = await apiFetch('/api/employees?status=activo');
         if (res.ok) {
           const data = await res.json();
-          const oneYearEmployees = data.filter((emp: any) => emp.contract_type === '1 año');
+          const oneYearEmployees = data.filter((emp: any) => emp.contract_type === 'Definido' || emp.contract_type === '1 año');
           
           // Fetch documents for these employees to get carnet dates, etc.
           const employeesWithDocs = await Promise.all(
@@ -80,7 +80,7 @@ export default function ChecklistContratos() {
       id: `manual-${Date.now()}`,
       full_name: '',
       cedula: '',
-      contract_type: '1 año',
+      contract_type: 'Definido',
       contract_start: '',
       contract_end: '',
       documents: [],
@@ -295,8 +295,11 @@ export default function ChecklistContratos() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Checklist: Contratos de 1 Año</h2>
-          <p className="text-sm text-slate-500 mt-1">Lista de personal activo con contrato definido por 1 año.</p>
+          <h2 className="text-2xl font-bold text-slate-800">Checklist: Contratos Definidos</h2>
+          <p className="text-sm text-slate-500 mt-1">Lista de personal activo con contrato definido.</p>
+          {canEdit && (
+            <p className="text-xs text-amber-600 mt-1 font-medium">Nota: Las filas agregadas manualmente son temporales y solo sirven para exportar a Excel.</p>
+          )}
         </div>
         <div className="flex gap-3">
           {canEdit && (
@@ -351,7 +354,7 @@ export default function ChecklistContratos() {
             {employees.length === 0 && manualRows.length === 0 ? (
               <tr>
                 <td colSpan={11} className="px-4 py-8 text-center text-slate-500">
-                  No se encontraron empleados con contrato de 1 año.
+                  No se encontraron empleados con contrato definido.
                 </td>
               </tr>
             ) : (
