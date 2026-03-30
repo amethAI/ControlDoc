@@ -41,8 +41,8 @@ export default function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      // Coordinadora, Supervisor Interno, and Supervisor Cliente are restricted to their club
-      const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente';
+      // Coordinadora and Supervisor Interno are restricted to their club
+      const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
       
       const url = isRestricted 
         ? `/api/dashboard?club_id=${user?.club_id}`

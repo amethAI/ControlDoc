@@ -43,10 +43,10 @@ export default function RolesInfo() {
     },
     {
       name: 'Supervisor Cliente',
-      description: 'Rol de solo lectura (auditoría) para el cliente, restringido a su club.',
+      description: 'Rol de solo lectura (auditoría) para el cliente, con acceso a ver todos los clubes.',
       permissions: [
-        'Ver solo la información de su club asignado',
-        'Acceso al Dashboard con métricas de su club',
+        'Ver la información de todos los clubes',
+        'Acceso al Dashboard con métricas de todos los clubes',
         'Ver Checklist de Contratos y Vencimientos (solo lectura)',
         'No puede editar ningún dato ni agregar filas manuales',
         'No tiene acceso a Empleados, Asistencia, Rendimiento ni Configuración'

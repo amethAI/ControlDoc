@@ -72,7 +72,7 @@ export default function Clubs() {
 
   const filteredClubs = clubs.filter(club => {
     const matchesSearch = club.name.toLowerCase().includes(searchTerm.toLowerCase());
-    if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente') {
+    if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno') {
       return matchesSearch && club.id === user.club_id;
     }
     return matchesSearch;

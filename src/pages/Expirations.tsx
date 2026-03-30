@@ -42,7 +42,7 @@ export default function Expirations() {
     setLoading(true);
     try {
       // Fetch clubs for filter
-      if (user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' && user?.role !== 'Supervisor Cliente') {
+      if (user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora') {
         const clubsRes = await apiFetch('/api/clubs');
         if (clubsRes.ok) {
           const clubsData = await clubsRes.json();
@@ -282,7 +282,7 @@ export default function Expirations() {
       'CARTA DE INGRESO': getVal(emp, 'doc_carta_ingreso'),
       'CARNET VERDE': formatDate(getVal(emp, 'doc_carnet_verde')),
       'CARNET BLANCO': formatDate(getVal(emp, 'doc_carnet_blanco')),
-      'FECHA DE AVISO CSS': formatDate(getVal(emp, 'contract_start')),
+      'FECHA DE AVISO CSS': formatDate(getVal(emp, 'doc_aviso_css')),
       'FECHA DE INICIO DE CONTRATO': formatDate(getVal(emp, 'contract_start')),
       'FECHA DE TERMINACION DE PERIODO PROBATORIO': formatDate(getVal(emp, 'probatorio_end')),
       'FECHA DE TERMINACION DE CONTRATO': formatDate(getVal(emp, 'contract_end')),
@@ -449,8 +449,12 @@ export default function Expirations() {
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                           />
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
-                          {formatDate(getVal(emp, 'contract_start'))}
+                        <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_aviso_css'))}`}>
+                          <input disabled={!canEdit}
+                            type="date" value={getVal(emp, 'doc_aviso_css')} onChange={(e) => handleEdit(emp.id, 'doc_aviso_css', e.target.value)}
+                            onBlur={(e) => handleSave(emp.id, 'doc_aviso_css', e.target.value)}
+                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
+                          />
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
                           <input disabled={!canEdit}

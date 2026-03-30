@@ -71,8 +71,8 @@ export default function EmployeeProfile() {
       if (empRes.ok && typesRes.ok && docsRes.ok) {
         const empData = await empRes.json();
         
-        // Check if Supervisor Interno is trying to view an employee from another club
-        if ((user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente') && empData.club_id !== user.club_id) {
+        // Check if Supervisor Interno or Coordinadora is trying to view an employee from another club
+        if ((user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno') && empData.club_id !== user.club_id) {
           navigate('/clubes');
           return;
         }
