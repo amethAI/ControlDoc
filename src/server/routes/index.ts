@@ -83,8 +83,8 @@ const canViewData = (req: any, res: any, next: any) => {
     return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para ver esta sección.' });
   }
 
-  // Restriction: Supervisor Interno and Coordinadora must have a club assigned
-  if ((user.role === 'Supervisor Interno' || user.role === 'Coordinadora') && !user.club_id) {
+  // Restriction: Supervisor Interno, Coordinadora and Supervisor Cliente must have a club assigned
+  if ((user.role === 'Supervisor Interno' || user.role === 'Coordinadora' || user.role === 'Supervisor Cliente') && !user.club_id) {
     return res.status(403).json({ error: 'Acceso denegado. No tiene un club asignado.' });
   }
 
@@ -407,12 +407,8 @@ router.get('/employees', canViewData, async (req, res) => {
   const { club_id: queryClubId, status } = req.query;
   const user = (req as any).user;
   
-  if (user.role === 'Supervisor Cliente') {
-    return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para ver empleados.' });
-  }
-
-  // If user is Supervisor Interno or Coordinadora, they can only see their club
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
+  // If user is Supervisor Interno, Coordinadora, or Supervisor Cliente, they can only see their club
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora' || user.role === 'Supervisor Cliente') ? user.club_id : queryClubId;
   
   // Debug check
   const isMock = !process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY;
@@ -1014,13 +1010,9 @@ router.patch('/employees/:id/reactivate', canModifyData, async (req, res) => {
 router.get('/attendance', canViewData, async (req, res) => {
   const { club_id: queryClubId, start_date, end_date } = req.query;
   const user = (req as any).user;
-  
-  if (user.role === 'Supervisor Cliente') {
-    return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para ver asistencia.' });
-  }
 
-  // If user is Supervisor Interno or Coordinadora, they can only see their club
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
+  // If user is Supervisor Interno, Coordinadora, or Supervisor Cliente, they can only see their club
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora' || user.role === 'Supervisor Cliente') ? user.club_id : queryClubId;
   
   if (!club_id) {
     return res.status(400).json({ error: 'Se requiere club_id' });
@@ -1081,13 +1073,9 @@ router.post('/attendance', canModifyData, async (req, res) => {
 router.get('/attendance-requests', canViewData, async (req, res) => {
   const { club_id: queryClubId, start_date, end_date } = req.query;
   const user = (req as any).user;
-  
-  if (user.role === 'Supervisor Cliente') {
-    return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para ver asistencia.' });
-  }
 
-  // If user is Supervisor Interno or Coordinadora, they can only see their club
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
+  // If user is Supervisor Interno, Coordinadora, or Supervisor Cliente, they can only see their club
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora' || user.role === 'Supervisor Cliente') ? user.club_id : queryClubId;
   
   try {
     const { data: requests, error } = await supabase
@@ -1142,8 +1130,8 @@ router.get('/documents/expirations', canViewData, async (req, res) => {
   const { club_id: queryClubId, status } = req.query;
   const user = (req as any).user;
   
-  // If user is Supervisor Interno or Coordinadora, they can only see their club
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
+  // If user is Supervisor Interno, Coordinadora, or Supervisor Cliente, they can only see their club
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora' || user.role === 'Supervisor Cliente') ? user.club_id : queryClubId;
   
   try {
     let query = supabase
@@ -1193,7 +1181,7 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
   const { club_id: queryClubId } = req.query;
   const user = (req as any).user;
   
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora' || user.role === 'Supervisor Cliente') ? user.club_id : queryClubId;
   console.log(`[API] /reports/checklist called by ${user?.email} (Role: ${user?.role}, UserClub: ${user?.club_id}, QueryClub: ${queryClubId}, FinalClub: ${club_id})`);
   
   try {
@@ -1277,8 +1265,8 @@ router.get('/dashboard', canViewData, async (req, res) => {
   const { club_id: queryClubId } = req.query;
   const user = (req as any).user;
   
-  // If user is Supervisor Interno or Coordinadora, they can only see their club
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
+  // If user is Supervisor Interno, Coordinadora, or Supervisor Cliente, they can only see their club
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora' || user.role === 'Supervisor Cliente') ? user.club_id : queryClubId;
   
   try {
     // 1. Total Employees

@@ -37,7 +37,7 @@ export default function ClubDetail() {
   const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState(false);
 
   const fetchClubData = async () => {
-    if ((user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno') && id !== user.club_id) {
+    if ((user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente') && id !== user.club_id) {
       setLoading(false);
       return;
     }

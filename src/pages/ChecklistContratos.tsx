@@ -21,6 +21,7 @@ interface EmployeeChecklist {
 
 export default function ChecklistContratos() {
   const { user } = useAuth();
+  const canEdit = user?.role === 'Administrador' || user?.role === 'Supervisor Interno';
   const [employees, setEmployees] = useState<EmployeeChecklist[]>([]);
   const [manualRows, setManualRows] = useState<EmployeeChecklist[]>([]);
   const [localEdits, setLocalEdits] = useState<Record<string, any>>({});
@@ -174,6 +175,76 @@ export default function ChecklistContratos() {
     return '';
   };
 
+  const parseExcelDate = (val: any) => {
+    if (!val) return '';
+    if (typeof val === 'number') {
+      const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+      return date.toISOString().split('T')[0];
+    }
+    if (typeof val === 'string') {
+      const months: any = { ene: '01', feb: '02', mar: '03', abr: '04', may: '05', jun: '06', jul: '07', ago: '08', sep: '09', oct: '10', nov: '11', dic: '12' };
+      const parts = val.toLowerCase().split(' ');
+      if (parts.length === 3) {
+        const day = parts[0].padStart(2, '0');
+        const month = months[parts[1]];
+        let year = parts[2];
+        if (year.length === 2) year = `20${year}`;
+        if (day && month && year) return `${year}-${month}-${day}`;
+      }
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    }
+    return '';
+  };
+
+  const importFromExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const bstr = evt.target?.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const data = XLSX.utils.sheet_to_json(ws);
+
+      for (const row of data as any[]) {
+        const cedula = row['CÉDULA'] || row['CEDULA'];
+        const nombre = row['NOMBRE'];
+        if (!cedula && !nombre) continue;
+
+        const emp = employees.find(e => e.cedula === cedula || e.full_name === nombre);
+        if (emp) {
+          const updates: any = {};
+          if (row['CARTA DE INGRESO']) updates.carta_ingreso = row['CARTA DE INGRESO'];
+          if (row['CARNET VERDE']) updates.carnet_verde = parseExcelDate(row['CARNET VERDE']);
+          if (row['CARNET BLANCO']) updates.carnet_blanco = parseExcelDate(row['CARNET BLANCO']);
+          if (row['FECHA DE AVISO CSS']) updates.aviso_css = parseExcelDate(row['FECHA DE AVISO CSS']);
+          if (row['FECHA DE INICIO DE CONTRATO']) updates.contract_start = parseExcelDate(row['FECHA DE INICIO DE CONTRATO']);
+          if (row['FECHA DE TERMINACION DE CONTRATO']) updates.contract_end = parseExcelDate(row['FECHA DE TERMINACION DE CONTRATO']);
+          if (row['TIPO DE CONTRATOS']) updates.contract_type = row['TIPO DE CONTRATOS'];
+
+          if (Object.keys(updates).length > 0) {
+            await apiFetch(`/api/employees/${emp.id}/checklist`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-user-role': user?.role || '',
+                'x-user-id': user?.id || '',
+                'x-user-name': user?.name || ''
+              },
+              body: JSON.stringify(updates)
+            });
+          }
+        }
+      }
+      
+      window.location.reload();
+    };
+    reader.readAsBinaryString(file);
+  };
+
   const exportToExcel = () => {
     const allData = [...employees, ...manualRows];
     
@@ -228,13 +299,27 @@ export default function ChecklistContratos() {
           <p className="text-sm text-slate-500 mt-1">Lista de personal activo con contrato definido por 1 año.</p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={addManualRow}
-            className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Agregar Fila Manual
-          </button>
+          {canEdit && (
+            <>
+              <button
+                onClick={addManualRow}
+                className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Agregar Fila Manual
+              </button>
+              
+              <input type="file" accept=".xlsx, .xls" onChange={importFromExcel} className="hidden" id="excel-upload" />
+              <label
+                htmlFor="excel-upload"
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Importar Excel
+              </label>
+            </>
+          )}
+
           <button
             onClick={exportToExcel}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
@@ -285,68 +370,83 @@ export default function ChecklistContratos() {
                     <tr key={emp.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 whitespace-nowrap text-slate-500 border-r border-slate-200 text-center">{index + 1}</td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input 
+                        <input disabled={!canEdit} 
                           type="text" value={getVal(emp, 'full_name')} onChange={(e) => handleEdit(emp.id, 'full_name', e.target.value)}
                           onBlur={(e) => handleSave(emp.id, 'full_name', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" placeholder="Nombre..."
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Nombre..."
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input 
+                        <input disabled={!canEdit} 
                           type="text" value={getVal(emp, 'cedula')} onChange={(e) => handleEdit(emp.id, 'cedula', e.target.value)}
                           onBlur={(e) => handleSave(emp.id, 'cedula', e.target.value)}
-                          className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" placeholder="Cédula..."
+                          className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Cédula..."
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200 text-center">
-                        <select 
+                        <select disabled={!canEdit} 
                           value={getVal(emp, 'carta_ingreso')} 
                           onChange={(e) => {
                             handleEdit(emp.id, 'carta_ingreso', e.target.value);
                             handleSave(emp.id, 'carta_ingreso', e.target.value);
                           }}
-                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         >
                           <option value="SÍ">SÍ</option>
                           <option value="NO">NO</option>
                         </select>
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input 
-                          type="date" value={getVal(emp, 'carnet_verde')} onChange={(e) => handleEdit(emp.id, 'carnet_verde', e.target.value)}
-                          onBlur={(e) => handleSave(emp.id, 'carnet_verde', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        <input disabled={!canEdit} 
+                          type="date" value={getVal(emp, 'carnet_verde')} 
+                          onChange={(e) => {
+                            handleEdit(emp.id, 'carnet_verde', e.target.value);
+                            handleSave(emp.id, 'carnet_verde', e.target.value);
+                          }}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input 
-                          type="date" value={getVal(emp, 'carnet_blanco')} onChange={(e) => handleEdit(emp.id, 'carnet_blanco', e.target.value)}
-                          onBlur={(e) => handleSave(emp.id, 'carnet_blanco', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        <input disabled={!canEdit} 
+                          type="date" value={getVal(emp, 'carnet_blanco')} 
+                          onChange={(e) => {
+                            handleEdit(emp.id, 'carnet_blanco', e.target.value);
+                            handleSave(emp.id, 'carnet_blanco', e.target.value);
+                          }}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input 
-                          type="date" value={getVal(emp, 'aviso_css')} onChange={(e) => handleEdit(emp.id, 'aviso_css', e.target.value)}
-                          onBlur={(e) => handleSave(emp.id, 'aviso_css', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        <input disabled={!canEdit} 
+                          type="date" value={getVal(emp, 'aviso_css')} 
+                          onChange={(e) => {
+                            handleEdit(emp.id, 'aviso_css', e.target.value);
+                            handleSave(emp.id, 'aviso_css', e.target.value);
+                          }}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input 
-                          type="date" value={getVal(emp, 'contract_start')} onChange={(e) => handleEdit(emp.id, 'contract_start', e.target.value)}
-                          onBlur={(e) => handleSave(emp.id, 'contract_start', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        <input disabled={!canEdit} 
+                          type="date" value={getVal(emp, 'contract_start')} 
+                          onChange={(e) => {
+                            handleEdit(emp.id, 'contract_start', e.target.value);
+                            handleSave(emp.id, 'contract_start', e.target.value);
+                          }}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
                         {probatoryEndStr}
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input 
-                          type="date" value={getVal(emp, 'contract_end')} onChange={(e) => handleEdit(emp.id, 'contract_end', e.target.value)}
-                          onBlur={(e) => handleSave(emp.id, 'contract_end', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        <input disabled={!canEdit} 
+                          type="date" value={getVal(emp, 'contract_end')} 
+                          onChange={(e) => {
+                            handleEdit(emp.id, 'contract_end', e.target.value);
+                            handleSave(emp.id, 'contract_end', e.target.value);
+                          }}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-2 py-2 border-slate-200">
@@ -384,95 +484,97 @@ export default function ChecklistContratos() {
                         {employees.length + index + 1}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input 
+                        <input disabled={!canEdit}
                           type="text" 
                           value={getVal(row, 'full_name')} 
                           onChange={(e) => handleEdit(row.id, 'full_name', e.target.value)}
                           placeholder="Nombre..."
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input 
+                        <input disabled={!canEdit}
                           type="text" 
                           value={getVal(row, 'cedula')} 
                           onChange={(e) => handleEdit(row.id, 'cedula', e.target.value)}
                           placeholder="Cédula..."
-                          className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
+                          className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200 text-center">
-                        <select 
+                        <select disabled={!canEdit}
                           value={getVal(row, 'carta_ingreso')} 
                           onChange={(e) => handleEdit(row.id, 'carta_ingreso', e.target.value)}
-                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         >
                           <option value="SÍ">SÍ</option>
                           <option value="NO">NO</option>
                         </select>
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input 
+                        <input disabled={!canEdit}
                           type="date" 
                           value={getVal(row, 'carnet_verde')} 
                           onChange={(e) => handleEdit(row.id, 'carnet_verde', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input 
+                        <input disabled={!canEdit}
                           type="date" 
                           value={getVal(row, 'carnet_blanco')} 
                           onChange={(e) => handleEdit(row.id, 'carnet_blanco', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input 
+                        <input disabled={!canEdit}
                           type="date" 
                           value={getVal(row, 'aviso_css')} 
                           onChange={(e) => handleEdit(row.id, 'aviso_css', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input 
+                        <input disabled={!canEdit}
                           type="date" 
                           value={getVal(row, 'contract_start')} 
                           onChange={(e) => handleEdit(row.id, 'contract_start', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
                         {probatoryEndStr}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input 
+                        <input disabled={!canEdit}
                           type="date" 
                           value={getVal(row, 'contract_end')} 
                           onChange={(e) => handleEdit(row.id, 'contract_end', e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-slate-200">
                         <div className="flex items-center justify-between gap-2">
-                          <select 
+                          <select disabled={!canEdit}
                             value={getVal(row, 'contract_type')} 
                             onChange={(e) => handleEdit(row.id, 'contract_type', e.target.value)}
-                            className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
+                            className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
                           >
                             <option value="">Seleccionar...</option>
                             <option value="Definido">Definido</option>
                             <option value="Indefinido">Indefinido</option>
                             <option value="Servicios Profesionales">Servicios Profesionales</option>
                           </select>
-                          <button 
-                            onClick={() => removeManualRow(row.id)} 
-                            className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
-                            title="Eliminar fila"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {canEdit && (
+                            <button 
+                              onClick={() => removeManualRow(row.id)} 
+                              className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                              title="Eliminar fila"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

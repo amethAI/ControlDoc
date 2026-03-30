@@ -25,6 +25,7 @@ interface ChecklistEmployee {
 
 export default function Expirations() {
   const { user } = useAuth();
+  const canEdit = user?.role === 'Administrador' || user?.role === 'Supervisor Interno';
   const [employees, setEmployees] = useState<ChecklistEmployee[]>([]);
   const [manualRows, setManualRows] = useState<ChecklistEmployee[]>([]);
   const [localEdits, setLocalEdits] = useState<Record<string, any>>({});
@@ -41,7 +42,7 @@ export default function Expirations() {
     setLoading(true);
     try {
       // Fetch clubs for filter
-      if (user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora') {
+      if (user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' && user?.role !== 'Supervisor Cliente') {
         const clubsRes = await apiFetch('/api/clubs');
         if (clubsRes.ok) {
           const clubsData = await clubsRes.json();
@@ -304,13 +305,15 @@ export default function Expirations() {
           <p className="text-slate-500 mt-1">Vista consolidada de documentos y fechas de vencimiento.</p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={addManualRow}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium shadow-sm"
-          >
-            <Plus className="h-4 w-4" />
-            Agregar Fila Manual
-          </button>
+          {canEdit && (
+            <button
+              onClick={addManualRow}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              Agregar Fila Manual
+            </button>
+          )}
           <button
             onClick={exportToExcel}
             className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium shadow-sm"
@@ -403,74 +406,74 @@ export default function Expirations() {
                         <td className="px-3 py-2 border-r border-slate-200 font-medium">{index + 1}</td>
                         
                         <td className="px-2 py-2 border-r border-slate-200">
-                          <input 
+                          <input disabled={!canEdit}
                             type="text" value={getVal(emp, 'full_name')} onChange={(e) => handleEdit(emp.id, 'full_name', e.target.value)}
                             onBlur={(e) => handleSave(emp.id, 'full_name', e.target.value)}
-                            className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" placeholder="Nombre..."
+                            className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Nombre..."
                           />
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
-                          <input 
+                          <input disabled={!canEdit}
                             type="text" value={getVal(emp, 'cedula')} onChange={(e) => handleEdit(emp.id, 'cedula', e.target.value)}
                             onBlur={(e) => handleSave(emp.id, 'cedula', e.target.value)}
-                            className="w-20 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" placeholder="Cédula..."
+                            className="w-20 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Cédula..."
                           />
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
-                          <select 
+                          <select disabled={!canEdit}
                             value={getVal(emp, 'doc_carta_ingreso')} 
                             onChange={(e) => {
                               handleEdit(emp.id, 'doc_carta_ingreso', e.target.value);
                               handleSave(emp.id, 'doc_carta_ingreso', e.target.value);
                             }}
-                            className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
+                            className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
                           >
                             <option value="SÍ">SÍ</option>
                             <option value="NO">NO</option>
                           </select>
                         </td>
                         <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_carnet_verde'))}`}>
-                          <input 
+                          <input disabled={!canEdit}
                             type="date" value={getVal(emp, 'doc_carnet_verde')} onChange={(e) => handleEdit(emp.id, 'doc_carnet_verde', e.target.value)}
                             onBlur={(e) => handleSave(emp.id, 'doc_carnet_verde', e.target.value)}
-                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                           />
                         </td>
                         <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_carnet_blanco'))}`}>
-                          <input 
+                          <input disabled={!canEdit}
                             type="date" value={getVal(emp, 'doc_carnet_blanco')} onChange={(e) => handleEdit(emp.id, 'doc_carnet_blanco', e.target.value)}
                             onBlur={(e) => handleSave(emp.id, 'doc_carnet_blanco', e.target.value)}
-                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                           />
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
                           {formatDate(getVal(emp, 'contract_start'))}
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
-                          <input 
+                          <input disabled={!canEdit}
                             type="date" value={getVal(emp, 'contract_start')} onChange={(e) => handleEdit(emp.id, 'contract_start', e.target.value)}
                             onBlur={(e) => handleSave(emp.id, 'contract_start', e.target.value)}
-                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                           />
                         </td>
                         <td className={`px-4 py-3 whitespace-nowrap text-center border-r border-slate-200 ${getCellColorClass(getVal(emp, 'probatorio_end'), getVal(emp, 'contract_type')?.toLowerCase() === 'indefinido')}`}>
                           {formatDate(getVal(emp, 'probatorio_end'))}
                         </td>
                         <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'contract_end'), getVal(emp, 'contract_type')?.toLowerCase() === 'indefinido')}`}>
-                          <input 
+                          <input disabled={!canEdit}
                             type="date" value={getVal(emp, 'contract_end')} onChange={(e) => handleEdit(emp.id, 'contract_end', e.target.value)}
                             onBlur={(e) => handleSave(emp.id, 'contract_end', e.target.value)}
-                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                           />
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
-                          <select 
+                          <select disabled={!canEdit}
                             value={getVal(emp, 'contract_type')?.toLowerCase() === 'indefinido' ? 'Indefinido' : getVal(emp, 'contract_type')} 
                             onChange={(e) => {
                               handleEdit(emp.id, 'contract_type', e.target.value);
                               handleSave(emp.id, 'contract_type', e.target.value);
                             }}
-                            className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs"
+                            className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
                           >
                             <option value="">Seleccionar...</option>
                             <option value="Definido">Definido</option>
