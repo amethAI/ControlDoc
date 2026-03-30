@@ -518,7 +518,7 @@ router.get('/document-types', async (req, res) => {
 router.get('/employees/:id/documents', async (req, res) => {
   const { data: documents, error } = await supabase
     .from('employee_documents')
-    .select('*')
+    .select('*, document_types(id, name)')
     .eq('employee_id', req.params.id)
     .eq('is_current', 1);
     
@@ -867,20 +867,33 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
     for (const docUpdate of docUpdates) {
       if (docUpdate.value !== undefined) {
         // Find document type ID
-        const { data: docType } = await supabase
+        const { data: docTypes } = await supabase
           .from('document_types')
           .select('id')
           .ilike('name', `%${docUpdate.name}%`)
-          .single();
+          .limit(1);
+          
+        const docType = docTypes && docTypes.length > 0 ? docTypes[0] : null;
 
-        if (docType) {
+        // Fallback for Aviso CSS if Afiliación CSS is not found
+        let finalDocType = docType;
+        if (!finalDocType && docUpdate.name === 'Afiliación CSS') {
+          const { data: fallbackTypes } = await supabase
+            .from('document_types')
+            .select('id')
+            .ilike('name', `%Aviso de entrada%`)
+            .limit(1);
+          finalDocType = fallbackTypes && fallbackTypes.length > 0 ? fallbackTypes[0] : null;
+        }
+
+        if (finalDocType) {
           // Check if document exists
           const { data: existingDocs } = await supabase
             .from('employee_documents')
             .select('id, is_current')
             .eq('employee_id', id)
-            .eq('document_type_id', docType.id)
-            .order('uploaded_at', { ascending: false })
+            .eq('document_type_id', finalDocType.id)
+            .eq('is_current', 1)
             .limit(1);
             
           const existingDoc = existingDocs && existingDocs.length > 0 ? existingDocs[0] : null;
@@ -904,7 +917,7 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
             const { error: insertError } = await supabase.from('employee_documents').insert([{
               id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               employee_id: id,
-              document_type_id: docType.id,
+              document_type_id: finalDocType.id,
               expiry_date: docUpdate.isBoolean ? null : (docUpdate.value || null),
               status: 'vigente',
               is_current: 1,
@@ -1217,14 +1230,14 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
     const checklist = employees.map(emp => {
       const docs = emp.employee_documents?.filter(d => d.is_current === 1) || [];
       
-      const getDoc = (nameIncludes: string) => docs.find(d => (d.document_types as any)?.name.toLowerCase().includes(nameIncludes.toLowerCase()));
+      const getDoc = (nameIncludes: string) => docs.find(d => (d.document_types as any)?.name?.toLowerCase()?.includes(nameIncludes.toLowerCase()));
       
       const cartaIngreso = getDoc('Carta de ingreso');
       const carnetVerde = getDoc('Carnet verde');
       const carnetBlanco = getDoc('Carnet blanco');
       const avisoCss = getDoc('Aviso') || getDoc('Afiliación CSS');
       
-      const contratosCount = docs.filter(d => (d.document_types as any)?.name.toLowerCase().includes('contrato')).length;
+      const contratosCount = docs.filter(d => (d.document_types as any)?.name?.toLowerCase()?.includes('contrato')).length;
 
       let probatorioEnd = null;
       if (emp.contract_start) {

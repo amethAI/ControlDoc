@@ -60,7 +60,7 @@ export default function ChecklistContratos() {
   }, []);
 
   const getDocDate = (docs: any[], typeName: string) => {
-    const doc = docs.find(d => d.document_types?.name?.includes(typeName));
+    const doc = docs.find(d => d.document_types?.name?.toLowerCase()?.includes(typeName.toLowerCase()) && d.is_current === 1);
     if (!doc || !doc.expiry_date) return '';
     return new Date(doc.expiry_date).toLocaleDateString('es-PA', {
       day: '2-digit',
@@ -70,7 +70,7 @@ export default function ChecklistContratos() {
   };
 
   const hasDoc = (docs: any[], typeName: string) => {
-    const doc = docs.find(d => d.document_types?.name?.includes(typeName));
+    const doc = docs.find(d => d.document_types?.name?.toLowerCase()?.includes(typeName.toLowerCase()) && d.is_current === 1);
     return doc ? 'SÍ' : 'NO';
   };
 
@@ -156,15 +156,18 @@ export default function ChecklistContratos() {
     
     if (field === 'carta_ingreso') return hasDoc(emp.documents, 'Carta de ingreso') === 'SÍ' ? 'SÍ' : 'NO';
     if (field === 'carnet_verde') {
-      const doc = emp.documents.find(d => d.document_types?.name?.includes('Carnet Verde'));
+      const doc = emp.documents.find(d => d.document_types?.name?.toLowerCase()?.includes('carnet verde') && d.is_current === 1);
       return doc?.expiry_date ? doc.expiry_date.split('T')[0] : '';
     }
     if (field === 'carnet_blanco') {
-      const doc = emp.documents.find(d => d.document_types?.name?.includes('Carnet Blanco'));
+      const doc = emp.documents.find(d => d.document_types?.name?.toLowerCase()?.includes('carnet blanco') && d.is_current === 1);
       return doc?.expiry_date ? doc.expiry_date.split('T')[0] : '';
     }
     if (field === 'aviso_css') {
-      const doc = emp.documents.find(d => d.document_types?.name?.includes('Aviso de entrada'));
+      const doc = emp.documents.find(d => {
+        const name = d.document_types?.name?.toLowerCase() || '';
+        return (name.includes('aviso de entrada') || name.includes('afiliación css')) && d.is_current === 1;
+      });
       return doc?.expiry_date ? doc.expiry_date.split('T')[0] : '';
     }
     
@@ -199,7 +202,7 @@ export default function ChecklistContratos() {
         'CARTA DE INGRESO': getVal(emp, 'carta_ingreso'),
         'CARNET VERDE': formatDateForExcel(getVal(emp, 'carnet_verde')),
         'CARNET BLANCO': formatDateForExcel(getVal(emp, 'carnet_blanco')),
-        'FECHA DE AVISO CSS': formatDateForExcel(contractStartStr),
+        'FECHA DE AVISO CSS': formatDateForExcel(getVal(emp, 'aviso_css')),
         'FECHA DE INICIO DE CONTRATO': formatDateForExcel(contractStartStr),
         'FECHA DE TERMINACION DE PERIODO PROBATORIO': probatoryEndStr,
         'FECHA DE TERMINACION DE CONTRATO': formatDateForExcel(getVal(emp, 'contract_end')),
@@ -322,8 +325,12 @@ export default function ChecklistContratos() {
                           className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
                         />
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">
-                        {getVal(emp, 'contract_start')}
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input 
+                          type="date" value={getVal(emp, 'aviso_css')} onChange={(e) => handleEdit(emp.id, 'aviso_css', e.target.value)}
+                          onBlur={(e) => handleSave(emp.id, 'aviso_css', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center"
+                        />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
                         <input 
