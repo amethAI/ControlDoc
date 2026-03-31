@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { FileSpreadsheet, Download, Plus, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 
 interface EmployeeChecklist {
@@ -21,6 +22,7 @@ interface EmployeeChecklist {
 
 export default function ChecklistContratos() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const canEdit = user?.role === 'Administrador' || user?.role === 'Supervisor Interno';
   const [employees, setEmployees] = useState<EmployeeChecklist[]>([]);
   const [manualRows, setManualRows] = useState<EmployeeChecklist[]>([]);
@@ -28,13 +30,17 @@ export default function ChecklistContratos() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (user && user.role !== 'Administrador') {
+      navigate('/');
+      return;
+    }
     const fetchChecklistData = async () => {
       try {
         // Fetch employees with Definido contract
         const res = await apiFetch('/api/employees?status=activo');
         if (res.ok) {
           const data = await res.json();
-          const oneYearEmployees = data.filter((emp: any) => emp.contract_type === 'Definido' || emp.contract_type === '1 año');
+          const oneYearEmployees = data.filter((emp: any) => emp.contract_type === '1 año');
           
           // Fetch documents for these employees to get carnet dates, etc.
           const employeesWithDocs = await Promise.all(
@@ -80,7 +86,7 @@ export default function ChecklistContratos() {
       id: `manual-${Date.now()}`,
       full_name: '',
       cedula: '',
-      contract_type: 'Definido',
+      contract_type: '1 año',
       contract_start: '',
       contract_end: '',
       documents: [],
@@ -373,14 +379,14 @@ export default function ChecklistContratos() {
                     <tr key={emp.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 whitespace-nowrap text-slate-500 border-r border-slate-200 text-center">{index + 1}</td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input disabled={!canEdit} 
+                        <input readOnly={!canEdit} 
                           type="text" value={getVal(emp, 'full_name')} onChange={(e) => handleEdit(emp.id, 'full_name', e.target.value)}
                           onBlur={(e) => handleSave(emp.id, 'full_name', e.target.value)}
                           className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Nombre..."
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input disabled={!canEdit} 
+                        <input readOnly={!canEdit} 
                           type="text" value={getVal(emp, 'cedula')} onChange={(e) => handleEdit(emp.id, 'cedula', e.target.value)}
                           onBlur={(e) => handleSave(emp.id, 'cedula', e.target.value)}
                           className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Cédula..."
@@ -400,7 +406,7 @@ export default function ChecklistContratos() {
                         </select>
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input disabled={!canEdit} 
+                        <input readOnly={!canEdit} 
                           type="date" value={getVal(emp, 'carnet_verde')} 
                           onChange={(e) => {
                             handleEdit(emp.id, 'carnet_verde', e.target.value);
@@ -410,7 +416,7 @@ export default function ChecklistContratos() {
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input disabled={!canEdit} 
+                        <input readOnly={!canEdit} 
                           type="date" value={getVal(emp, 'carnet_blanco')} 
                           onChange={(e) => {
                             handleEdit(emp.id, 'carnet_blanco', e.target.value);
@@ -420,7 +426,7 @@ export default function ChecklistContratos() {
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input disabled={!canEdit} 
+                        <input readOnly={!canEdit} 
                           type="date" value={getVal(emp, 'aviso_css')} 
                           onChange={(e) => {
                             handleEdit(emp.id, 'aviso_css', e.target.value);
@@ -430,7 +436,7 @@ export default function ChecklistContratos() {
                         />
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input disabled={!canEdit} 
+                        <input readOnly={!canEdit} 
                           type="date" value={getVal(emp, 'contract_start')} 
                           onChange={(e) => {
                             handleEdit(emp.id, 'contract_start', e.target.value);
@@ -443,7 +449,7 @@ export default function ChecklistContratos() {
                         {probatoryEndStr}
                       </td>
                       <td className="px-2 py-2 border-r border-slate-200">
-                        <input disabled={!canEdit} 
+                        <input readOnly={!canEdit} 
                           type="date" value={getVal(emp, 'contract_end')} 
                           onChange={(e) => {
                             handleEdit(emp.id, 'contract_end', e.target.value);
@@ -487,7 +493,7 @@ export default function ChecklistContratos() {
                         {employees.length + index + 1}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input disabled={!canEdit}
+                        <input readOnly={!canEdit}
                           type="text" 
                           value={getVal(row, 'full_name')} 
                           onChange={(e) => handleEdit(row.id, 'full_name', e.target.value)}
@@ -496,7 +502,7 @@ export default function ChecklistContratos() {
                         />
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input disabled={!canEdit}
+                        <input readOnly={!canEdit}
                           type="text" 
                           value={getVal(row, 'cedula')} 
                           onChange={(e) => handleEdit(row.id, 'cedula', e.target.value)}
@@ -515,7 +521,7 @@ export default function ChecklistContratos() {
                         </select>
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input disabled={!canEdit}
+                        <input readOnly={!canEdit}
                           type="date" 
                           value={getVal(row, 'carnet_verde')} 
                           onChange={(e) => handleEdit(row.id, 'carnet_verde', e.target.value)}
@@ -523,7 +529,7 @@ export default function ChecklistContratos() {
                         />
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input disabled={!canEdit}
+                        <input readOnly={!canEdit}
                           type="date" 
                           value={getVal(row, 'carnet_blanco')} 
                           onChange={(e) => handleEdit(row.id, 'carnet_blanco', e.target.value)}
@@ -531,7 +537,7 @@ export default function ChecklistContratos() {
                         />
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input disabled={!canEdit}
+                        <input readOnly={!canEdit}
                           type="date" 
                           value={getVal(row, 'aviso_css')} 
                           onChange={(e) => handleEdit(row.id, 'aviso_css', e.target.value)}
@@ -539,7 +545,7 @@ export default function ChecklistContratos() {
                         />
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input disabled={!canEdit}
+                        <input readOnly={!canEdit}
                           type="date" 
                           value={getVal(row, 'contract_start')} 
                           onChange={(e) => handleEdit(row.id, 'contract_start', e.target.value)}
@@ -550,7 +556,7 @@ export default function ChecklistContratos() {
                         {probatoryEndStr}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
-                        <input disabled={!canEdit}
+                        <input readOnly={!canEdit}
                           type="date" 
                           value={getVal(row, 'contract_end')} 
                           onChange={(e) => handleEdit(row.id, 'contract_end', e.target.value)}

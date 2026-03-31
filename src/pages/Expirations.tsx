@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Filter, Search, FileSpreadsheet, Plus, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import * as XLSX from 'xlsx';
@@ -25,6 +26,7 @@ interface ChecklistEmployee {
 
 export default function Expirations() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const canEdit = user?.role === 'Administrador' || user?.role === 'Supervisor Interno';
   const [employees, setEmployees] = useState<ChecklistEmployee[]>([]);
   const [manualRows, setManualRows] = useState<ChecklistEmployee[]>([]);
@@ -35,8 +37,12 @@ export default function Expirations() {
   const [clubs, setClubs] = useState<{id: string, name: string}[]>([]);
 
   useEffect(() => {
+    if (user && user.role !== 'Administrador') {
+      navigate('/');
+      return;
+    }
     fetchData();
-  }, [clubFilter]);
+  }, [clubFilter, user, navigate]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -71,10 +77,11 @@ export default function Expirations() {
   };
 
   const filteredEmployees = employees.filter(emp => {
+    const isOneYear = emp.contract_type === '1 año';
     const matchesSearch = 
       emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.cedula.includes(searchTerm);
-    return matchesSearch;
+    return isOneYear && matchesSearch;
   });
 
   const groupedEmployees = filteredEmployees.reduce((acc, emp) => {
@@ -143,7 +150,7 @@ export default function Expirations() {
       club_name: clubFilter !== 'all' ? (clubs.find(c => c.id === clubFilter)?.name || 'Agregados Manualmente') : 'Agregados Manualmente',
       contract_start: '',
       contract_end: '',
-      contract_type: 'Indefinido',
+      contract_type: '1 año',
       probatorio_end: '',
       contratos_count: 1,
       isManual: true,

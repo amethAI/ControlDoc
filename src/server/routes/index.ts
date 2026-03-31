@@ -1280,7 +1280,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
     // Fetch expired employee documents
     let expiredDocsQuery = supabase
       .from('employee_documents')
-      .select('id, expiry_date, document_types!inner(name, has_expiry), employees!inner(id, full_name, club_id, status)')
+      .select('id, expiry_date, document_types!inner(name, has_expiry), employees!inner(id, full_name, club_id, status, contract_type)')
       .eq('is_current', 1)
       .eq('document_types.has_expiry', 1)
       .not('expiry_date', 'is', null)
@@ -1304,7 +1304,17 @@ router.get('/dashboard', canViewData, async (req, res) => {
     const { data: expiredContractsData } = await expiredContractsQuery;
     
     const expiredList = [
-      ...(expiredDocsData || []).map(d => ({
+      ...(expiredDocsData || [])
+        .filter(d => {
+          const docName = (d.document_types as any).name?.toLowerCase() || '';
+          const contractType = (d.employees as any).contract_type?.toLowerCase() || '';
+          // Ignore 'Contrato firmado' expiration if contract is 'Indefinido'
+          if (docName.includes('contrato firmado') && contractType === 'indefinido') {
+            return false;
+          }
+          return true;
+        })
+        .map(d => ({
         id: d.id,
         employee_name: (d.employees as any).full_name,
         type: (d.document_types as any).name,
@@ -1332,7 +1342,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
     // Fetch expiring employee documents
     let expiringDocsQuery = supabase
       .from('employee_documents')
-      .select('id, expiry_date, document_types!inner(name, has_expiry), employees!inner(id, full_name, club_id, status)')
+      .select('id, expiry_date, document_types!inner(name, has_expiry), employees!inner(id, full_name, club_id, status, contract_type)')
       .eq('is_current', 1)
       .eq('document_types.has_expiry', 1)
       .gte('expiry_date', todayStr)
@@ -1356,7 +1366,17 @@ router.get('/dashboard', canViewData, async (req, res) => {
     const { data: expiringContractsData } = await expiringContractsQuery;
     
     const expiringList = [
-      ...(expiringDocsData || []).map(d => ({
+      ...(expiringDocsData || [])
+        .filter(d => {
+          const docName = (d.document_types as any).name?.toLowerCase() || '';
+          const contractType = (d.employees as any).contract_type?.toLowerCase() || '';
+          // Ignore 'Contrato firmado' expiration if contract is 'Indefinido'
+          if (docName.includes('contrato firmado') && contractType === 'indefinido') {
+            return false;
+          }
+          return true;
+        })
+        .map(d => ({
         id: d.id,
         employee_name: (d.employees as any).full_name,
         type: (d.document_types as any).name,

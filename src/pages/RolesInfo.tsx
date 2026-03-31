@@ -10,7 +10,7 @@ export default function RolesInfo() {
         'Ver todos los clubes y empleados',
         'Crear, editar y eliminar empleados',
         'Gestionar asistencia y rendimiento',
-        'Modificar fechas y documentos en Checklist y Vencimientos',
+        'Acceso exclusivo a Checklist de Contratos y Vencimientos',
         'Acceso a la Configuración General (usuarios, alertas, respaldos)'
       ],
       color: 'bg-purple-100 text-purple-800',
@@ -23,7 +23,7 @@ export default function RolesInfo() {
         'Ver solo la información de su club asignado',
         'Crear, editar y eliminar empleados de su club',
         'Gestionar asistencia y rendimiento de su club',
-        'Modificar fechas y documentos en Checklist y Vencimientos de su club',
+        'No tiene acceso a Checklist ni Vencimientos',
         'No tiene acceso a la Configuración General'
       ],
       color: 'bg-blue-100 text-blue-800',
@@ -35,7 +35,7 @@ export default function RolesInfo() {
       permissions: [
         'Ver solo la información de su club asignado',
         'Ver lista de empleados y perfiles de su club',
-        'No puede editar fechas en Checklist ni Vencimientos',
+        'No tiene acceso a Checklist ni Vencimientos',
         'No tiene acceso a Asistencia ni Configuración General'
       ],
       color: 'bg-emerald-100 text-emerald-800',
@@ -47,7 +47,7 @@ export default function RolesInfo() {
       permissions: [
         'Ver la información de todos los clubes',
         'Acceso al Dashboard con métricas de todos los clubes',
-        'Ver Checklist de Contratos y Vencimientos (solo lectura)',
+        'No tiene acceso a Checklist ni Vencimientos',
         'No puede editar ningún dato ni agregar filas manuales',
         'No tiene acceso a Empleados, Asistencia, Rendimiento ni Configuración'
       ],

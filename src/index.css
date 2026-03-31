@@ -10,4 +10,11 @@
   body {
     @apply font-sans text-slate-900 bg-slate-50;
   }
+
+  /* Make disabled inputs readable, especially on iOS Safari */
+  input:disabled, select:disabled, textarea:disabled {
+    opacity: 1 !important;
+    -webkit-text-fill-color: #334155 !important;
+    color: #334155 !important;
+  }
 }
