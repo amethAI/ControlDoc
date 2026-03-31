@@ -274,7 +274,6 @@ export default function ChecklistContratos() {
         'NOMBRE': getVal(emp, 'full_name'),
         'CÉDULA': getVal(emp, 'cedula'),
         'CARTA DE INGRESO': getVal(emp, 'carta_ingreso'),
-        'CONTRATO SELLADO': getVal(emp, 'contrato_sellado'),
         'CARNET VERDE': formatDateForExcel(getVal(emp, 'carnet_verde')),
         'CARNET BLANCO': formatDateForExcel(getVal(emp, 'carnet_blanco')),
         'FECHA DE AVISO CSS': formatDateForExcel(getVal(emp, 'aviso_css')),
@@ -299,9 +298,6 @@ export default function ChecklistContratos() {
     (emp) => (localEdits[emp.id]?.contract_type ?? emp.contract_type) === 'Definido 1 año'
   );
 
-  const sinContratoSellado = oneYearEmployees.filter(
-    (emp) => getVal(emp, 'contrato_sellado') === 'NO'
-  ).length;
 
   return (
     <div className="space-y-6">
@@ -348,22 +344,9 @@ export default function ChecklistContratos() {
       {/* Sección separada: Contratos Definido 1 año */}
       {oneYearEmployees.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-start justify-between">
-            <div>
-              <h3 className="text-xl font-bold text-slate-800">Checklist: Contratos Definido 1 Año</h3>
-              <p className="text-sm text-slate-500 mt-1">Personal activo con contrato definido de 1 año.</p>
-            </div>
-            {sinContratoSellado > 0 && (
-              <div className="flex items-center gap-2 bg-amber-50 border border-amber-300 text-amber-800 text-sm font-medium px-3 py-2 rounded-lg">
-                <span className="text-lg font-bold">{sinContratoSellado}</span>
-                <span>empleado{sinContratoSellado !== 1 ? 's' : ''} sin contrato sellado</span>
-              </div>
-            )}
-            {sinContratoSellado === 0 && oneYearEmployees.length > 0 && (
-              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-300 text-emerald-800 text-sm font-medium px-3 py-2 rounded-lg">
-                Todos con contrato sellado
-              </div>
-            )}
+          <div>
+            <h3 className="text-xl font-bold text-slate-800">Checklist: Contratos Definido 1 Año</h3>
+            <p className="text-sm text-slate-500 mt-1">Personal activo con contrato definido de 1 año.</p>
           </div>
           <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -373,7 +356,6 @@ export default function ChecklistContratos() {
                   <th scope="col" className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs border-r border-blue-900 min-w-[250px]">NOMBRE</th>
                   <th scope="col" className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs border-r border-blue-900">CÉDULA</th>
                   <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">CARTA DE INGRESO</th>
-                  <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">CONTRATO SELLADO</th>
                   <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">CARNET VERDE</th>
                   <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">CARNET BLANCO</th>
                   <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">FECHA DE AVISO CSS</th>
@@ -410,14 +392,6 @@ export default function ChecklistContratos() {
                       <td className="px-2 py-2 border-r border-slate-200 text-center">
                         <select disabled={!canEdit} value={getVal(emp, 'carta_ingreso')}
                           onChange={(e) => { handleEdit(emp.id, 'carta_ingreso', e.target.value); handleSave(emp.id, 'carta_ingreso', e.target.value); }}
-                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center">
-                          <option value="SÍ">SÍ</option>
-                          <option value="NO">NO</option>
-                        </select>
-                      </td>
-                      <td className={`px-2 py-2 border-r border-slate-200 text-center ${getVal(emp, 'contrato_sellado') === 'NO' ? 'bg-amber-50' : ''}`}>
-                        <select disabled={!canEdit} value={getVal(emp, 'contrato_sellado')}
-                          onChange={(e) => { handleEdit(emp.id, 'contrato_sellado', e.target.value); handleSave(emp.id, 'contrato_sellado', e.target.value); }}
                           className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center">
                           <option value="SÍ">SÍ</option>
                           <option value="NO">NO</option>
