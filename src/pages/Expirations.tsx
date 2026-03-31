@@ -73,11 +73,10 @@ export default function Expirations() {
   };
 
   const filteredEmployees = employees.filter(emp => {
-    const isOneYear = emp.contract_type?.toLowerCase() !== 'indefinido';
-    const matchesSearch = 
+    const matchesSearch =
       emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.cedula.includes(searchTerm);
-    return isOneYear && matchesSearch;
+    return matchesSearch;
   });
 
   const groupedEmployees = filteredEmployees.reduce((acc, emp) => {
