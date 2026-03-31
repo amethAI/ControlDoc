@@ -439,29 +439,29 @@ export default function Expirations() {
                         </td>
                         <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_carnet_verde'))}`}>
                           <input disabled={!canEdit}
-                            type="date" value={getVal(emp, 'doc_carnet_verde')} onChange={(e) => handleEdit(emp.id, 'doc_carnet_verde', e.target.value)}
-                            onBlur={(e) => handleSave(emp.id, 'doc_carnet_verde', e.target.value)}
+                            type="date" value={getVal(emp, 'doc_carnet_verde')}
+                            onChange={(e) => { handleEdit(emp.id, 'doc_carnet_verde', e.target.value); handleSave(emp.id, 'doc_carnet_verde', e.target.value); }}
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                           />
                         </td>
                         <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_carnet_blanco'))}`}>
                           <input disabled={!canEdit}
-                            type="date" value={getVal(emp, 'doc_carnet_blanco')} onChange={(e) => handleEdit(emp.id, 'doc_carnet_blanco', e.target.value)}
-                            onBlur={(e) => handleSave(emp.id, 'doc_carnet_blanco', e.target.value)}
+                            type="date" value={getVal(emp, 'doc_carnet_blanco')}
+                            onChange={(e) => { handleEdit(emp.id, 'doc_carnet_blanco', e.target.value); handleSave(emp.id, 'doc_carnet_blanco', e.target.value); }}
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                           />
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
                           <input disabled={!canEdit}
-                            type="date" value={getVal(emp, 'doc_aviso_css')} onChange={(e) => handleEdit(emp.id, 'doc_aviso_css', e.target.value)}
-                            onBlur={(e) => handleSave(emp.id, 'doc_aviso_css', e.target.value)}
+                            type="date" value={getVal(emp, 'doc_aviso_css')}
+                            onChange={(e) => { handleEdit(emp.id, 'doc_aviso_css', e.target.value); handleSave(emp.id, 'doc_aviso_css', e.target.value); }}
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                           />
                         </td>
                         <td className="px-2 py-2 border-r border-slate-200">
                           <input disabled={!canEdit}
-                            type="date" value={getVal(emp, 'contract_start')} onChange={(e) => handleEdit(emp.id, 'contract_start', e.target.value)}
-                            onBlur={(e) => handleSave(emp.id, 'contract_start', e.target.value)}
+                            type="date" value={getVal(emp, 'contract_start')}
+                            onChange={(e) => { handleEdit(emp.id, 'contract_start', e.target.value); handleSave(emp.id, 'contract_start', e.target.value); }}
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                           />
                         </td>
@@ -470,8 +470,8 @@ export default function Expirations() {
                         </td>
                         <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'contract_end'), getVal(emp, 'contract_type')?.toLowerCase() === 'indefinido')}`}>
                           <input disabled={!canEdit}
-                            type="date" value={getVal(emp, 'contract_end')} onChange={(e) => handleEdit(emp.id, 'contract_end', e.target.value)}
-                            onBlur={(e) => handleSave(emp.id, 'contract_end', e.target.value)}
+                            type="date" value={getVal(emp, 'contract_end')}
+                            onChange={(e) => { handleEdit(emp.id, 'contract_end', e.target.value); handleSave(emp.id, 'contract_end', e.target.value); }}
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                           />
                         </td>
