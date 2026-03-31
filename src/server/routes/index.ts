@@ -16,24 +16,10 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024 // 10MB limit
   }
 });
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_for_development_only_12345';
-
-// Debug route for environment variables
-router.get('/debug-env', (req, res) => {
-  res.json({
-    VITE_SUPABASE_URL: !!process.env.VITE_SUPABASE_URL,
-    SUPABASE_URL: !!process.env.SUPABASE_URL,
-    VITE_SUPABASE_ANON_KEY: !!process.env.VITE_SUPABASE_ANON_KEY,
-    SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
-    SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-    NODE_ENV: process.env.NODE_ENV,
-    cwd: process.cwd()
-  });
-});
-
 if (!process.env.JWT_SECRET) {
-  console.warn('WARNING: JWT_SECRET environment variable is not set. Using insecure fallback key.');
+  throw new Error('FATAL: JWT_SECRET environment variable is not set.');
 }
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Middleware to check if user is authenticated
 const isAuthenticated = async (req: any, res: any, next: any) => {
@@ -223,26 +209,6 @@ router.post('/auth/login', async (req, res) => {
   const { email, password } = req.body;
   console.log(`Intentando login para: ${email}`);
   
-  // Hardcoded check for debugging
-  if (email === 'admin@psmt.com' && password === 'admin123') {
-    console.log(`Login exitoso (hardcoded) para: ${email}`);
-    const token = jwt.sign(
-      { id: 'admin-1', email: 'admin@psmt.com', name: 'Admin General', role: 'Administrador', club_id: null },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-    return res.json({
-      token,
-      user: {
-        id: 'admin-1',
-        email: 'admin@psmt.com',
-        name: 'Admin General',
-        role: 'Administrador',
-        club_id: null
-      }
-    });
-  }
-
   try {
     const { data: user, error } = await supabase
       .from('users')
@@ -259,13 +225,10 @@ router.post('/auth/login', async (req, res) => {
       }
     }
 
-    // Check if user exists and verify password
-    const isValidPassword = user && (
-      // For backwards compatibility with plain text passwords during migration
-      user.password_hash === password || 
-      // For hashed passwords
-      (user.password_hash.startsWith('$2') && bcrypt.compareSync(password, user.password_hash))
-    );
+    // Check if user exists and verify password (bcrypt only)
+    const isValidPassword = user &&
+      user.password_hash.startsWith('$2') &&
+      bcrypt.compareSync(password, user.password_hash);
     
     if (user && isValidPassword) {
       console.log(`Login exitoso para: ${email}`);

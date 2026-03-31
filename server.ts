@@ -21,7 +21,14 @@ async function startServer() {
   console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode...`);
 
   app.use(express.json());
-  app.use(cors());
+  app.use(cors({
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://controldoc-xiwh.onrender.com'
+    ],
+    credentials: true
+  }));
 
   // Aggressive cache busting for ALL responses
   app.use((req, res, next) => {

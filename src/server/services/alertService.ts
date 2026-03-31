@@ -53,7 +53,8 @@ export async function sendExpirationAlerts(isTest = false) {
     if (empError) throw empError;
 
     // We need to fetch clubs separately to get their names
-    const { data: clubs } = await supabase.from('clubs').select('id, name');
+    const { data: clubs, error: clubsError } = await supabase.from('clubs').select('id, name');
+    if (clubsError) throw clubsError;
     const clubMap = new Map(clubs?.map(c => [c.id, c.name]) || []);
 
     // Agrupar por club
