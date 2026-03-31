@@ -451,7 +451,7 @@ export default function Expirations() {
                             className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
                           />
                         </td>
-                        <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_aviso_css'))}`}>
+                        <td className="px-2 py-2 border-r border-slate-200">
                           <input disabled={!canEdit}
                             type="date" value={getVal(emp, 'doc_aviso_css')} onChange={(e) => handleEdit(emp.id, 'doc_aviso_css', e.target.value)}
                             onBlur={(e) => handleSave(emp.id, 'doc_aviso_css', e.target.value)}
