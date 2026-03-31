@@ -16,24 +16,10 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024 // 10MB limit
   }
 });
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_for_development_only_12345';
-
-// Debug route for environment variables
-router.get('/debug-env', (req, res) => {
-  res.json({
-    VITE_SUPABASE_URL: !!process.env.VITE_SUPABASE_URL,
-    SUPABASE_URL: !!process.env.SUPABASE_URL,
-    VITE_SUPABASE_ANON_KEY: !!process.env.VITE_SUPABASE_ANON_KEY,
-    SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
-    SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-    NODE_ENV: process.env.NODE_ENV,
-    cwd: process.cwd()
-  });
-});
-
 if (!process.env.JWT_SECRET) {
-  console.warn('WARNING: JWT_SECRET environment variable is not set. Using insecure fallback key.');
+  throw new Error('FATAL: JWT_SECRET environment variable is not set.');
 }
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Middleware to check if user is authenticated
 const isAuthenticated = async (req: any, res: any, next: any) => {
@@ -62,6 +48,7 @@ const isAuthenticated = async (req: any, res: any, next: any) => {
     
     next();
   } catch (err) {
+    console.warn(`[AUTH] Token inválido desde IP: ${req.headers['x-forwarded-for'] || req.socket?.remoteAddress}`);
     return res.status(403).json({ error: 'Token inválido o expirado' });
   }
 };
@@ -150,7 +137,7 @@ router.get('/performance', isAuthenticated, isInternal, async (req, res) => {
     res.json(data);
   } catch (error: any) {
     console.error('Error fetching performance:', error);
-    res.status(500).json({ error: 'Error al obtener datos de rendimiento', details: error.message });
+    res.status(500).json({ error: 'Error al obtener datos de rendimiento' });
   }
 });
 
@@ -179,7 +166,7 @@ router.post('/performance', isAuthenticated, isInternal, async (req, res) => {
     res.json({ message: 'Datos guardados correctamente', data });
   } catch (error: any) {
     console.error('Error saving performance:', error);
-    res.status(500).json({ error: 'Error al guardar datos de rendimiento', details: error.message });
+    res.status(500).json({ error: 'Error al guardar datos de rendimiento' });
   }
 });
 
@@ -209,7 +196,7 @@ router.get('/performance/stats', isAuthenticated, isInternal, async (req, res) =
     
     res.json(stats);
   } catch (error: any) {
-    res.status(500).json({ error: 'Error al obtener estadísticas', details: error.message });
+    res.status(500).json({ error: 'Error al obtener estadísticas' });
   }
 });
 
@@ -221,28 +208,6 @@ router.get('/auth/me', isAuthenticated, async (req, res) => {
 
 router.post('/auth/login', async (req, res) => {
   const { email, password } = req.body;
-  console.log(`Intentando login para: ${email}`);
-  
-  // Hardcoded check for debugging
-  if (email === 'admin@psmt.com' && password === 'admin123') {
-    console.log(`Login exitoso (hardcoded) para: ${email}`);
-    const token = jwt.sign(
-      { id: 'admin-1', email: 'admin@psmt.com', name: 'Admin General', role: 'Administrador', club_id: null },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-    return res.json({
-      token,
-      user: {
-        id: 'admin-1',
-        email: 'admin@psmt.com',
-        name: 'Admin General',
-        role: 'Administrador',
-        club_id: null
-      }
-    });
-  }
-
   try {
     const { data: user, error } = await supabase
       .from('users')
@@ -259,13 +224,10 @@ router.post('/auth/login', async (req, res) => {
       }
     }
 
-    // Check if user exists and verify password
-    const isValidPassword = user && (
-      // For backwards compatibility with plain text passwords during migration
-      user.password_hash === password || 
-      // For hashed passwords
-      (user.password_hash.startsWith('$2') && bcrypt.compareSync(password, user.password_hash))
-    );
+    // Verify bcrypt-hashed password only
+    const isValidPassword = user &&
+      user.password_hash?.startsWith('$2') &&
+      bcrypt.compareSync(password, user.password_hash);
     
     if (user && isValidPassword) {
       console.log(`Login exitoso para: ${email}`);
@@ -288,7 +250,7 @@ router.post('/auth/login', async (req, res) => {
         }
       });
     } else {
-      console.log(`Login fallido para: ${email} (Credenciales inválidas)`);
+      console.warn(`[AUTH] Login fallido para: ${email} desde IP: ${req.headers['x-forwarded-for'] || req.socket?.remoteAddress}`);
       res.status(401).json({ error: 'Credenciales inválidas' });
     }
   } catch (error) {
@@ -311,9 +273,9 @@ const logAudit = async (
   clubId: string | null
 ) => {
   try {
-    const userId = req.user?.id || req.headers['x-user-id'] as string;
-    const userName = req.user?.name || req.headers['x-user-name'] as string;
-    const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    const userId = req.user?.id || null;
+    const userName = req.user?.name || 'Sistema';
+    const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
     await supabase.from('audit_logs').insert({
       id: crypto.randomUUID(),
       user_id: userId || null,
@@ -350,7 +312,7 @@ router.get('/audit-logs', isAdmin, async (req, res) => {
 });
 
 // Get all clubs
-router.get('/clubs', async (req, res) => {
+router.get('/clubs', isAuthenticated, async (req, res) => {
   try {
     const user = (req as any).user;
     console.log(`[API] /clubs called by ${user?.email} (Role: ${user?.role}, Club: ${user?.club_id})`);
@@ -364,7 +326,7 @@ router.get('/clubs', async (req, res) => {
 });
 
 // Get single club
-router.get('/clubs/:id', async (req, res) => {
+router.get('/clubs/:id', isAuthenticated, async (req, res) => {
   try {
     const { data: club, error } = await supabase.from('clubs').select('*').eq('id', req.params.id).single();
     if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
@@ -489,7 +451,7 @@ router.post('/employees', canModifyData, async (req, res) => {
 });
 
 // Get single employee
-router.get('/employees/:id', async (req, res) => {
+router.get('/employees/:id', isAuthenticated, async (req, res) => {
   try {
     const { data: employee, error } = await supabase.from('employees').select('*').eq('id', req.params.id).single();
     if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
@@ -538,7 +500,7 @@ router.get('/document-types', async (req, res) => {
 });
 
 // Get employee documents
-router.get('/employees/:id/documents', async (req, res) => {
+router.get('/employees/:id/documents', isAuthenticated, async (req, res) => {
   try {
     const { data: documents, error } = await supabase
       .from('employee_documents')
@@ -1089,7 +1051,20 @@ router.get('/attendance', canViewData, async (req, res) => {
 router.post('/attendance', canModifyData, async (req, res) => {
   const { records } = req.body; // Array of { employee_id, date, status }
   const user = (req as any).user;
-  
+
+  // Supervisor Interno can only update attendance for their own club's employees
+  if (user.role === 'Supervisor Interno' && Array.isArray(records)) {
+    const employeeIds = records.map((r: any) => r.employee_id);
+    const { data: empData } = await supabase
+      .from('employees')
+      .select('id, club_id')
+      .in('id', employeeIds);
+    const unauthorized = (empData || []).find((e: any) => e.club_id !== user.club_id);
+    if (unauthorized) {
+      return res.status(403).json({ error: 'Acceso denegado. Solo puede registrar asistencia de empleados de su club.' });
+    }
+  }
+
   try {
     const upsertData = records.map((record: any) => ({
       id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -1253,7 +1228,7 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
       query = query.eq('club_id', club_id);
     }
 
-    const { data: employees, error } = await query.order('full_name', { ascending: true });
+    const { data: employees, error } = await query;
 
     if (error) throw error;
 
@@ -1540,7 +1515,7 @@ router.post('/users', isAdmin, async (req, res) => {
     res.status(201).json(newUser);
   } catch (error: any) {
     console.error('Error creating user:', error);
-    res.status(500).json({ error: 'Error al crear usuario', details: error.message || error });
+    res.status(500).json({ error: 'Error al crear usuario' });
   }
 });
 
@@ -1753,32 +1728,6 @@ router.post('/restore/database', (req, res) => {
   res.status(400).json({ error: 'La restauración de base de datos ya no está disponible con Supabase. Use el panel de Supabase para restaurar.' });
 });
 
-// Download Source Code
-router.get('/download-source', (req, res) => {
-  try {
-    const archive = archiver('zip', {
-      zlib: { level: 9 }
-    });
-
-    res.attachment(`psmt-source-code-${new Date().toISOString().split('T')[0]}.zip`);
-
-    archive.on('error', function(err) {
-      res.status(500).send({error: err.message});
-    });
-
-    archive.pipe(res);
-
-    archive.glob('**/*', {
-      cwd: process.cwd(),
-      ignore: ['node_modules/**', 'dist/**', '.git/**', '.env', '.env.*', '*.zip']
-    });
-
-    archive.finalize();
-  } catch (error) {
-    console.error('Error creating zip:', error);
-    res.status(500).json({ error: 'Error al generar el archivo ZIP' });
-  }
-});
 
 export default router;
 

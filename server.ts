@@ -1,5 +1,4 @@
 import express from 'express';
-console.log('--- SERVER.TS IS EXECUTING ---');
 import { createServer as createViteServer } from 'vite';
 import apiRouter from './src/server/routes/index.ts';
 import cron from 'node-cron';
@@ -9,7 +8,8 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import pptxgen from 'pptxgenjs';
 import cors from 'cors';
-import JSZip from 'jszip';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,10 +22,21 @@ async function startServer() {
 
   app.use(express.json());
   app.use(cors());
+  app.use(helmet({ contentSecurityPolicy: false }));
 
-  // Aggressive cache busting for ALL responses
+  // Rate limiter for login endpoint
+  const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Demasiados intentos de inicio de sesión. Intente de nuevo en 15 minutos.' }
+  });
+  app.use('/api/auth/login', loginLimiter);
+
+  // Security + cache headers
   app.use((req, res, next) => {
-    res.set('X-App-Version', '1.0.7');
+    res.set('X-App-Version', '1.0.8');
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
@@ -36,46 +47,6 @@ async function startServer() {
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
-  });
-
-  // Download source code
-  app.get('/api/download-source', async (req, res) => {
-    try {
-      const zip = new JSZip();
-      const rootPath = process.cwd();
-      
-      const addFolderToZip = (folderPath: string, zipFolder: JSZip) => {
-        const items = fs.readdirSync(folderPath);
-        for (const item of items) {
-          // Ignore heavy/unnecessary folders
-          if (['node_modules', 'dist', '.git', '.DS_Store', 'controldoc.zip', '.next'].includes(item)) continue;
-          
-          const fullPath = path.join(folderPath, item);
-          const stat = fs.statSync(fullPath);
-          
-          if (stat.isDirectory()) {
-            const newFolder = zipFolder.folder(item);
-            if (newFolder) {
-              addFolderToZip(fullPath, newFolder);
-            }
-          } else {
-            zipFolder.file(item, fs.readFileSync(fullPath));
-          }
-        }
-      };
-
-      addFolderToZip(rootPath, zip);
-      
-      const content = await zip.generateAsync({ type: 'nodebuffer' });
-      
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', `attachment; filename=controldoc-source-${timestamp}.zip`);
-      res.send(content);
-    } catch (error) {
-      console.error('Error generating zip:', error);
-      res.status(500).send('Error al generar el archivo ZIP del código fuente.');
-    }
   });
 
   // Generate and download PowerPoint presentation

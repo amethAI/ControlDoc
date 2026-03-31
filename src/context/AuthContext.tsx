@@ -21,31 +21,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
+  const clearSession = () => {
+    setToken(null);
+    setUser(null);
+    try {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    } catch (_) {}
+  };
+
+  const isTokenExpired = (token: string): boolean => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.exp * 1000 < Date.now();
+    } catch {
+      return true;
+    }
+  };
+
   useEffect(() => {
     try {
       const storedToken = localStorage.getItem('token');
       const storedUser = localStorage.getItem('user');
       if (storedToken && storedUser) {
+        // M-5: Validate token expiry client-side before using it
+        if (isTokenExpired(storedToken)) {
+          clearSession();
+          return;
+        }
         try {
           setToken(storedToken);
           setUser(JSON.parse(storedUser));
-          
-          // Fetch latest user data
+
+          // A-2: Validate res.ok before trusting response
           fetch('/api/auth/me', {
             headers: { 'Authorization': `Bearer ${storedToken}` }
           })
-          .then(res => res.json())
+          .then(res => {
+            if (!res.ok) {
+              clearSession();
+              return null;
+            }
+            return res.json();
+          })
           .then(data => {
-            if (data.user) {
+            if (data?.user) {
               setUser(data.user);
               localStorage.setItem('user', JSON.stringify(data.user));
             }
           })
-          .catch(err => console.error('Error fetching latest user data', err));
+          .catch(() => clearSession());
         } catch (e) {
-          console.error('Error parsing stored user', e);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
+          clearSession();
         }
       }
     } catch (e) {
@@ -65,14 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    setToken(null);
-    setUser(null);
-    try {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-    } catch (e) {
-      console.warn('localStorage not available', e);
-    }
+    clearSession();
   };
 
   return (
