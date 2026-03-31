@@ -866,7 +866,7 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
 // Update employee checklist data
 router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
   const { id } = req.params;
-  const { full_name, cedula, contract_type, contract_start, contract_end, carta_ingreso, carnet_verde, carnet_blanco, aviso_css } = req.body;
+  const { full_name, cedula, contract_type, contract_start, contract_end, carta_ingreso, carnet_verde, carnet_blanco, aviso_css, contrato_sellado } = req.body;
   
   try {
     // 1. Update employee basic info
@@ -887,6 +887,7 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
     // 2. Update documents if provided
     const docUpdates = [
       { name: 'Carta de ingreso', value: carta_ingreso, isBoolean: true },
+      { name: 'Contrato sellado', value: contrato_sellado, isBoolean: true },
       { name: 'Carnet Verde', value: carnet_verde, isBoolean: false },
       { name: 'Carnet Blanco', value: carnet_blanco, isBoolean: false },
       { name: 'Afiliación CSS', value: aviso_css, isBoolean: false }
@@ -905,6 +906,15 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
 
         // Fallback for Aviso CSS if Afiliación CSS is not found
         let finalDocType = docType;
+        if (!finalDocType && docUpdate.name === 'Contrato sellado') {
+          // Auto-create the document type if it doesn't exist
+          const { data: created } = await supabase
+            .from('document_types')
+            .upsert([{ id: 'doctype-contrato-sellado', name: 'Contrato sellado', is_active: 1, sort_order: 99 }], { onConflict: 'id' })
+            .select('id')
+            .single();
+          finalDocType = created;
+        }
         if (!finalDocType && docUpdate.name === 'Afiliación CSS') {
           const { data: fallbackTypes } = await supabase
             .from('document_types')
