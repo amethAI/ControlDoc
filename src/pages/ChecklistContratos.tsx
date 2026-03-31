@@ -32,15 +32,12 @@ export default function ChecklistContratos() {
   useEffect(() => {
     const fetchChecklistData = async () => {
       try {
-        // Fetch employees with Definido contract
         const res = await apiFetch('/api/employees?status=activo');
         if (res.ok) {
           const data = await res.json();
-          const oneYearEmployees = data.filter((emp: any) => emp.contract_type?.toLowerCase() !== 'indefinido');
-          
-          // Fetch documents for these employees to get carnet dates, etc.
+
           const employeesWithDocs = await Promise.all(
-            oneYearEmployees.map(async (emp: any) => {
+            data.map(async (emp: any) => {
               const docsRes = await apiFetch(`/api/employees/${emp.id}/documents`);
               let documents = [];
               if (docsRes.ok) {
@@ -49,7 +46,7 @@ export default function ChecklistContratos() {
               return { ...emp, documents };
             })
           );
-          
+
           setEmployees(employeesWithDocs);
         }
       } catch (error) {
@@ -293,6 +290,13 @@ export default function ChecklistContratos() {
     return <div className="p-8 text-center text-slate-500">Cargando datos...</div>;
   }
 
+  const regularEmployees = employees.filter(
+    (emp) => (localEdits[emp.id]?.contract_type ?? emp.contract_type) !== 'Definido 1 año'
+  );
+  const oneYearEmployees = employees.filter(
+    (emp) => (localEdits[emp.id]?.contract_type ?? emp.contract_type) === 'Definido 1 año'
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -353,7 +357,7 @@ export default function ChecklistContratos() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
-            {employees.length === 0 && manualRows.length === 0 ? (
+            {regularEmployees.length === 0 && manualRows.length === 0 ? (
               <tr>
                 <td colSpan={11} className="px-4 py-8 text-center text-slate-500">
                   No se encontraron empleados con contrato definido.
@@ -362,7 +366,7 @@ export default function ChecklistContratos() {
             ) : (
               <>
                 {/* Database Rows */}
-                {employees.map((emp, index) => {
+                {regularEmployees.map((emp, index) => {
                   let probatoryEndStr = '';
                   const contractStartStr = getVal(emp, 'contract_start');
                   if (contractStartStr && contractStartStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
@@ -455,8 +459,8 @@ export default function ChecklistContratos() {
                         />
                       </td>
                       <td className="px-2 py-2 border-slate-200">
-                        <select 
-                          value={getVal(emp, 'contract_type')} 
+                        <select
+                          value={getVal(emp, 'contract_type')}
                           onChange={(e) => {
                             handleEdit(emp.id, 'contract_type', e.target.value);
                             handleSave(emp.id, 'contract_type', e.target.value);
@@ -487,7 +491,7 @@ export default function ChecklistContratos() {
                   return (
                     <tr key={row.id} className="bg-blue-50 hover:bg-blue-100 transition-colors">
                       <td className="px-2 py-2 whitespace-nowrap text-slate-500 border-r border-slate-200 text-center">
-                        {employees.length + index + 1}
+                        {regularEmployees.length + index + 1}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap border-r border-slate-200">
                         <input readOnly={!canEdit}
@@ -592,6 +596,108 @@ export default function ChecklistContratos() {
           </tbody>
         </table>
       </div>
+
+      {/* Sección separada: Contratos Definido 1 año */}
+      {oneYearEmployees.length > 0 && (
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-xl font-bold text-slate-800">Checklist: Contratos Definido 1 Año</h3>
+            <p className="text-sm text-slate-500 mt-1">Personal activo con contrato definido de 1 año.</p>
+          </div>
+          <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-[#1a2e5a] text-white">
+                <tr>
+                  <th scope="col" className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs border-r border-blue-900">No.</th>
+                  <th scope="col" className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs border-r border-blue-900 min-w-[250px]">NOMBRE</th>
+                  <th scope="col" className="px-4 py-3 text-left font-bold uppercase tracking-wider text-xs border-r border-blue-900">CÉDULA</th>
+                  <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">CARTA DE INGRESO</th>
+                  <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">CARNET VERDE</th>
+                  <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">CARNET BLANCO</th>
+                  <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">FECHA DE AVISO CSS</th>
+                  <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">FECHA DE INICIO DE CONTRATO</th>
+                  <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">FECHA DE TERMINACION DE PERIODO PROBATORIO</th>
+                  <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs border-r border-blue-900">FECHA DE TERMINACION DE CONTRATO</th>
+                  <th scope="col" className="px-4 py-3 text-center font-bold uppercase tracking-wider text-xs">TIPO DE CONTRATOS</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-slate-200">
+                {oneYearEmployees.map((emp, index) => {
+                  let probatoryEndStr = '';
+                  const contractStartStr = getVal(emp, 'contract_start');
+                  if (contractStartStr && contractStartStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    const date = new Date(`${contractStartStr}T12:00:00`);
+                    date.setMonth(date.getMonth() + 3);
+                    probatoryEndStr = date.toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
+                  }
+                  return (
+                    <tr key={emp.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 whitespace-nowrap text-slate-500 border-r border-slate-200 text-center">{index + 1}</td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input readOnly={!canEdit} type="text" value={getVal(emp, 'full_name')}
+                          onChange={(e) => handleEdit(emp.id, 'full_name', e.target.value)}
+                          onBlur={(e) => handleSave(emp.id, 'full_name', e.target.value)}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" />
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input readOnly={!canEdit} type="text" value={getVal(emp, 'cedula')}
+                          onChange={(e) => handleEdit(emp.id, 'cedula', e.target.value)}
+                          onBlur={(e) => handleSave(emp.id, 'cedula', e.target.value)}
+                          className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs" />
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200 text-center">
+                        <select disabled={!canEdit} value={getVal(emp, 'carta_ingreso')}
+                          onChange={(e) => { handleEdit(emp.id, 'carta_ingreso', e.target.value); handleSave(emp.id, 'carta_ingreso', e.target.value); }}
+                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center">
+                          <option value="SÍ">SÍ</option>
+                          <option value="NO">NO</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input readOnly={!canEdit} type="date" value={getVal(emp, 'carnet_verde')}
+                          onChange={(e) => { handleEdit(emp.id, 'carnet_verde', e.target.value); handleSave(emp.id, 'carnet_verde', e.target.value); }}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center" />
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input readOnly={!canEdit} type="date" value={getVal(emp, 'carnet_blanco')}
+                          onChange={(e) => { handleEdit(emp.id, 'carnet_blanco', e.target.value); handleSave(emp.id, 'carnet_blanco', e.target.value); }}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center" />
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input readOnly={!canEdit} type="date" value={getVal(emp, 'aviso_css')}
+                          onChange={(e) => { handleEdit(emp.id, 'aviso_css', e.target.value); handleSave(emp.id, 'aviso_css', e.target.value); }}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center" />
+                      </td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input readOnly={!canEdit} type="date" value={getVal(emp, 'contract_start')}
+                          onChange={(e) => { handleEdit(emp.id, 'contract_start', e.target.value); handleSave(emp.id, 'contract_start', e.target.value); }}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center" />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center border-r border-slate-200">{probatoryEndStr}</td>
+                      <td className="px-2 py-2 border-r border-slate-200">
+                        <input readOnly={!canEdit} type="date" value={getVal(emp, 'contract_end')}
+                          onChange={(e) => { handleEdit(emp.id, 'contract_end', e.target.value); handleSave(emp.id, 'contract_end', e.target.value); }}
+                          className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center" />
+                      </td>
+                      <td className="px-2 py-2 border-slate-200">
+                        <select value={getVal(emp, 'contract_type')}
+                          onChange={(e) => { handleEdit(emp.id, 'contract_type', e.target.value); handleSave(emp.id, 'contract_type', e.target.value); }}
+                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs">
+                          <option value="">Seleccionar...</option>
+                          <option value="Definido">Definido</option>
+                          <option value="Definido 1 año">Definido 1 año</option>
+                          <option value="Indefinido">Indefinido</option>
+                          <option value="Servicios Profesionales">Servicios Profesionales</option>
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
