@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import * as XLSX from 'xlsx';
+import { toast } from 'sonner';
 
 interface ChecklistEmployee {
   id: string;
@@ -225,9 +226,13 @@ export default function Expirations() {
 
       if (!res.ok) {
         console.error('Error saving checklist field');
+        toast.error('Error al guardar');
+      } else {
+        toast.success('Guardado');
       }
     } catch (error) {
       console.error('Error saving checklist field:', error);
+      toast.error('Error al guardar');
     }
   };
 
