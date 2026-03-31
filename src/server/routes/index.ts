@@ -1192,6 +1192,56 @@ router.get('/documents/expirations', canViewData, async (req, res) => {
   }
 });
 
+// Get employees missing a specific document
+router.get('/reports/missing-document', canViewData, async (req, res) => {
+  const { doc_type = 'Contrato sellado' } = req.query;
+  const user = (req as any).user;
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : req.query.club_id;
+
+  try {
+    // Get all active employees
+    let empQuery = supabase
+      .from('employees')
+      .select('id, full_name, cedula, position, club_id, clubs(name)')
+      .eq('status', 'activo')
+      .order('full_name', { ascending: true });
+
+    if (club_id) empQuery = empQuery.eq('club_id', club_id);
+
+    const { data: employees, error: empError } = await empQuery;
+    if (empError) throw empError;
+
+    // Get employees who HAVE the document
+    const { data: docTypes } = await supabase
+      .from('document_types')
+      .select('id')
+      .ilike('name', `%${doc_type}%`)
+      .limit(1);
+
+    const docTypeId = docTypes?.[0]?.id;
+    if (!docTypeId) {
+      return res.json((employees || []).map(e => ({ ...e, club_name: (e.clubs as any)?.name || '' })));
+    }
+
+    const { data: hasDocs } = await supabase
+      .from('employee_documents')
+      .select('employee_id')
+      .eq('document_type_id', docTypeId)
+      .eq('is_current', 1);
+
+    const hasDocSet = new Set((hasDocs || []).map((d: any) => d.employee_id));
+
+    const missing = (employees || [])
+      .filter(e => !hasDocSet.has(e.id))
+      .map(e => ({ ...e, club_name: (e.clubs as any)?.name || '' }));
+
+    res.json(missing);
+  } catch (error) {
+    console.error('Error fetching missing documents:', error);
+    res.status(500).json({ error: 'Error al obtener empleados sin documento' });
+  }
+});
+
 // Get checklist report
 router.get('/reports/checklist', canViewData, async (req, res) => {
   const { club_id: queryClubId } = req.query;

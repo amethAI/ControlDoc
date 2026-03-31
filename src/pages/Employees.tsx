@@ -25,6 +25,9 @@ export default function Employees() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('activo');
+  const [showMissingContract, setShowMissingContract] = useState(false);
+  const [missingContractEmployees, setMissingContractEmployees] = useState<Employee[]>([]);
+  const [loadingMissing, setLoadingMissing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isBulkEmployeeModalOpen, setIsBulkEmployeeModalOpen] = useState(false);
@@ -41,14 +44,12 @@ export default function Employees() {
   }
 
   const fetchEmployees = useCallback(async () => {
+    if (showMissingContract) return;
     try {
-      // Coordinadora and Supervisor Interno are restricted to their club
       const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
-      
-      let url = isRestricted 
+      let url = isRestricted
         ? `/api/employees?club_id=${user?.club_id}&status=${statusFilter}`
         : `/api/employees?status=${statusFilter}`;
-      
       const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -57,13 +58,41 @@ export default function Employees() {
     } catch (error) {
       console.error('Error fetching employees:', error);
     }
-  }, [user, statusFilter]);
+  }, [user, statusFilter, showMissingContract]);
 
   useEffect(() => {
     fetchEmployees();
   }, [fetchEmployees]);
 
-  const filteredEmployees = employees.filter(emp => 
+  const fetchMissingContract = async () => {
+    setLoadingMissing(true);
+    try {
+      const res = await apiFetch('/api/reports/missing-document?doc_type=Contrato+sellado');
+      if (res.ok) {
+        const data = await res.json();
+        setMissingContractEmployees(data);
+      }
+    } catch (error) {
+      console.error('Error fetching missing contracts:', error);
+    } finally {
+      setLoadingMissing(false);
+    }
+  };
+
+  const handleMissingContractTab = () => {
+    setShowMissingContract(true);
+    setStatusFilter('');
+    fetchMissingContract();
+  };
+
+  const handleStatusFilter = (status: string) => {
+    setStatusFilter(status);
+    setShowMissingContract(false);
+  };
+
+  const displayEmployees = showMissingContract ? missingContractEmployees : employees;
+
+  const filteredEmployees = displayEmployees.filter(emp =>
     emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     emp.cedula.includes(searchTerm)
   );
@@ -71,26 +100,41 @@ export default function Employees() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex p-1 bg-slate-100 rounded-lg w-fit">
+        <div className="flex p-1 bg-slate-100 rounded-lg w-fit flex-wrap gap-y-1">
           <button
-            onClick={() => setStatusFilter('activo')}
+            onClick={() => handleStatusFilter('activo')}
             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-              statusFilter === 'activo' 
-                ? 'bg-white text-blue-600 shadow-sm' 
+              statusFilter === 'activo' && !showMissingContract
+                ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
             }`}
           >
             Activos
           </button>
           <button
-            onClick={() => setStatusFilter('inactivo')}
+            onClick={() => handleStatusFilter('inactivo')}
             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-              statusFilter === 'inactivo' 
-                ? 'bg-white text-blue-600 shadow-sm' 
+              statusFilter === 'inactivo' && !showMissingContract
+                ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
             }`}
           >
             Inactivos (Historial)
+          </button>
+          <button
+            onClick={handleMissingContractTab}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-1.5 ${
+              showMissingContract
+                ? 'bg-white text-orange-600 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Sin Contrato Sellado
+            {showMissingContract && !loadingMissing && (
+              <span className="bg-orange-100 text-orange-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
+                {missingContractEmployees.length}
+              </span>
+            )}
           </button>
           <Link
             to="/checklist-contratos"
@@ -191,7 +235,13 @@ export default function Employees() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
-            {filteredEmployees.length > 0 ? (
+            {showMissingContract && loadingMissing ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                  Cargando...
+                </td>
+              </tr>
+            ) : filteredEmployees.length > 0 ? (
               filteredEmployees.map((person) => (
                 <tr key={person.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">

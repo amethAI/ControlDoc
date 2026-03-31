@@ -298,11 +298,6 @@ export default function ChecklistContratos() {
     (emp) => (localEdits[emp.id]?.contract_type ?? emp.contract_type) === 'Definido 1 año'
   );
 
-  const sinContratoSellado = oneYearEmployees.filter(
-    (emp) => hasDoc(emp.documents, 'Contrato sellado') === 'NO'
-  );
-
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -348,25 +343,9 @@ export default function ChecklistContratos() {
       {/* Sección separada: Contratos Definido 1 año */}
       {oneYearEmployees.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-start justify-between flex-wrap gap-3">
-            <div>
-              <h3 className="text-xl font-bold text-slate-800">Checklist: Contratos Definido 1 Año</h3>
-              <p className="text-sm text-slate-500 mt-1">Personal activo con contrato definido de 1 año.</p>
-            </div>
-            {sinContratoSellado.length > 0 ? (
-              <div className="bg-orange-50 border border-orange-300 rounded-lg px-4 py-2 text-sm">
-                <p className="font-semibold text-orange-800 mb-1">{sinContratoSellado.length} sin contrato sellado:</p>
-                <ul className="text-orange-700 space-y-0.5">
-                  {sinContratoSellado.map(emp => (
-                    <li key={emp.id}>• {emp.full_name}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-sm font-medium px-3 py-2 rounded-lg">
-                Todos con contrato sellado
-              </div>
-            )}
+          <div>
+            <h3 className="text-xl font-bold text-slate-800">Checklist: Contratos Definido 1 Año</h3>
+            <p className="text-sm text-slate-500 mt-1">Personal activo con contrato definido de 1 año.</p>
           </div>
           <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
