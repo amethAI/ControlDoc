@@ -4,7 +4,6 @@ import { sendExpirationAlerts } from '../services/alertService.ts';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import archiver from 'archiver';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
