@@ -30,17 +30,13 @@ export default function ChecklistContratos() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user && user.role !== 'Administrador') {
-      navigate('/');
-      return;
-    }
     const fetchChecklistData = async () => {
       try {
         // Fetch employees with Definido contract
         const res = await apiFetch('/api/employees?status=activo');
         if (res.ok) {
           const data = await res.json();
-          const oneYearEmployees = data.filter((emp: any) => emp.contract_type === '1 año');
+          const oneYearEmployees = data.filter((emp: any) => emp.contract_type?.toLowerCase() !== 'indefinido');
           
           // Fetch documents for these employees to get carnet dates, etc.
           const employeesWithDocs = await Promise.all(
@@ -86,7 +82,7 @@ export default function ChecklistContratos() {
       id: `manual-${Date.now()}`,
       full_name: '',
       cedula: '',
-      contract_type: '1 año',
+      contract_type: 'Definido',
       contract_start: '',
       contract_end: '',
       documents: [],
@@ -469,6 +465,7 @@ export default function ChecklistContratos() {
                         >
                           <option value="">Seleccionar...</option>
                           <option value="Definido">Definido</option>
+                          <option value="Definido 1 año">Definido 1 año</option>
                           <option value="Indefinido">Indefinido</option>
                           <option value="Servicios Profesionales">Servicios Profesionales</option>
                         </select>
@@ -572,6 +569,7 @@ export default function ChecklistContratos() {
                           >
                             <option value="">Seleccionar...</option>
                             <option value="Definido">Definido</option>
+                            <option value="Definido 1 año">Definido 1 año</option>
                             <option value="Indefinido">Indefinido</option>
                             <option value="Servicios Profesionales">Servicios Profesionales</option>
                           </select>

@@ -22,7 +22,7 @@ export async function sendExpirationAlerts(isTest = false) {
       .from('employee_documents')
       .select(`
         *,
-        employees!inner(full_name, club_id),
+        employees!inner(full_name, club_id, contract_type),
         document_types!inner(name, has_expiry)
       `)
       .eq('document_types.has_expiry', 1)
@@ -53,8 +53,7 @@ export async function sendExpirationAlerts(isTest = false) {
     if (empError) throw empError;
 
     // We need to fetch clubs separately to get their names
-    const { data: clubs, error: clubsError } = await supabase.from('clubs').select('id, name');
-    if (clubsError) throw clubsError;
+    const { data: clubs } = await supabase.from('clubs').select('id, name');
     const clubMap = new Map(clubs?.map(c => [c.id, c.name]) || []);
 
     // Agrupar por club
@@ -63,6 +62,14 @@ export async function sendExpirationAlerts(isTest = false) {
     // Process expiring documents
     if (expiringDocs && expiringDocs.length > 0) {
       for (const doc of expiringDocs) {
+        const docName = (doc.document_types as any).name?.toLowerCase() || '';
+        const contractType = (doc.employees as any).contract_type?.toLowerCase() || '';
+        
+        // Ignore 'Contrato firmado' or 'Contrato sellado' expiration if contract is 'Indefinido'
+        if (docName.includes('contrato') && contractType === 'indefinido') {
+          continue;
+        }
+
         const clubId = (doc.employees as any).club_id;
         const clubName = clubMap.get(clubId) || 'Desconocido';
         

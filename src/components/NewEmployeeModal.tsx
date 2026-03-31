@@ -186,6 +186,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
                   >
                     <option value="Indefinido">Indefinido</option>
                     <option value="Definido">Definido</option>
+                    <option value="Definido 1 año">Definido 1 año</option>
                     <option value="Servicios Profesionales">Servicios Profesionales</option>
                   </select>
                 </div>
@@ -199,7 +200,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
                       const newStart = e.target.value;
                       let newEnd = formData.contract_end;
                       
-                      if (formData.contract_type === 'Definido' && newStart && !newEnd) {
+                      if ((formData.contract_type === 'Definido' || formData.contract_type === 'Definido 1 año') && newStart && !newEnd) {
                         // Optional: auto-set end date to 1 year for Definido if empty
                         const start = new Date(newStart);
                         start.setFullYear(start.getFullYear() + 1);

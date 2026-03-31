@@ -30,8 +30,8 @@ export default function Layout() {
   const navigation = [
     ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' ? [{ name: 'Dashboard', href: '/', icon: LayoutDashboard }] : []),
     ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' && user?.role !== 'Supervisor Cliente' ? [{ name: 'Empleados', href: '/empleados', icon: Users }] : []),
-    ...(user?.role === 'Administrador' ? [{ name: 'Vencimientos', href: '/vencimientos', icon: CalendarClock }] : []),
-    ...(user?.role === 'Administrador' ? [{ name: 'Checklist Contratos', href: '/checklist-contratos', icon: ClipboardList }] : []),
+    { name: 'Vencimientos', href: '/vencimientos', icon: CalendarClock },
+    { name: 'Checklist Contratos', href: '/checklist-contratos', icon: ClipboardList },
     ...(user?.role !== 'Supervisor Cliente' && user?.role !== 'Coordinadora' ? [{ name: 'Asistencia', href: '/asistencia', icon: CalendarCheck }] : []),
     ...((user?.role === 'Administrador' || user?.role === 'Supervisor Interno') ? [
       { name: 'Rendimiento', href: '/rendimiento', icon: TrendingUp }
@@ -39,7 +39,7 @@ export default function Layout() {
     ...((user?.role === 'Administrador' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente') ? [
       { name: 'Clubes', href: '/clubes', icon: Building2 }
     ] : []),
-    { name: 'Roles y Permisos', href: '/roles', icon: Info },
+    ...(user?.role === 'Administrador' ? [{ name: 'Roles y Permisos', href: '/roles', icon: Info }] : []),
     ...(user?.role === 'Administrador' ? [
       { name: 'Configuración', href: '/configuracion', icon: Settings }
     ] : [])

@@ -37,10 +37,6 @@ export default function Expirations() {
   const [clubs, setClubs] = useState<{id: string, name: string}[]>([]);
 
   useEffect(() => {
-    if (user && user.role !== 'Administrador') {
-      navigate('/');
-      return;
-    }
     fetchData();
   }, [clubFilter, user, navigate]);
 
@@ -77,7 +73,7 @@ export default function Expirations() {
   };
 
   const filteredEmployees = employees.filter(emp => {
-    const isOneYear = emp.contract_type === '1 año';
+    const isOneYear = emp.contract_type?.toLowerCase() !== 'indefinido';
     const matchesSearch = 
       emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.cedula.includes(searchTerm);
@@ -150,7 +146,7 @@ export default function Expirations() {
       club_name: clubFilter !== 'all' ? (clubs.find(c => c.id === clubFilter)?.name || 'Agregados Manualmente') : 'Agregados Manualmente',
       contract_start: '',
       contract_end: '',
-      contract_type: '1 año',
+      contract_type: 'Definido',
       probatorio_end: '',
       contratos_count: 1,
       isManual: true,
@@ -491,6 +487,7 @@ export default function Expirations() {
                           >
                             <option value="">Seleccionar...</option>
                             <option value="Definido">Definido</option>
+                            <option value="Definido 1 año">Definido 1 año</option>
                             <option value="Indefinido">Indefinido</option>
                             <option value="Servicios Profesionales">Servicios Profesionales</option>
                           </select>

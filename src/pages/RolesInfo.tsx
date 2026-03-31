@@ -1,7 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Shield, Users, Building2, FileSpreadsheet, Edit3, Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function RolesInfo() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user && user.role !== 'Administrador') {
+      navigate('/');
+    }
+  }, [user, navigate]);
+
   const roles = [
     {
       name: 'Administrador',
@@ -10,7 +21,6 @@ export default function RolesInfo() {
         'Ver todos los clubes y empleados',
         'Crear, editar y eliminar empleados',
         'Gestionar asistencia y rendimiento',
-        'Acceso exclusivo a Checklist de Contratos y Vencimientos',
         'Acceso a la Configuración General (usuarios, alertas, respaldos)'
       ],
       color: 'bg-purple-100 text-purple-800',
@@ -23,7 +33,6 @@ export default function RolesInfo() {
         'Ver solo la información de su club asignado',
         'Crear, editar y eliminar empleados de su club',
         'Gestionar asistencia y rendimiento de su club',
-        'No tiene acceso a Checklist ni Vencimientos',
         'No tiene acceso a la Configuración General'
       ],
       color: 'bg-blue-100 text-blue-800',
