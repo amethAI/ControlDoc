@@ -1,7 +1,7 @@
 import { apiFetch } from '../lib/api';
 import React, { useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Settings, Users, Bell, Shield, Database, Download, FileSpreadsheet, Upload, Send } from 'lucide-react';
+import { Settings, Users, Bell, Shield, Database, Download, FileSpreadsheet, Upload, Send, LogIn } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import ConfirmModal from '../components/ConfirmModal';
@@ -234,38 +234,6 @@ export default function Configuracion() {
             </button>
 
             <button 
-              onClick={async () => {
-                try {
-                  const response = await apiFetch('/api/download-source');
-                  if (!response.ok) throw new Error('Error al descargar');
-                  const blob = await response.blob();
-                  const url = window.URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `psmt-source-code-${new Date().toISOString().split('T')[0]}.zip`;
-                  document.body.appendChild(a);
-                  a.click();
-                  window.URL.revokeObjectURL(url);
-                  document.body.removeChild(a);
-                } catch (error) {
-                  console.error('Error downloading source:', error);
-                  toast.error('Error al descargar el código fuente');
-                }
-              }}
-              className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-left group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-100">
-                  <Download className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Descargar Código Fuente</p>
-                  <p className="text-xs text-slate-500">Descargar el código de la aplicación</p>
-                </div>
-              </div>
-            </button>
-
-            <button 
               onClick={handleTestAlerts}
               disabled={isSendingAlerts}
               className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-left group disabled:opacity-50"
@@ -324,6 +292,16 @@ export default function Configuracion() {
           <div>
             <h3 className="text-base font-medium text-slate-900">Log de Auditoría</h3>
             <p className="text-sm text-slate-500 mt-1">Revisa el historial inmutable de todas las acciones realizadas en el sistema.</p>
+          </div>
+        </Link>
+
+        <Link to="/configuracion/accesos" className="bg-white shadow-sm rounded-xl border border-slate-200 p-6 flex items-start gap-4 hover:border-blue-300 hover:shadow-md transition-all">
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
+            <LogIn className="h-6 w-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-medium text-slate-900">Historial de Accesos</h3>
+            <p className="text-sm text-slate-500 mt-1">Consulta cuándo y desde dónde ingresó cada usuario a la plataforma.</p>
           </div>
         </Link>
       </div>

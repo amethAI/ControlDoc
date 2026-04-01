@@ -20,6 +20,7 @@ import Configuracion from './pages/Configuracion';
 import GestionUsuarios from './pages/GestionUsuarios';
 import DestinatariosAlertas from './pages/DestinatariosAlertas';
 import LogAuditoria from './pages/LogAuditoria';
+import AccessLogs from './pages/AccessLogs';
 import Expirations from './pages/Expirations';
 import ChecklistContratos from './pages/ChecklistContratos';
 import RolesInfo from './pages/RolesInfo';
@@ -57,6 +58,7 @@ function AppRoutes() {
         <Route path="configuracion/usuarios" element={<GestionUsuarios />} />
         <Route path="configuracion/alertas" element={<DestinatariosAlertas />} />
         <Route path="configuracion/auditoria" element={<LogAuditoria />} />
+        <Route path="configuracion/accesos" element={<AccessLogs />} />
         <Route path="roles" element={<RolesInfo />} />
         {/* Add more routes here as needed */}
       </Route>
