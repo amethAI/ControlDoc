@@ -230,14 +230,28 @@ router.post('/auth/login', async (req, res) => {
     
     if (user && isValidPassword) {
       console.log(`Login exitoso para: ${email}`);
-      
+
       // Generate JWT
       const token = jwt.sign(
         { id: user.id, email: user.email, name: user.name, role: user.role, club_id: user.club_id },
         JWT_SECRET,
         { expiresIn: '24h' }
       );
-      
+
+      // Log login event to audit_logs
+      supabase.from('audit_logs').insert({
+        id: crypto.randomUUID(),
+        user_id: user.id,
+        user_name: user.name,
+        action_type: 'Inicio de sesión',
+        action_description: `${user.name} (${user.role}) inició sesión`,
+        entity_type: 'Usuario',
+        entity_id: user.id,
+        entity_name: user.email,
+        club_id: user.club_id || null,
+        ip_address: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'
+      }).then(({ error }) => { if (error) console.error('Error logging login:', error); });
+
       res.json({
         token,
         user: {
@@ -292,6 +306,23 @@ const logAudit = async (
   }
 };
 
+
+// Get access logs (login history)
+router.get('/access-logs', isAdmin, async (req, res) => {
+  try {
+    const { data: logs, error } = await supabase
+      .from('audit_logs')
+      .select('id, created_at, user_name, entity_name, club_id, ip_address')
+      .eq('action_type', 'Inicio de sesión')
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    res.json(logs);
+  } catch (error) {
+    console.error('Error fetching access logs:', error);
+    res.status(500).json({ error: 'Error al obtener historial de accesos' });
+  }
+});
 
 // Get audit logs
 router.get('/audit-logs', isAdmin, async (req, res) => {
