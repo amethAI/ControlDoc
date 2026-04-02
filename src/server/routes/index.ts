@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
+import { GoogleGenAI } from '@google/genai';
 
 const router = Router();
 const upload = multer({ 
@@ -1808,6 +1809,91 @@ router.post('/restore/database', (req, res) => {
   res.status(400).json({ error: 'La restauración de base de datos ya no está disponible con Supabase. Use el panel de Supabase para restaurar.' });
 });
 
+// AI Chat assistant
+router.post('/ai/chat', isAuthenticated, async (req, res) => {
+  try {
+    const { question } = req.body;
+    if (!question) return res.status(400).json({ error: 'Pregunta requerida' });
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(503).json({ error: 'Asistente IA no configurado' });
+
+    const user = (req as any).user;
+    const isPrivileged = ['Administrador', 'Supervisor Interno', 'Supervisora'].includes(user.role);
+
+    let systemPrompt: string;
+
+    if (isPrivileged) {
+      const today = new Date().toISOString().split('T')[0];
+      const thirtyDays = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      const [{ data: clubs }, { data: employees }, { data: expired }, { data: expiring }] = await Promise.all([
+        supabase.from('clubs').select('id, name').neq('id', 'global'),
+        supabase.from('employees').select('id, full_name, club_id, contract_type').eq('status', 'activo'),
+        supabase.from('employee_documents')
+          .select('id, expiry_date, document_types!inner(name), employees!inner(full_name, club_id, status)')
+          .eq('is_current', 1).lt('expiry_date', today).eq('employees.status', 'activo'),
+        supabase.from('employee_documents')
+          .select('id, expiry_date, document_types!inner(name), employees!inner(full_name, club_id, status)')
+          .eq('is_current', 1).gte('expiry_date', today).lte('expiry_date', thirtyDays).eq('employees.status', 'activo'),
+      ]);
+
+      const clubSummary = clubs?.map(club => {
+        const emp = employees?.filter(e => e.club_id === club.id) || [];
+        const exp = expired?.filter(d => (d.employees as any).club_id === club.id) || [];
+        const prox = expiring?.filter(d => (d.employees as any).club_id === club.id) || [];
+        return `- ${club.name}: ${emp.length} empleados activos, ${exp.length} docs vencidos, ${prox.length} próximos a vencer`;
+      }).join('\n') || 'Sin datos';
+
+      const expiredDetails = expired?.slice(0, 30).map(d =>
+        `  • ${(d.employees as any).full_name} — ${(d.document_types as any).name} (venció ${d.expiry_date})`
+      ).join('\n') || 'Ninguno';
+
+      systemPrompt = `Eres el asistente inteligente de ControlDoc, la plataforma de gestión documental de PSMT.
+Responde siempre en español, de forma concisa y útil. Usa los datos reales que te proporciono a continuación.
+
+DATOS ACTUALES (${today}):
+Estado por club:
+${clubSummary}
+
+Empleados con documentos vencidos (hasta 30):
+${expiredDetails}
+
+Totales:
+- Empleados activos: ${employees?.length || 0}
+- Documentos vencidos: ${expired?.length || 0}
+- Próximos a vencer (30 días): ${expiring?.length || 0}
+
+Responde la pregunta del usuario con base en estos datos. Si no hay información suficiente, indícalo claramente.`;
+    } else {
+      systemPrompt = `Eres el asistente de ayuda de ControlDoc, la plataforma de gestión documental de PSMT.
+Responde siempre en español, de forma amable y clara.
+Tu función es ayudar a los usuarios a navegar y usar la plataforma correctamente.
+
+Las secciones disponibles son:
+- Check List: revisa las fechas de vencimiento de documentos de empleados
+- Check List 1 Año: seguimiento específico de empleados con contrato de 1 año
+- Asistencia: registro de asistencia del personal por club
+- Clubes: visualiza los clubes y su personal asignado
+- Empleados: gestión completa de empleados y sus documentos
+- Configuración (solo Admin): usuarios, alertas, auditoría e historial de accesos
+
+Responde dudas sobre cómo usar la aplicación. No tienes acceso a datos personales de empleados.`;
+    }
+
+    const genAI = new GoogleGenAI({ apiKey });
+    const response = await genAI.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [{ role: 'user', parts: [{ text: question }] }],
+      config: { systemInstruction: systemPrompt },
+    });
+
+    res.json({ response: response.text });
+  } catch (error: any) {
+    console.error('AI chat error:', error);
+    res.status(500).json({ error: 'Error al procesar tu pregunta' });
+  }
+});
 
 export default router;
 
