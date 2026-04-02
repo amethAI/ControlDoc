@@ -1813,15 +1813,12 @@ router.post('/restore/database', (req, res) => {
 router.get('/ai/models', async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(503).json({ error: 'No API key' });
-    const genAI = new GoogleGenAI({ apiKey });
-    const models: string[] = [];
-    for await (const model of await genAI.models.list()) {
-      models.push((model as any).name);
-    }
-    res.json({ models });
+    if (!apiKey) return res.json({ error: 'No GEMINI_API_KEY configured' });
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    const data = await response.json();
+    res.json(data);
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    res.json({ error: e.message });
   }
 });
 
