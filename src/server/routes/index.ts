@@ -1809,6 +1809,22 @@ router.post('/restore/database', (req, res) => {
   res.status(400).json({ error: 'La restauración de base de datos ya no está disponible con Supabase. Use el panel de Supabase para restaurar.' });
 });
 
+// Temporary: list available Gemini models
+router.get('/ai/models', isAdmin, async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(503).json({ error: 'No API key' });
+    const genAI = new GoogleGenAI({ apiKey });
+    const models: string[] = [];
+    for await (const model of await genAI.models.list()) {
+      models.push((model as any).name);
+    }
+    res.json({ models });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // AI Chat assistant
 router.post('/ai/chat', isAuthenticated, async (req, res) => {
   try {
