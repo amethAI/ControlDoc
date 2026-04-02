@@ -1874,9 +1874,9 @@ Totales: ${employees?.length || 0} empleados activos, ${expired?.length || 0} do
       ? `Eres el asistente inteligente de ControlDoc, la plataforma de gestión documental de PSMT. Responde siempre en español, de forma concisa y útil.${contextBlock}\n\nResponde la pregunta del usuario con base en estos datos.`
       : `Eres el asistente de ayuda de ControlDoc de PSMT. Responde en español, de forma amable y clara. Ayuda a los usuarios con el uso de la plataforma: Check List (vencimientos), Check List 1 Año (contratos anuales), Asistencia, Clubes, Empleados y Configuración. No tienes acceso a datos privados.`;
 
-    const genAI = new GoogleGenAI({ apiKey, apiVersion: 'v1' });
+    const genAI = new GoogleGenAI({ apiKey });
     const result = await genAI.models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-3.0-flash-preview',
       contents: `${systemPrompt}\n\nPregunta: ${question}`,
     });
 
