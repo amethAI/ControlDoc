@@ -1810,7 +1810,7 @@ router.post('/restore/database', (req, res) => {
 });
 
 // Temporary: list available Gemini models
-router.get('/ai/models', isAdmin, async (req, res) => {
+router.get('/ai/models', async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return res.status(503).json({ error: 'No API key' });
