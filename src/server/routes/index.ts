@@ -273,6 +273,19 @@ router.post('/auth/login', async (req, res) => {
   }
 });
 
+// Temporary: list available Gemini models (public for diagnostics)
+router.get('/ai/models', async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.json({ error: 'No GEMINI_API_KEY configured' });
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (e: any) {
+    res.json({ error: e.message });
+  }
+});
+
 // Apply authentication middleware to all routes below
 router.use(isAuthenticated);
 
@@ -1807,19 +1820,6 @@ router.get('/backup/employees-csv', async (req, res) => {
 // Restore route
 router.post('/restore/database', (req, res) => {
   res.status(400).json({ error: 'La restauración de base de datos ya no está disponible con Supabase. Use el panel de Supabase para restaurar.' });
-});
-
-// Temporary: list available Gemini models
-router.get('/ai/models', async (req, res) => {
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.json({ error: 'No GEMINI_API_KEY configured' });
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-    const data = await response.json();
-    res.json(data);
-  } catch (e: any) {
-    res.json({ error: e.message });
-  }
 });
 
 // AI Chat assistant
