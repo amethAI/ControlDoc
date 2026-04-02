@@ -1876,7 +1876,7 @@ Totales: ${employees?.length || 0} empleados activos, ${expired?.length || 0} do
 
     const genAI = new GoogleGenAI({ apiKey });
     const result = await genAI.models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash-lite',
       contents: question,
       config: { systemInstruction: systemPrompt },
     });
