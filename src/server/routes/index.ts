@@ -1877,8 +1877,7 @@ Totales: ${employees?.length || 0} empleados activos, ${expired?.length || 0} do
     const genAI = new GoogleGenAI({ apiKey, apiVersion: 'v1' });
     const result = await genAI.models.generateContent({
       model: 'gemini-1.5-flash',
-      contents: question,
-      config: { systemInstruction: systemPrompt },
+      contents: `${systemPrompt}\n\nPregunta: ${question}`,
     });
 
     const text = result.text || 'No se pudo generar una respuesta.';
