@@ -1821,77 +1821,71 @@ router.post('/ai/chat', isAuthenticated, async (req, res) => {
     const user = (req as any).user;
     const isPrivileged = ['Administrador', 'Supervisor Interno', 'Supervisora'].includes(user.role);
 
-    let systemPrompt: string;
+    let contextBlock = '';
 
     if (isPrivileged) {
-      const today = new Date().toISOString().split('T')[0];
-      const thirtyDays = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const thirtyDays = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      const [{ data: clubs }, { data: employees }, { data: expired }, { data: expiring }] = await Promise.all([
-        supabase.from('clubs').select('id, name').neq('id', 'global'),
-        supabase.from('employees').select('id, full_name, club_id, contract_type').eq('status', 'activo'),
-        supabase.from('employee_documents')
-          .select('id, expiry_date, document_types!inner(name), employees!inner(full_name, club_id, status)')
-          .eq('is_current', 1).lt('expiry_date', today).eq('employees.status', 'activo'),
-        supabase.from('employee_documents')
-          .select('id, expiry_date, document_types!inner(name), employees!inner(full_name, club_id, status)')
-          .eq('is_current', 1).gte('expiry_date', today).lte('expiry_date', thirtyDays).eq('employees.status', 'activo'),
-      ]);
+        const { data: clubs } = await supabase.from('clubs').select('id, name').neq('id', 'global');
+        const { data: employees } = await supabase.from('employees').select('id, full_name, club_id').eq('status', 'activo');
+        const { data: expired } = await supabase
+          .from('employee_documents')
+          .select('expiry_date, document_types(name), employees(full_name, club_id)')
+          .eq('is_current', 1)
+          .lt('expiry_date', today)
+          .limit(50);
+        const { data: expiring } = await supabase
+          .from('employee_documents')
+          .select('expiry_date, document_types(name), employees(full_name, club_id)')
+          .eq('is_current', 1)
+          .gte('expiry_date', today)
+          .lte('expiry_date', thirtyDays)
+          .limit(50);
 
-      const clubSummary = clubs?.map(club => {
-        const emp = employees?.filter(e => e.club_id === club.id) || [];
-        const exp = expired?.filter(d => (d.employees as any).club_id === club.id) || [];
-        const prox = expiring?.filter(d => (d.employees as any).club_id === club.id) || [];
-        return `- ${club.name}: ${emp.length} empleados activos, ${exp.length} docs vencidos, ${prox.length} próximos a vencer`;
-      }).join('\n') || 'Sin datos';
+        const clubLines = clubs?.map(club => {
+          const empCount = employees?.filter(e => e.club_id === club.id).length || 0;
+          const expCount = expired?.filter(d => (d.employees as any)?.club_id === club.id).length || 0;
+          const proxCount = expiring?.filter(d => (d.employees as any)?.club_id === club.id).length || 0;
+          return `- ${club.name}: ${empCount} empleados, ${expCount} docs vencidos, ${proxCount} próximos a vencer`;
+        }).join('\n') || 'Sin datos de clubs';
 
-      const expiredDetails = expired?.slice(0, 30).map(d =>
-        `  • ${(d.employees as any).full_name} — ${(d.document_types as any).name} (venció ${d.expiry_date})`
-      ).join('\n') || 'Ninguno';
+        const expiredLines = expired?.slice(0, 20).map(d =>
+          `  • ${(d.employees as any)?.full_name || 'Desconocido'} — ${(d.document_types as any)?.name || 'Documento'} (venció ${d.expiry_date})`
+        ).join('\n') || 'Ninguno';
 
-      systemPrompt = `Eres el asistente inteligente de ControlDoc, la plataforma de gestión documental de PSMT.
-Responde siempre en español, de forma concisa y útil. Usa los datos reales que te proporciono a continuación.
-
+        contextBlock = `
 DATOS ACTUALES (${today}):
 Estado por club:
-${clubSummary}
+${clubLines}
 
-Empleados con documentos vencidos (hasta 30):
-${expiredDetails}
+Documentos vencidos:
+${expiredLines}
 
-Totales:
-- Empleados activos: ${employees?.length || 0}
-- Documentos vencidos: ${expired?.length || 0}
-- Próximos a vencer (30 días): ${expiring?.length || 0}
-
-Responde la pregunta del usuario con base en estos datos. Si no hay información suficiente, indícalo claramente.`;
-    } else {
-      systemPrompt = `Eres el asistente de ayuda de ControlDoc, la plataforma de gestión documental de PSMT.
-Responde siempre en español, de forma amable y clara.
-Tu función es ayudar a los usuarios a navegar y usar la plataforma correctamente.
-
-Las secciones disponibles son:
-- Check List: revisa las fechas de vencimiento de documentos de empleados
-- Check List 1 Año: seguimiento específico de empleados con contrato de 1 año
-- Asistencia: registro de asistencia del personal por club
-- Clubes: visualiza los clubes y su personal asignado
-- Empleados: gestión completa de empleados y sus documentos
-- Configuración (solo Admin): usuarios, alertas, auditoría e historial de accesos
-
-Responde dudas sobre cómo usar la aplicación. No tienes acceso a datos personales de empleados.`;
+Totales: ${employees?.length || 0} empleados activos, ${expired?.length || 0} docs vencidos, ${expiring?.length || 0} próximos a vencer (30 días).`;
+      } catch (dbErr) {
+        console.error('AI chat DB error:', dbErr);
+        contextBlock = '\n(No se pudo cargar el contexto de la base de datos en este momento.)';
+      }
     }
 
+    const systemPrompt = isPrivileged
+      ? `Eres el asistente inteligente de ControlDoc, la plataforma de gestión documental de PSMT. Responde siempre en español, de forma concisa y útil.${contextBlock}\n\nResponde la pregunta del usuario con base en estos datos.`
+      : `Eres el asistente de ayuda de ControlDoc de PSMT. Responde en español, de forma amable y clara. Ayuda a los usuarios con el uso de la plataforma: Check List (vencimientos), Check List 1 Año (contratos anuales), Asistencia, Clubes, Empleados y Configuración. No tienes acceso a datos privados.`;
+
     const genAI = new GoogleGenAI({ apiKey });
-    const response = await genAI.models.generateContent({
+    const result = await genAI.models.generateContent({
       model: 'gemini-2.0-flash',
-      contents: [{ role: 'user', parts: [{ text: question }] }],
+      contents: question,
       config: { systemInstruction: systemPrompt },
     });
 
-    res.json({ response: response.text });
+    const text = result.text || 'No se pudo generar una respuesta.';
+    res.json({ response: text });
   } catch (error: any) {
-    console.error('AI chat error:', error);
-    res.status(500).json({ error: 'Error al procesar tu pregunta' });
+    console.error('AI chat error:', error?.message || error);
+    res.status(500).json({ error: `Error: ${error?.message || 'Error al procesar tu pregunta'}` });
   }
 });
 
