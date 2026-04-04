@@ -87,16 +87,31 @@ export async function sendExpirationAlerts(isTest = false) {
       }
     }
 
+    // Build set of employee IDs that already have a contract document in the alerts
+    // to avoid duplicating "Terminación de Contrato" when "Contrato firmado" is already present
+    const employeesWithContractDoc = new Set<string>();
+    if (expiringDocs) {
+      for (const doc of expiringDocs) {
+        const docName = (doc.document_types as any).name?.toLowerCase() || '';
+        const contractType = (doc.employees as any).contract_type?.toLowerCase() || '';
+        if (docName.includes('contrato') && contractType !== 'indefinido') {
+          employeesWithContractDoc.add(doc.employee_id);
+        }
+      }
+    }
+
     // Process expiring contracts and probationary periods
     if (activeEmployees && activeEmployees.length > 0) {
       const targetThreshold = isTest ? new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000) : thresholdDate;
-      
+
       for (const emp of activeEmployees) {
         const clubId = emp.club_id;
         const clubName = clubMap.get(clubId) || 'Desconocido';
 
         // Check contract_end
-        if (emp.contract_end && emp.contract_type?.toLowerCase() !== 'indefinido') {
+        // Skip if employee already has a contract document alert (e.g. "Contrato firmado")
+        // to avoid showing the same expiration twice
+        if (emp.contract_end && emp.contract_type?.toLowerCase() !== 'indefinido' && !employeesWithContractDoc.has(emp.id)) {
           const contractEnd = new Date(emp.contract_end);
           if (contractEnd <= targetThreshold) {
             if (!alertsByClub[clubId]) {

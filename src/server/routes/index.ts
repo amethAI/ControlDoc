@@ -1401,6 +1401,15 @@ router.get('/dashboard', canViewData, async (req, res) => {
     
     const { data: expiredContractsData } = await expiredContractsQuery;
     
+    // Build set of employee IDs that already have a contract document in expired docs
+    // to avoid showing duplicate "Contrato" entries when "Contrato firmado" already appears
+    const expiredEmployeesWithContractDoc = new Set(
+      (expiredDocsData || [])
+        .filter(d => (d.document_types as any).name?.toLowerCase().includes('contrato') &&
+                     (d.employees as any).contract_type?.toLowerCase() !== 'indefinido')
+        .map(d => (d.employees as any).id)
+    );
+
     const expiredList = [
       ...(expiredDocsData || [])
         .filter(d => {
@@ -1420,7 +1429,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
         status: 'expired'
       })),
       ...(expiredContractsData || [])
-        .filter(e => e.contract_type?.toLowerCase() !== 'indefinido')
+        .filter(e => e.contract_type?.toLowerCase() !== 'indefinido' && !expiredEmployeesWithContractDoc.has(e.id))
         .map(e => ({
         id: `contract-${e.id}`,
         employee_name: e.full_name,
@@ -1463,6 +1472,14 @@ router.get('/dashboard', canViewData, async (req, res) => {
     
     const { data: expiringContractsData } = await expiringContractsQuery;
     
+    // Same deduplication for expiring docs
+    const expiringEmployeesWithContractDoc = new Set(
+      (expiringDocsData || [])
+        .filter(d => (d.document_types as any).name?.toLowerCase().includes('contrato') &&
+                     (d.employees as any).contract_type?.toLowerCase() !== 'indefinido')
+        .map(d => (d.employees as any).id)
+    );
+
     const expiringList = [
       ...(expiringDocsData || [])
         .filter(d => {
@@ -1482,7 +1499,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
         status: 'expiring'
       })),
       ...(expiringContractsData || [])
-        .filter(e => e.contract_type?.toLowerCase() !== 'indefinido')
+        .filter(e => e.contract_type?.toLowerCase() !== 'indefinido' && !expiringEmployeesWithContractDoc.has(e.id))
         .map(e => ({
         id: `contract-${e.id}`,
         employee_name: e.full_name,
