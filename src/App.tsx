@@ -24,6 +24,7 @@ import AccessLogs from './pages/AccessLogs';
 import Expirations from './pages/Expirations';
 import ChecklistContratos from './pages/ChecklistContratos';
 import RolesInfo from './pages/RolesInfo';
+import Cumpleanos from './pages/Cumpleanos';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
@@ -60,6 +61,7 @@ function AppRoutes() {
         <Route path="configuracion/auditoria" element={<LogAuditoria />} />
         <Route path="configuracion/accesos" element={<AccessLogs />} />
         <Route path="roles" element={<RolesInfo />} />
+        <Route path="cumpleanos" element={<Cumpleanos />} />
         {/* Add more routes here as needed */}
       </Route>
     </Routes>

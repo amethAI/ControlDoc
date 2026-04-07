@@ -3,18 +3,19 @@ import React from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import AiAssistant from './AiAssistant';
 import { useAuth } from '../context/AuthContext';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Settings, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  Users,
+  Settings,
+  LogOut,
   Shield,
   Building2,
   CalendarCheck,
   TrendingUp,
   CalendarClock,
   ClipboardList,
-  Info
+  Info,
+  Cake
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -33,6 +34,9 @@ export default function Layout() {
     ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' && user?.role !== 'Supervisor Cliente' ? [{ name: 'Empleados', href: '/empleados', icon: Users }] : []),
     { name: 'Check List', href: '/vencimientos', icon: CalendarClock },
     { name: 'Check List 1 Año', href: '/checklist-contratos', icon: ClipboardList },
+    ...((user?.role === 'Administrador' || user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora') ? [
+      { name: 'Cumpleaños', href: '/cumpleanos', icon: Cake }
+    ] : []),
     ...(user?.role !== 'Supervisor Cliente' && user?.role !== 'Coordinadora' ? [{ name: 'Asistencia', href: '/asistencia', icon: CalendarCheck }] : []),
     ...((user?.role === 'Administrador' || user?.role === 'Supervisor Interno') ? [
       { name: 'Rendimiento', href: '/rendimiento', icon: TrendingUp }

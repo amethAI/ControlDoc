@@ -1905,5 +1905,56 @@ Totales: ${employees?.length || 0} empleados activos, ${expired?.length || 0} do
   }
 });
 
+// GET /api/employees/birthdays
+router.get('/employees/birthdays', canViewData, async (req, res) => {
+  const { month } = req.query;
+  const user = (req as any).user;
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : undefined;
+
+  let query = supabase
+    .from('employees')
+    .select('id, full_name, birth_date, club_id, clubs(name)')
+    .eq('status', 'activo')
+    .not('birth_date', 'is', null)
+    .order('birth_date', { ascending: true });
+
+  if (club_id) query = query.eq('club_id', club_id);
+
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+
+  const filtered = month
+    ? (data || []).filter((e: any) => new Date(e.birth_date).getMonth() + 1 === Number(month))
+    : data || [];
+
+  res.json(filtered);
+});
+
+// POST /api/employees/import-birthdays
+router.post('/employees/import-birthdays', isAuthenticated, async (req, res) => {
+  const records: { name: string; birth_date: string }[] = req.body;
+  if (!Array.isArray(records)) return res.status(400).json({ error: 'Se esperaba un array' });
+
+  let updated = 0;
+  const notFound: string[] = [];
+
+  for (const r of records) {
+    if (!r.name || !r.birth_date) continue;
+    const { data } = await supabase
+      .from('employees')
+      .select('id')
+      .ilike('full_name', r.name.trim())
+      .limit(1);
+
+    if (data && data.length > 0) {
+      await supabase.from('employees').update({ birth_date: r.birth_date }).eq('id', data[0].id);
+      updated++;
+    } else {
+      notFound.push(r.name);
+    }
+  }
+  res.json({ updated, notFound });
+});
+
 export default router;
 
