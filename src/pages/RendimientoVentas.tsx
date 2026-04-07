@@ -270,10 +270,10 @@ export default function RendimientoVentas() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200">
-                            {employee?.name?.charAt(0).toUpperCase()}
+                            {employee?.full_name?.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-slate-800">{employee?.name}</p>
+                            <p className="text-sm font-bold text-slate-800">{employee?.full_name}</p>
                             <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">ID: {employee?.id.split('-')[0]}</p>
                           </div>
                         </div>
