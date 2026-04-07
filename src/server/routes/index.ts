@@ -1532,7 +1532,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
     }
 
     // 6. Club Distribution
-    const { data: clubs } = await supabase.from('clubs').select('id, name').neq('id', 'global');
+    const { data: clubs } = await supabase.from('clubs').select('id, name').neq('id', 'global').neq('id', 'hr');
     const { data: activeEmployees } = await supabase.from('employees').select('club_id').eq('status', 'activo');
     
     const clubDistribution = clubs?.map(club => {
