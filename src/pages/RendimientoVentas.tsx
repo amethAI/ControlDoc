@@ -136,26 +136,25 @@ export default function RendimientoVentas() {
     }
   }, []);
 
-  // Auto-save: fires 2 seconds after the last change
+  // Keep a ref to latest records for onBlur saves (avoids stale closure)
+  const latestRecordsRef = useRef<PerformanceRecord[]>([]);
   useEffect(() => {
-    if (isInitialLoad.current || records.length === 0) return;
-
-    setAutoSaveStatus('pending');
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => {
-      saveRecords(records);
-    }, 2000);
-
-    return () => {
-      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    };
+    latestRecordsRef.current = records;
   }, [records]);
 
   const handleRecordChange = (index: number, field: keyof PerformanceRecord, value: any) => {
     const newRecords = [...records];
     newRecords[index] = { ...newRecords[index], [field]: value };
     setRecords(newRecords);
+    setAutoSaveStatus('pending');
   };
+
+  // Save when user leaves a field — fires before SPA navigation
+  const handleFieldBlur = useCallback(() => {
+    if (isInitialLoad.current || latestRecordsRef.current.length === 0) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    saveRecords(latestRecordsRef.current);
+  }, [saveRecords]);
 
   const handleSave = async () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
@@ -313,6 +312,7 @@ export default function RendimientoVentas() {
                             type="text"
                             value={record.demostradora_name || ''}
                             onChange={(e) => handleRecordChange(index, 'demostradora_name', e.target.value)}
+                            onBlur={handleFieldBlur}
                             placeholder="Nombre de la demostradora"
                             className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-transparent hover:bg-white focus:bg-white"
                           />
@@ -323,6 +323,7 @@ export default function RendimientoVentas() {
                           type="number"
                           value={record.average || ''}
                           onChange={(e) => handleRecordChange(index, 'average', e.target.value)}
+                          onBlur={handleFieldBlur}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                           placeholder="0"
                         />
@@ -332,6 +333,7 @@ export default function RendimientoVentas() {
                           type="number"
                           value={record.meta || ''}
                           onChange={(e) => handleRecordChange(index, 'meta', e.target.value)}
+                          onBlur={handleFieldBlur}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all font-bold text-blue-600"
                           placeholder="0"
                         />
@@ -341,6 +343,7 @@ export default function RendimientoVentas() {
                           type="text"
                           value={record.item_code || ''}
                           onChange={(e) => handleRecordChange(index, 'item_code', e.target.value)}
+                          onBlur={handleFieldBlur}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono"
                           placeholder="Código Item"
                         />
@@ -350,6 +353,7 @@ export default function RendimientoVentas() {
                           type="number"
                           value={record.actual_sales || ''}
                           onChange={(e) => handleRecordChange(index, 'actual_sales', e.target.value)}
+                          onBlur={handleFieldBlur}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all font-bold text-emerald-600"
                           placeholder="0"
                         />
