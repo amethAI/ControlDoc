@@ -385,6 +385,160 @@ export async function sendExpirationAlerts(isTest = false) {
       }
     }
 
+    // ── HR Email ────────────────────────────────────────────────────────────────
+    // Send contract terminations, probationary periods and upcoming birthdays to HR
+    const { data: hrRecipients } = await supabase
+      .from('alert_recipients')
+      .select('email')
+      .eq('club_id', 'hr');
+
+    if (hrRecipients && hrRecipients.length > 0) {
+      const hrEmails = Array.from(new Set(hrRecipients.map((r: any) => r.email))).join(', ');
+
+      // Collect HR-relevant entries from all clubs
+      const hrDocs: { full_name: string; doc_name: string; expiry_date: string; club_name: string }[] = [];
+      for (const clubId in alertsByClub) {
+        const clubData = alertsByClub[clubId];
+        for (const doc of clubData.docs) {
+          if (
+            doc.doc_name === 'Terminación de Contrato' ||
+            doc.doc_name === 'Terminación de Periodo Probatorio'
+          ) {
+            hrDocs.push({ ...doc, club_name: clubData.club_name });
+          }
+        }
+      }
+
+      // Fetch upcoming birthdays (today + next 7 days)
+      const { data: allEmpsBirthday } = await supabase
+        .from('employees')
+        .select('full_name, birth_date, club_id')
+        .eq('status', 'activo')
+        .not('birth_date', 'is', null);
+
+      const upcomingBirthdays: { full_name: string; birth_date: string; club_name: string }[] = [];
+      if (allEmpsBirthday) {
+        for (const emp of allEmpsBirthday) {
+          const birth = new Date(emp.birth_date);
+          const thisYear = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
+          const diffDays = Math.ceil((thisYear.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays >= 0 && diffDays <= 7) {
+            upcomingBirthdays.push({
+              full_name: emp.full_name,
+              birth_date: emp.birth_date,
+              club_name: clubMap.get(emp.club_id) || 'Desconocido'
+            });
+          }
+        }
+      }
+
+      if (hrDocs.length > 0 || upcomingBirthdays.length > 0) {
+        let hrHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+            <div style="background-color: #7c3aed; color: white; padding: 20px; text-align: center;">
+              <h2 style="margin: 0;">📋 Resumen de Recursos Humanos</h2>
+              <p style="margin: 5px 0 0 0; opacity: 0.9;">PSMT — ${today.toISOString().split('T')[0]}</p>
+            </div>
+            <div style="padding: 20px;">
+        `;
+
+        if (hrDocs.length > 0) {
+          hrHtml += `
+            <h3 style="color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">⚠️ Vencimientos de Contrato y Periodo Probatorio</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+              <thead>
+                <tr style="background-color: #f8fafc;">
+                  <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; text-align: left;">Empleado</th>
+                  <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; text-align: left;">Club</th>
+                  <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; text-align: left;">Alerta</th>
+                  <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; text-align: left;">Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+          for (const doc of hrDocs) {
+            hrHtml += `
+              <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;"><strong>${doc.full_name}</strong></td>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${doc.club_name}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${doc.doc_name}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #dc2626; font-weight: bold;">${doc.expiry_date}</td>
+              </tr>
+            `;
+          }
+          hrHtml += `</tbody></table>`;
+        }
+
+        if (upcomingBirthdays.length > 0) {
+          hrHtml += `
+            <h3 style="color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">🎂 Cumpleaños próximos (próximos 7 días)</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="background-color: #f8fafc;">
+                  <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; text-align: left;">Empleado</th>
+                  <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; text-align: left;">Club</th>
+                  <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; text-align: left;">Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+          for (const emp of upcomingBirthdays) {
+            const birth = new Date(emp.birth_date);
+            hrHtml += `
+              <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;"><strong>${emp.full_name}</strong></td>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${emp.club_name}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${birth.toLocaleDateString('es-PA', { day: '2-digit', month: 'long' })}</td>
+              </tr>
+            `;
+          }
+          hrHtml += `</tbody></table>`;
+        }
+
+        hrHtml += `
+            </div>
+            <div style="background-color: #f8fafc; padding: 15px; text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0;">
+              Este es un mensaje automático del Sistema de Gestión PSMT — Recursos Humanos.
+            </div>
+          </div>
+        `;
+
+        try {
+          if (useBrevo) {
+            await fetch('https://api.brevo.com/v3/smtp/email', {
+              method: 'POST',
+              headers: { 'accept': 'application/json', 'api-key': process.env.BREVO_API_KEY as string, 'content-type': 'application/json' },
+              body: JSON.stringify({
+                sender: { name: 'Sistema PSMT', email: process.env.EMAIL_USER || 'alertaspsmt@gmail.com' },
+                to: hrEmails.split(',').map((e: string) => ({ email: e.trim() })),
+                subject: `📋 Resumen RRHH — ${today.toISOString().split('T')[0]}`,
+                htmlContent: hrHtml
+              })
+            });
+          } else if (useResend && resend) {
+            await resend.emails.send({
+              from: process.env.EMAIL_FROM || 'Sistema PSMT <onboarding@resend.dev>',
+              to: hrEmails.split(',').map((e: string) => e.trim()),
+              subject: `📋 Resumen RRHH — ${today.toISOString().split('T')[0]}`,
+              html: hrHtml,
+            });
+          } else if (transporter) {
+            await transporter.sendMail({
+              from: process.env.EMAIL_FROM || `"Sistema PSMT" <${process.env.EMAIL_USER}>`,
+              to: hrEmails,
+              subject: `📋 Resumen RRHH — ${today.toISOString().split('T')[0]}`,
+              html: hrHtml,
+            });
+          }
+          sentCount++;
+          console.log(`Correo RRHH enviado a ${hrEmails}`);
+        } catch (hrErr: any) {
+          console.error('Error al enviar correo RRHH:', hrErr.message);
+        }
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────────
+
     if (sentCount === 0) {
        return { success: false, error: `No se pudo enviar el correo. Detalle técnico: ${lastError || 'Verifique credenciales y destinatarios.'}` };
     }

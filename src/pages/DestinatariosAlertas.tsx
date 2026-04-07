@@ -1,7 +1,7 @@
 import { apiFetch } from '../lib/api';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Bell, Search, Shield } from 'lucide-react';
+import { ArrowLeft, Bell, Shield, UserCheck } from 'lucide-react';
 import AlertRecipientsModal from '../components/AlertRecipientsModal';
 
 export default function DestinatariosAlertas() {
@@ -59,6 +59,42 @@ export default function DestinatariosAlertas() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
+            {/* HR Recipients Row */}
+            <tr className="bg-purple-50/50">
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="flex items-center">
+                  <div className="h-8 w-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center">
+                    <UserCheck className="h-4 w-4" />
+                  </div>
+                  <div className="ml-3">
+                    <div className="text-sm font-bold text-slate-900">Recursos Humanos</div>
+                    <div className="text-xs text-slate-500">Recibe: vencimientos de contrato, periodo probatorio y cumpleaños</div>
+                  </div>
+                </div>
+              </td>
+              <td className="px-6 py-4">
+                <div className="flex flex-wrap gap-2">
+                  {getEmailsForClub('hr').length > 0 ? (
+                    getEmailsForClub('hr').map(email => (
+                      <span key={email} className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                        {email}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-slate-400 italic">Sin configurar</span>
+                  )}
+                </div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button
+                  onClick={() => handleEdit({ id: 'hr', name: 'Recursos Humanos' })}
+                  className="text-purple-600 hover:text-purple-900 font-bold"
+                >
+                  Editar
+                </button>
+              </td>
+            </tr>
+
             {/* Global Recipients Row */}
             <tr className="bg-slate-50/50">
               <td className="px-6 py-4 whitespace-nowrap">
