@@ -272,11 +272,11 @@ export default function RendimientoVentas() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200 shrink-0">
-                            {(record.demostradora_name || employee?.full_name || '?').charAt(0).toUpperCase()}
+                            {(record.demostradora_name || '?').charAt(0).toUpperCase()}
                           </div>
                           <input
                             type="text"
-                            value={record.demostradora_name ?? (employee?.full_name || '')}
+                            value={record.demostradora_name || ''}
                             onChange={(e) => handleRecordChange(index, 'demostradora_name', e.target.value)}
                             placeholder="Nombre de la demostradora"
                             className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-transparent hover:bg-white focus:bg-white"
