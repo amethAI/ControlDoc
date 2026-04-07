@@ -210,6 +210,7 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
                 <option value="Supervisor Interno">Supervisor Interno</option>
                 <option value="Supervisor Cliente">Supervisor Cliente</option>
                 <option value="Coordinadora">Coordinadora</option>
+                <option value="Recursos Humanos">Recursos Humanos</option>
               </select>
             </div>
           </div>

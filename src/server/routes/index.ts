@@ -63,7 +63,7 @@ const isAdmin = (req: any, res: any, next: any) => {
 
 // Middleware to check if user can view data (Employees, Attendance, Dashboard)
 const canViewData = (req: any, res: any, next: any) => {
-  const allowedRoles = ['Administrador', 'Supervisor Interno', 'Supervisora', 'Coordinadora', 'Supervisor Cliente'];
+  const allowedRoles = ['Administrador', 'Supervisor Interno', 'Supervisora', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos'];
   const user = (req as any).user;
   
   if (!user || !allowedRoles.includes(user.role)) {
