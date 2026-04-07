@@ -154,14 +154,19 @@ router.post('/performance', isAuthenticated, isInternal, async (req, res) => {
   }
   
   try {
-    const { data, error } = await supabase
-      .from('daily_performance')
-      .upsert(records.map((r: any) => ({
-        ...r,
+    const cleanRecords = records.map((r: any) => {
+      const { employee, ...rest } = r;
+      return {
+        ...rest,
         created_by: user.id,
         updated_at: new Date().toISOString()
-      })));
-    
+      };
+    });
+
+    const { data, error } = await supabase
+      .from('daily_performance')
+      .upsert(cleanRecords, { onConflict: 'date,employee_id,club_id' });
+
     if (error) throw error;
     res.json({ message: 'Datos guardados correctamente', data });
   } catch (error: any) {
