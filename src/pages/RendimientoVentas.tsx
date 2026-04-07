@@ -1,15 +1,15 @@
 import { apiFetch } from '../lib/api';
-import React, { useState, useEffect } from 'react';
-import { 
-  TrendingUp, 
-  Calendar, 
-  Building2, 
-  Save, 
-  Plus, 
-  Trash2, 
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  TrendingUp,
+  Calendar,
+  Building2,
+  Save,
   AlertCircle,
   CheckCircle2,
-  BarChart3
+  BarChart3,
+  Cloud,
+  CloudOff
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
@@ -36,6 +36,9 @@ export default function RendimientoVentas() {
   const [records, setRecords] = useState<PerformanceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'pending' | 'error'>('saved');
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialLoad = useRef(true);
 
   if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
     return (
@@ -77,6 +80,7 @@ export default function RendimientoVentas() {
 
   useEffect(() => {
     if (selectedClub && date) {
+      isInitialLoad.current = true;
       fetchPerformance();
     }
   }, [selectedClub, date]);
@@ -86,11 +90,10 @@ export default function RendimientoVentas() {
     try {
       const res = await apiFetch(`/api/performance?date=${date}&club_id=${selectedClub}`);
       const data = await res.json();
-      
+
       if (data.length > 0) {
         setRecords(data);
       } else {
-        // If no records, initialize with employees from that club
         const clubEmployees = employees.filter(e => e.club_id === selectedClub);
         setRecords(clubEmployees.map(e => ({
           date,
@@ -107,47 +110,57 @@ export default function RendimientoVentas() {
       console.error('Error fetching performance:', error);
     } finally {
       setLoading(false);
+      isInitialLoad.current = false;
     }
   };
 
-  const handleRecordChange = (index: number, field: keyof PerformanceRecord, value: any) => {
-    const newRecords = [...records];
-    const record = { ...newRecords[index], [field]: value };
-    
-    // Auto-calculate average if meta and sales are present
-    if (field === 'meta' || field === 'actual_sales') {
-      const meta = field === 'meta' ? Number(value) : record.meta;
-      const sales = field === 'actual_sales' ? Number(value) : record.actual_sales;
-      // In the note, average seems to be a specific KPI, but let's assume it's sales/meta or similar
-      // Actually, the note has "Average - Meta - Item - Venta"
-      // Let's just let them input it for now as per the note
-    }
-    
-    newRecords[index] = record;
-    setRecords(newRecords);
-  };
-
-  const handleSave = async () => {
+  const saveRecords = useCallback(async (recordsToSave: PerformanceRecord[]) => {
     setSaving(true);
     try {
       const res = await apiFetch('/api/performance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(records)
+        body: JSON.stringify(recordsToSave)
       });
-      
+
       if (res.ok) {
-        toast.success('Datos guardados correctamente');
-        fetchPerformance();
+        setAutoSaveStatus('saved');
       } else {
-        const data = await res.json();
-        toast.error(data.error || 'Error al guardar datos');
+        setAutoSaveStatus('error');
+        toast.error('Error al guardar automáticamente');
       }
-    } catch (error) {
-      toast.error('Error de red');
+    } catch {
+      setAutoSaveStatus('error');
     } finally {
       setSaving(false);
     }
+  }, []);
+
+  // Auto-save: fires 2 seconds after the last change
+  useEffect(() => {
+    if (isInitialLoad.current || records.length === 0) return;
+
+    setAutoSaveStatus('pending');
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      saveRecords(records);
+    }, 2000);
+
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [records]);
+
+  const handleRecordChange = (index: number, field: keyof PerformanceRecord, value: any) => {
+    const newRecords = [...records];
+    newRecords[index] = { ...newRecords[index], [field]: value };
+    setRecords(newRecords);
+  };
+
+  const handleSave = async () => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    await saveRecords(records);
+    toast.success('Datos guardados correctamente');
   };
 
   const calculateCompliance = (meta: number, sales: number) => {
@@ -190,6 +203,28 @@ export default function RendimientoVentas() {
               ))}
             </select>
           </div>
+          {/* Auto-save status indicator */}
+          <div className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border">
+            {autoSaveStatus === 'pending' && (
+              <>
+                <div className="h-3 w-3 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
+                <span className="text-slate-500">Guardando...</span>
+              </>
+            )}
+            {autoSaveStatus === 'saved' && (
+              <>
+                <Cloud className="h-3.5 w-3.5 text-emerald-500" />
+                <span className="text-emerald-600">Guardado</span>
+              </>
+            )}
+            {autoSaveStatus === 'error' && (
+              <>
+                <CloudOff className="h-3.5 w-3.5 text-red-500" />
+                <span className="text-red-600">Error al guardar</span>
+              </>
+            )}
+          </div>
+
           <button
             onClick={handleSave}
             disabled={saving || records.length === 0}
