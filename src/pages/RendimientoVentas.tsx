@@ -123,24 +123,26 @@ export default function RendimientoVentas() {
         body: JSON.stringify(recordsToSave)
       });
 
+      const body = await res.json();
+
       if (res.ok) {
         setAutoSaveStatus('saved');
+        toast.success('Guardado correctamente');
       } else {
         setAutoSaveStatus('error');
-        toast.error('Error al guardar automáticamente');
+        toast.error(`Error: ${body?.error || res.status}`);
       }
-    } catch {
+    } catch (err: any) {
       setAutoSaveStatus('error');
+      toast.error(`Error de red: ${err?.message || 'desconocido'}`);
     } finally {
       setSaving(false);
     }
   }, []);
 
-  // Keep a ref to latest records for onBlur saves (avoids stale closure)
-  const latestRecordsRef = useRef<PerformanceRecord[]>([]);
-  useEffect(() => {
-    latestRecordsRef.current = records;
-  }, [records]);
+  // Update ref synchronously during render — no useEffect, avoids stale closure on onBlur
+  const latestRecordsRef = useRef<PerformanceRecord[]>(records);
+  latestRecordsRef.current = records;
 
   const handleRecordChange = (index: number, field: keyof PerformanceRecord, value: any) => {
     const newRecords = [...records];
