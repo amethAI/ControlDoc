@@ -22,12 +22,13 @@ export async function sendExpirationAlerts(isTest = false) {
       .from('employee_documents')
       .select(`
         *,
-        employees!inner(full_name, club_id, contract_type),
+        employees!inner(full_name, club_id, contract_type, status),
         document_types!inner(name, has_expiry)
       `)
       .eq('document_types.has_expiry', 1)
       .not('expiry_date', 'is', null)
-      .eq('is_current', 1);
+      .eq('is_current', 1)
+      .eq('employees.status', 'activo');
 
     // Si no es una prueba, filtramos por fecha. 
     // Si es prueba, traemos algunos para verificar el formato del correo.
@@ -65,8 +66,13 @@ export async function sendExpirationAlerts(isTest = false) {
         const docName = (doc.document_types as any).name?.toLowerCase() || '';
         const contractType = (doc.employees as any).contract_type?.toLowerCase() || '';
         
-        // Ignore 'Contrato firmado' or 'Contrato sellado' expiration if contract is 'Indefinido'
-        if (docName.includes('contrato') && contractType === 'indefinido') {
+        // Exclude all contract documents — they are not actionable alerts
+        if (docName.includes('contrato')) {
+          continue;
+        }
+
+        // Skip inactive employees (extra guard in case the join filter doesn't apply)
+        if ((doc.employees as any).status && (doc.employees as any).status !== 'activo') {
           continue;
         }
 
