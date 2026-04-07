@@ -100,7 +100,7 @@ export default function RendimientoVentas() {
           meta: 0,
           actual_sales: 0,
           average: 0,
-          demostradora_name: e.full_name || ''
+          demostradora_name: ''
         })));
       }
     } catch (error) {

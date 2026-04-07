@@ -70,19 +70,6 @@ export default function Dashboard() {
     { name: 'Doc. Incompleta', value: stats.incompleteEmployees, icon: FileWarning, color: 'bg-orange-500', textColor: 'text-orange-600' },
   ];
 
-  if (stats.performanceStats) {
-    const compliance = stats.performanceStats.totalMeta > 0 
-      ? Math.round((stats.performanceStats.totalVentas / stats.performanceStats.totalMeta) * 100) 
-      : 0;
-    
-    kpis.push({ 
-      name: 'Cumplimiento de Ventas Hoy', 
-      value: `${compliance}%`, 
-      icon: TrendingUp, 
-      color: 'bg-emerald-500', 
-      textColor: 'text-emerald-600' 
-    });
-  }
 
   if (loading) {
     return (
