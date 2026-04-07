@@ -24,6 +24,7 @@ interface PerformanceRecord {
   meta: number;
   actual_sales: number;
   average: number;
+  demostradora_name?: string;
 }
 
 export default function RendimientoVentas() {
@@ -98,7 +99,8 @@ export default function RendimientoVentas() {
           item_code: '',
           meta: 0,
           actual_sales: 0,
-          average: 0
+          average: 0,
+          demostradora_name: e.full_name || ''
         })));
       }
     } catch (error) {
@@ -269,13 +271,16 @@ export default function RendimientoVentas() {
                     <tr key={record.employee_id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200">
-                            {employee?.full_name?.charAt(0).toUpperCase()}
+                          <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200 shrink-0">
+                            {(record.demostradora_name || employee?.full_name || '?').charAt(0).toUpperCase()}
                           </div>
-                          <div>
-                            <p className="text-sm font-bold text-slate-800">{employee?.full_name}</p>
-                            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">ID: {employee?.id.split('-')[0]}</p>
-                          </div>
+                          <input
+                            type="text"
+                            value={record.demostradora_name ?? (employee?.full_name || '')}
+                            onChange={(e) => handleRecordChange(index, 'demostradora_name', e.target.value)}
+                            placeholder="Nombre de la demostradora"
+                            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-transparent hover:bg-white focus:bg-white"
+                          />
                         </div>
                       </td>
                       <td className="px-6 py-4">

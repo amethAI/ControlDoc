@@ -125,7 +125,7 @@ router.get('/performance', isAuthenticated, isInternal, async (req, res) => {
       .from('daily_performance')
       .select(`
         *,
-        employee:employees(id, name)
+        employee:employees(id, full_name)
       `);
     
     if (date) query = query.eq('date', date);
