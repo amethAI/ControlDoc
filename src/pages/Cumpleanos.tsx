@@ -83,9 +83,9 @@ export default function Cumpleanos() {
     setImporting(true);
     try {
       const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer);
+      const wb = XLSX.read(buffer, { cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows: any[] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      const rows: any[] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
 
       // Find header row and column indexes
       let nameCol = -1, dateCol = -1, dataStartRow = 0;
@@ -110,21 +110,32 @@ export default function Cumpleanos() {
           let rawDate = row[dateCol];
           let birth_date = '';
 
-          if (typeof rawDate === 'number') {
-            // Excel serial date
+          if (rawDate instanceof Date) {
+            // JS Date object (when cellDates: true)
+            if (!isNaN(rawDate.getTime())) {
+              birth_date = `${rawDate.getFullYear()}-${String(rawDate.getMonth() + 1).padStart(2, '0')}-${String(rawDate.getDate()).padStart(2, '0')}`;
+            }
+          } else if (typeof rawDate === 'number') {
+            // Excel serial date (fallback)
             const d = XLSX.SSF.parse_date_code(rawDate);
             birth_date = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
           } else {
-            // String date — try to parse DD/MM/YYYY or similar
+            // String date — try common formats: DD/MM/YYYY, YYYY-MM-DD, DD/MM/YY
             const str = String(rawDate).trim();
             const parts = str.split(/[\/\-\.]/);
             if (parts.length === 3) {
               const [a, b, c] = parts;
-              // If year is 4 digits in last position
               if (c.length === 4) {
+                // DD/MM/YYYY
                 birth_date = `${c}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
               } else if (a.length === 4) {
+                // YYYY-MM-DD
                 birth_date = `${a}-${b.padStart(2, '0')}-${c.padStart(2, '0')}`;
+              } else if (c.length === 2) {
+                // DD/MM/YY — assume 2000s if ≤ current year's 2-digit, else 1900s
+                const currentYY = new Date().getFullYear() % 100;
+                const year = parseInt(c) <= currentYY ? `20${c}` : `19${c}`;
+                birth_date = `${year}-${b.padStart(2, '0')}-${a.padStart(2, '0')}`;
               }
             }
           }
