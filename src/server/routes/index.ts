@@ -1973,9 +1973,11 @@ router.get('/employees/birthdays', canViewData, async (req, res) => {
   const user = (req as any).user;
   const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : undefined;
 
+  // Avoid clubs(name) FK join — RLS on clubs table can cause silent failures
+  // Instead, fetch clubs separately and merge
   let query = supabase
     .from('employees')
-    .select('id, full_name, birth_date, club_id, clubs(name)')
+    .select('id, full_name, birth_date, club_id')
     .eq('status', 'activo')
     .not('birth_date', 'is', null)
     .order('birth_date', { ascending: true });
@@ -1985,9 +1987,17 @@ router.get('/employees/birthdays', canViewData, async (req, res) => {
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
+  const { data: clubs } = await supabase.from('clubs').select('id, name');
+  const clubMap = new Map((clubs || []).map((c: any) => [c.id, c.name]));
+
+  const employees = (data || []).map((e: any) => ({
+    ...e,
+    clubs: clubMap.has(e.club_id) ? { name: clubMap.get(e.club_id) } : null,
+  }));
+
   const filtered = month
-    ? (data || []).filter((e: any) => new Date(e.birth_date).getMonth() + 1 === Number(month))
-    : data || [];
+    ? employees.filter((e: any) => new Date(e.birth_date + 'T12:00:00').getMonth() + 1 === Number(month))
+    : employees;
 
   res.json(filtered);
 });

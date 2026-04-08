@@ -68,7 +68,12 @@ export default function Cumpleanos() {
         ? '/api/employees/birthdays'
         : `/api/employees/birthdays?month=${selectedMonth}`;
       const res = await apiFetch(url);
-      if (res.ok) setEmployees(await res.json());
+      if (res.ok) {
+        setEmployees(await res.json());
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || 'Error al cargar cumpleaños');
+      }
     } catch {
       toast.error('Error al cargar cumpleaños');
     } finally {
