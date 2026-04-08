@@ -131,7 +131,8 @@ export default function EmployeeProfile() {
 
   const getFileUrl = (docId: string | undefined | null) => {
     if (!docId) return '';
-    return `/api/documents/${docId}/view`;
+    const token = localStorage.getItem('token');
+    return `/api/documents/${docId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   };
 
   const handleDownloadZip = async () => {

@@ -697,8 +697,19 @@ router.patch('/documents/:id', canModifyData, async (req, res) => {
   }
 });
 
-// Serve document via signed URL (authenticated — bucket is private)
-router.get('/documents/:docId/view', isAuthenticated, canViewData, async (req, res) => {
+// Serve document via signed URL — accepts token from Authorization header OR ?token= query param
+// This allows <a href> links opened in new browser tabs to work without JS auth handling
+router.get('/documents/:docId/view', async (req: any, res: any) => {
+  const authHeader = req.headers['authorization'];
+  const token = (authHeader && authHeader.split(' ')[1]) || (req.query.token as string);
+
+  if (!token) return res.status(401).json({ error: 'Token de autenticación no proporcionado' });
+
+  try {
+    jwt.verify(token, JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Token inválido o expirado' });
+  }
   const { docId } = req.params;
 
   const { data: doc, error } = await supabase
