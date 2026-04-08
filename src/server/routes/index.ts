@@ -500,7 +500,7 @@ router.get('/employees/:id', isAuthenticated, async (req, res) => {
 });
 
 // Get document types
-router.get('/document-types', async (req, res) => {
+router.get('/document-types', isAuthenticated, async (req, res) => {
   try {
     const { data: types, error } = await supabase.from('document_types').select('*').eq('is_active', 1).order('sort_order');
     if (error) return res.status(500).json({ error: error.message });
@@ -1698,7 +1698,7 @@ router.delete('/users/:id', isAdmin, async (req, res) => {
 });
 
 // Alert recipients routes
-router.get('/alert-recipients', async (req, res) => {
+router.get('/alert-recipients', isAuthenticated, isAdmin, async (req, res) => {
   try {
     const { data: recipients, error } = await supabase
       .from('alert_recipients')
@@ -1719,7 +1719,7 @@ router.get('/alert-recipients', async (req, res) => {
   }
 });
 
-router.post('/alert-recipients', async (req, res) => {
+router.post('/alert-recipients', isAuthenticated, isAdmin, async (req, res) => {
   const { club_id, emails } = req.body; // emails is an array of strings
   
   try {
@@ -1756,7 +1756,7 @@ router.post('/alert-recipients', async (req, res) => {
 });
 
 // Test alert route
-router.post('/test-alert', async (req, res) => {
+router.post('/test-alert', isAuthenticated, isAdmin, async (req, res) => {
   try {
     const result = await sendExpirationAlerts(true);
     if (!result.success) {

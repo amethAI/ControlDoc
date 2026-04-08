@@ -20,9 +20,36 @@ async function startServer() {
 
   console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode...`);
 
-  app.use(express.json());
-  app.use(cors());
-  app.use(helmet({ contentSecurityPolicy: false }));
+  app.use(express.json({ limit: '10mb' }));
+
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : ['http://localhost:3000', 'http://localhost:5173'];
+  app.use(cors({
+    origin: (origin, cb) => {
+      // Allow requests with no origin (mobile apps, curl, same-origin)
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      cb(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }));
+
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:', 'https://images.unsplash.com', 'https://picsum.photos'],
+        connectSrc: ["'self'", 'https://*.supabase.co', 'https://generativelanguage.googleapis.com'],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+      },
+    },
+  }));
 
   // Rate limiter for login endpoint
   const loginLimiter = rateLimit({
