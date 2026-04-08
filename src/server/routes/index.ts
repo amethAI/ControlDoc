@@ -123,10 +123,7 @@ router.get('/performance', isAuthenticated, isInternal, async (req, res) => {
   try {
     let query = supabase
       .from('daily_performance')
-      .select(`
-        *,
-        employee:employees(id, full_name)
-      `);
+      .select('*');
     
     if (date) query = query.eq('date', date);
     if (club_id) query = query.eq('club_id', club_id);

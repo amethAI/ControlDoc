@@ -60,9 +60,10 @@ export default function RendimientoVentas() {
         const clubsData = await clubsRes.json();
         const employeesData = await employeesRes.json();
         
-        const filteredClubs = user?.role === 'Supervisor Interno' 
-          ? clubsData.filter((c: any) => c.id === user.club_id)
-          : clubsData;
+        const realClubs = clubsData.filter((c: any) => c.id !== 'hr');
+        const filteredClubs = user?.role === 'Supervisor Interno'
+          ? realClubs.filter((c: any) => c.id === user.club_id)
+          : realClubs;
 
         setClubs(filteredClubs);
         setEmployees(employeesData);
@@ -192,18 +193,20 @@ export default function RendimientoVentas() {
               className="pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
             />
           </div>
-          <div className="relative">
-            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <select
-              value={selectedClub}
-              onChange={(e) => setSelectedClub(e.target.value)}
-              className="pl-10 pr-8 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none appearance-none bg-white transition-all"
-            >
-              {clubs.map(club => (
-                <option key={club.id} value={club.id}>{club.name}</option>
-              ))}
-            </select>
-          </div>
+          {clubs.length > 1 && (
+            <div className="relative">
+              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <select
+                value={selectedClub}
+                onChange={(e) => setSelectedClub(e.target.value)}
+                className="pl-10 pr-8 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none appearance-none bg-white transition-all"
+              >
+                {clubs.map(club => (
+                  <option key={club.id} value={club.id}>{club.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           {/* Auto-save status indicator */}
           <div className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border">
             {autoSaveStatus === 'pending' && (
