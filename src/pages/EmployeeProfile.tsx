@@ -129,10 +129,21 @@ export default function EmployeeProfile() {
     setIsDeleteModalOpen(true);
   };
 
-  const getFileUrl = (docId: string | undefined | null) => {
+  const openDocument = async (docId: string | undefined | null) => {
+    if (!docId) return;
+    try {
+      const res = await apiFetch(`/api/documents/${docId}/signed-url`);
+      if (!res.ok) { toast.error('No se pudo abrir el documento'); return; }
+      const { url } = await res.json();
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch {
+      toast.error('Error al abrir el documento');
+    }
+  };
+
+  const getDownloadUrl = (docId: string | undefined | null) => {
     if (!docId) return '';
-    const token = localStorage.getItem('token');
-    return `/api/documents/${docId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    return `/api/documents/${docId}/download`;
   };
 
   const handleDownloadZip = async () => {
@@ -147,7 +158,7 @@ export default function EmployeeProfile() {
 
       const downloadPromises = documents.map(async (doc) => {
         try {
-          const response = await apiFetch(getFileUrl(doc.id));
+          const response = await apiFetch(getDownloadUrl(doc.id));
           if (!response.ok) throw new Error(`Failed to fetch ${doc.file_name}`);
           
           const contentType = response.headers.get('content-type');
@@ -373,28 +384,24 @@ export default function EmployeeProfile() {
                   <div className="mt-auto pt-4 border-t border-black/5 flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2 truncate pr-4">
                       <FileText className="h-4 w-4 flex-shrink-0" />
-                      <a 
-                        href={getFileUrl(doc.id)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="truncate hover:text-blue-600 hover:underline transition-all font-medium"
+                      <button
+                        onClick={() => openDocument(doc.id)}
+                        className="truncate hover:text-blue-600 hover:underline transition-all font-medium text-left"
                         title="Ver documento"
                       >
                         {doc.file_name}
-                      </a>
+                      </button>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1">
-                        <a 
-                          href={getFileUrl(doc.id)}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          onClick={() => openDocument(doc.id)}
                           className="inline-flex items-center gap-1 px-2 py-1 bg-white/80 hover:bg-white rounded-md text-blue-600 shadow-sm border border-slate-200 transition-all text-xs font-bold"
                           title="Ver documento"
                         >
                           <Eye className="h-3.5 w-3.5" />
                           Ver
-                        </a>
+                        </button>
                         {type.id !== 'doc-personal-combined' && !isContractTiedDoc && (user?.role === 'Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
                           <button 
                             onClick={() => handleEditClick(doc, type.name)}

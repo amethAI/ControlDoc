@@ -697,19 +697,8 @@ router.patch('/documents/:id', canModifyData, async (req, res) => {
   }
 });
 
-// Serve document via signed URL — accepts token from Authorization header OR ?token= query param
-// This allows <a href> links opened in new browser tabs to work without JS auth handling
-router.get('/documents/:docId/view', async (req: any, res: any) => {
-  const authHeader = req.headers['authorization'];
-  const token = (authHeader && authHeader.split(' ')[1]) || (req.query.token as string);
-
-  if (!token) return res.status(401).json({ error: 'Token de autenticación no proporcionado' });
-
-  try {
-    jwt.verify(token, JWT_SECRET);
-  } catch {
-    return res.status(401).json({ error: 'Token inválido o expirado' });
-  }
+// Return a short-lived Supabase signed URL for a document (used by frontend to open in new tab)
+router.get('/documents/:docId/signed-url', isAuthenticated, async (req: any, res: any) => {
   const { docId } = req.params;
 
   const { data: doc, error } = await supabase
@@ -720,33 +709,47 @@ router.get('/documents/:docId/view', async (req: any, res: any) => {
 
   if (error || !doc) return res.status(404).json({ error: 'Documento no encontrado' });
 
-  // Legacy local uploads (before Supabase storage migration)
+  // Legacy local uploads
+  if (doc.file_url.startsWith('/uploads/')) {
+    return res.json({ url: doc.file_url, fileName: doc.file_name });
+  }
+
+  const { data: signedData, error: signedError } = await supabase.storage
+    .from('documents')
+    .createSignedUrl(doc.file_url, 3600, { download: false });
+
+  if (signedError || !signedData) {
+    return res.status(500).json({ error: 'Error al generar URL del documento' });
+  }
+
+  res.json({ url: signedData.signedUrl, fileName: doc.file_name });
+});
+
+// Download document content (used server-side for ZIP generation)
+router.get('/documents/:docId/download', isAuthenticated, async (req: any, res: any) => {
+  const { docId } = req.params;
+
+  const { data: doc, error } = await supabase
+    .from('employee_documents')
+    .select('id, file_url, file_name')
+    .eq('id', docId)
+    .single();
+
+  if (error || !doc) return res.status(404).json({ error: 'Documento no encontrado' });
+
   if (doc.file_url.startsWith('/uploads/')) {
     return res.redirect(doc.file_url);
   }
 
   const { data: signedData, error: signedError } = await supabase.storage
     .from('documents')
-    .createSignedUrl(doc.file_url, 60); // short-lived — used immediately
+    .createSignedUrl(doc.file_url, 60);
 
   if (signedError || !signedData) {
     return res.status(500).json({ error: 'Error al generar URL del documento' });
   }
 
-  // Proxy the file content so we control Content-Disposition: inline
-  // (direct redirect to Supabase signed URL triggers a download in Chrome)
-  try {
-    const fileRes = await fetch(signedData.signedUrl);
-    if (!fileRes.ok) return res.status(502).json({ error: 'Error al obtener el documento desde storage' });
-    const contentType = fileRes.headers.get('content-type') || 'application/octet-stream';
-    const buffer = await fileRes.arrayBuffer();
-    res.set('Content-Type', contentType);
-    res.set('Content-Disposition', `inline; filename="${encodeURIComponent(doc.file_name)}"`);
-    res.set('Cache-Control', 'private, max-age=300');
-    res.send(Buffer.from(buffer));
-  } catch {
-    return res.status(502).json({ error: 'No se pudo obtener el archivo' });
-  }
+  res.redirect(signedData.signedUrl);
 });
 
 // Delete document
