@@ -10,11 +10,27 @@ import multer from 'multer';
 import { GoogleGenAI } from '@google/genai';
 
 const router = Router();
-const upload = multer({ 
+const ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
+const ALLOWED_EXTENSIONS = new Set(['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx']);
+
+const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB limit
-  }
+  },
+  fileFilter: (_req, file, cb) => {
+    const ext = file.originalname.split('.').pop()?.toLowerCase() ?? '';
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype) || !ALLOWED_EXTENSIONS.has(ext)) {
+      return cb(new Error('Tipo de archivo no permitido. Solo se aceptan PDF, JPG, PNG, DOC, DOCX.'));
+    }
+    cb(null, true);
+  },
 });
 if (!process.env.JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable is not set.');
@@ -558,7 +574,7 @@ router.post('/documents', canModifyData, (req, res, next) => {
       }
       return res.status(400).json({ error: `Error al subir archivo: ${err.message}` });
     } else if (err) {
-      return res.status(500).json({ error: `Error desconocido: ${err.message}` });
+      return res.status(400).json({ error: err.message });
     }
     next();
   });
@@ -580,14 +596,6 @@ router.post('/documents', canModifyData, (req, res, next) => {
     const fileExt = file_name.split('.').pop();
     const filePath = `${employee_id}/${id}.${fileExt}`;
     
-    // Ensure bucket exists
-    const { data: buckets } = await supabase.storage.listBuckets();
-    if (!buckets?.find(b => b.name === 'documents')) {
-      await supabase.storage.createBucket('documents', { public: true });
-    }
-    
-    // Ensure bucket exists or just upload (Supabase will fail if bucket doesn't exist, 
-    // but we assume it's created or we can try to create it)
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('documents')
       .upload(filePath, file.buffer, {
@@ -600,11 +608,8 @@ router.post('/documents', canModifyData, (req, res, next) => {
       throw new Error(`Error al subir archivo a storage: ${uploadError.message}`);
     }
 
-    const { data: publicUrlData } = supabase.storage
-      .from('documents')
-      .getPublicUrl(filePath);
-      
-    const file_url = publicUrlData.publicUrl;
+    // Store only the storage path — access via signed URLs through /api/documents/:id/view
+    const file_url = filePath;
     
     // Handle the special 'doc-personal-combined' type
     if (document_type_id === 'doc-personal-combined') {
@@ -690,6 +695,34 @@ router.patch('/documents/:id', canModifyData, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Error al actualizar documento' });
   }
+});
+
+// Serve document via signed URL (authenticated — bucket is private)
+router.get('/documents/:docId/view', isAuthenticated, canViewData, async (req, res) => {
+  const { docId } = req.params;
+
+  const { data: doc, error } = await supabase
+    .from('employee_documents')
+    .select('id, file_url, file_name')
+    .eq('id', docId)
+    .single();
+
+  if (error || !doc) return res.status(404).json({ error: 'Documento no encontrado' });
+
+  // Legacy local uploads (before Supabase storage migration)
+  if (doc.file_url.startsWith('/uploads/')) {
+    return res.redirect(doc.file_url);
+  }
+
+  const { data: signedData, error: signedError } = await supabase.storage
+    .from('documents')
+    .createSignedUrl(doc.file_url, 3600); // valid 1 hour
+
+  if (signedError || !signedData) {
+    return res.status(500).json({ error: 'Error al generar URL del documento' });
+  }
+
+  res.redirect(signedData.signedUrl);
 });
 
 // Delete document

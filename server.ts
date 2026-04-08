@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode...`);
 
@@ -60,6 +60,27 @@ async function startServer() {
     message: { error: 'Demasiados intentos de inicio de sesión. Intente de nuevo en 15 minutos.' }
   });
   app.use('/api/auth/login', loginLimiter);
+
+  // General API rate limiter (prevents data scraping / abuse)
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 500,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Demasiadas solicitudes. Intente de nuevo en 15 minutos.' }
+  });
+  app.use('/api/', apiLimiter);
+
+  // Stricter limiter for write operations (POST/PATCH/DELETE)
+  const writeLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.method === 'GET' || req.method === 'OPTIONS',
+    message: { error: 'Demasiadas operaciones de escritura. Intente de nuevo en 15 minutos.' }
+  });
+  app.use('/api/', writeLimiter);
 
   // Security + cache headers
   app.use((req, res, next) => {

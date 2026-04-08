@@ -129,9 +129,9 @@ export default function EmployeeProfile() {
     setIsDeleteModalOpen(true);
   };
 
-  const getFileUrl = (url: string | undefined | null) => {
-    if (!url) return '';
-    return url;
+  const getFileUrl = (docId: string | undefined | null) => {
+    if (!docId) return '';
+    return `/api/documents/${docId}/view`;
   };
 
   const handleDownloadZip = async () => {
@@ -146,7 +146,7 @@ export default function EmployeeProfile() {
 
       const downloadPromises = documents.map(async (doc) => {
         try {
-          const response = await apiFetch(getFileUrl(doc.file_url));
+          const response = await apiFetch(getFileUrl(doc.id));
           if (!response.ok) throw new Error(`Failed to fetch ${doc.file_name}`);
           
           const contentType = response.headers.get('content-type');
@@ -373,8 +373,8 @@ export default function EmployeeProfile() {
                     <div className="flex items-center gap-2 truncate pr-4">
                       <FileText className="h-4 w-4 flex-shrink-0" />
                       <a 
-                        href={getFileUrl(doc.file_url)} 
-                        target="_blank" 
+                        href={getFileUrl(doc.id)}
+                        target="_blank"
                         rel="noopener noreferrer"
                         className="truncate hover:text-blue-600 hover:underline transition-all font-medium"
                         title="Ver documento"
@@ -385,8 +385,8 @@ export default function EmployeeProfile() {
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1">
                         <a 
-                          href={getFileUrl(doc.file_url)} 
-                          target="_blank" 
+                          href={getFileUrl(doc.id)}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 px-2 py-1 bg-white/80 hover:bg-white rounded-md text-blue-600 shadow-sm border border-slate-200 transition-all text-xs font-bold"
                           title="Ver documento"
