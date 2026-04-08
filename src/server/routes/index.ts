@@ -499,6 +499,39 @@ router.post('/employees', canModifyData, async (req, res) => {
   }
 });
 
+// GET /api/employees/birthdays — MUST be before /employees/:id to avoid route shadowing
+router.get('/employees/birthdays', canViewData, async (req, res) => {
+  const { month } = req.query;
+  const user = (req as any).user;
+  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : undefined;
+
+  let query = supabase
+    .from('employees')
+    .select('id, full_name, birth_date, club_id')
+    .eq('status', 'activo')
+    .not('birth_date', 'is', null)
+    .order('birth_date', { ascending: true });
+
+  if (club_id) query = query.eq('club_id', club_id);
+
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+
+  const { data: clubs } = await supabase.from('clubs').select('id, name');
+  const clubMap = new Map((clubs || []).map((c: any) => [c.id, c.name]));
+
+  const employees = (data || []).map((e: any) => ({
+    ...e,
+    clubs: clubMap.has(e.club_id) ? { name: clubMap.get(e.club_id) } : null,
+  }));
+
+  const filtered = month
+    ? employees.filter((e: any) => new Date(e.birth_date + 'T12:00:00').getMonth() + 1 === Number(month))
+    : employees;
+
+  res.json(filtered);
+});
+
 // Get single employee
 router.get('/employees/:id', isAuthenticated, async (req, res) => {
   try {
@@ -1965,41 +1998,6 @@ Totales: ${employees?.length || 0} empleados activos, ${expired?.length || 0} do
     console.error('AI chat error:', error?.message || error);
     res.status(500).json({ error: `Error: ${error?.message || 'Error al procesar tu pregunta'}` });
   }
-});
-
-// GET /api/employees/birthdays
-router.get('/employees/birthdays', canViewData, async (req, res) => {
-  const { month } = req.query;
-  const user = (req as any).user;
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : undefined;
-
-  // Avoid clubs(name) FK join — RLS on clubs table can cause silent failures
-  // Instead, fetch clubs separately and merge
-  let query = supabase
-    .from('employees')
-    .select('id, full_name, birth_date, club_id')
-    .eq('status', 'activo')
-    .not('birth_date', 'is', null)
-    .order('birth_date', { ascending: true });
-
-  if (club_id) query = query.eq('club_id', club_id);
-
-  const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
-
-  const { data: clubs } = await supabase.from('clubs').select('id, name');
-  const clubMap = new Map((clubs || []).map((c: any) => [c.id, c.name]));
-
-  const employees = (data || []).map((e: any) => ({
-    ...e,
-    clubs: clubMap.has(e.club_id) ? { name: clubMap.get(e.club_id) } : null,
-  }));
-
-  const filtered = month
-    ? employees.filter((e: any) => new Date(e.birth_date + 'T12:00:00').getMonth() + 1 === Number(month))
-    : employees;
-
-  res.json(filtered);
 });
 
 // POST /api/employees/import-birthdays
