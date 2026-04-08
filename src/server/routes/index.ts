@@ -727,13 +727,26 @@ router.get('/documents/:docId/view', async (req: any, res: any) => {
 
   const { data: signedData, error: signedError } = await supabase.storage
     .from('documents')
-    .createSignedUrl(doc.file_url, 3600); // valid 1 hour
+    .createSignedUrl(doc.file_url, 60); // short-lived — used immediately
 
   if (signedError || !signedData) {
     return res.status(500).json({ error: 'Error al generar URL del documento' });
   }
 
-  res.redirect(signedData.signedUrl);
+  // Proxy the file content so we control Content-Disposition: inline
+  // (direct redirect to Supabase signed URL triggers a download in Chrome)
+  try {
+    const fileRes = await fetch(signedData.signedUrl);
+    if (!fileRes.ok) return res.status(502).json({ error: 'Error al obtener el documento desde storage' });
+    const contentType = fileRes.headers.get('content-type') || 'application/octet-stream';
+    const buffer = await fileRes.arrayBuffer();
+    res.set('Content-Type', contentType);
+    res.set('Content-Disposition', `inline; filename="${encodeURIComponent(doc.file_name)}"`);
+    res.set('Cache-Control', 'private, max-age=300');
+    res.send(Buffer.from(buffer));
+  } catch {
+    return res.status(502).json({ error: 'No se pudo obtener el archivo' });
+  }
 });
 
 // Delete document
