@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { FileSpreadsheet, Download, Plus, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface EmployeeChecklist {
@@ -23,10 +22,8 @@ interface EmployeeChecklist {
 
 export default function ChecklistContratos() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const canEdit = user?.role === 'Administrador' || user?.role === 'Supervisor Interno';
   const [employees, setEmployees] = useState<EmployeeChecklist[]>([]);
-  const [manualRows, setManualRows] = useState<EmployeeChecklist[]>([]);
   const [localEdits, setLocalEdits] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
@@ -73,34 +70,6 @@ export default function ChecklistContratos() {
   const hasDoc = (docs: any[], typeName: string) => {
     const doc = docs.find(d => d.document_types?.name?.toLowerCase()?.includes(typeName.toLowerCase()) && d.is_current === 1);
     return doc ? 'SÍ' : 'NO';
-  };
-
-  const addManualRow = () => {
-    const newRow: EmployeeChecklist = {
-      id: `manual-${Date.now()}`,
-      full_name: '',
-      cedula: '',
-      contract_type: 'Definido',
-      contract_start: '',
-      contract_end: '',
-      documents: [],
-      isManual: true,
-      carta_ingreso: 'NO',
-      carnet_verde: '',
-      carnet_blanco: '',
-      aviso_css: ''
-    };
-    setManualRows([...manualRows, newRow]);
-  };
-
-  const updateManualRow = (id: string, field: keyof EmployeeChecklist, value: string) => {
-    setManualRows(manualRows.map(row => 
-      row.id === id ? { ...row, [field]: value } : row
-    ));
-  };
-
-  const removeManualRow = (id: string) => {
-    setManualRows(manualRows.filter(row => row.id !== id));
   };
 
   const handleEdit = (id: string, field: string, value: any) => {
@@ -178,80 +147,11 @@ export default function ChecklistContratos() {
     return '';
   };
 
-  const parseExcelDate = (val: any) => {
-    if (!val) return '';
-    if (typeof val === 'number') {
-      const date = new Date(Math.round((val - 25569) * 86400 * 1000));
-      return date.toISOString().split('T')[0];
-    }
-    if (typeof val === 'string') {
-      const months: any = { ene: '01', feb: '02', mar: '03', abr: '04', may: '05', jun: '06', jul: '07', ago: '08', sep: '09', oct: '10', nov: '11', dic: '12' };
-      const parts = val.toLowerCase().split(' ');
-      if (parts.length === 3) {
-        const day = parts[0].padStart(2, '0');
-        const month = months[parts[1]];
-        let year = parts[2];
-        if (year.length === 2) year = `20${year}`;
-        if (day && month && year) return `${year}-${month}-${day}`;
-      }
-      const d = new Date(val);
-      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
-    }
-    return '';
-  };
-
-  const importFromExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      const bstr = evt.target?.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      const data = XLSX.utils.sheet_to_json(ws);
-
-      for (const row of data as any[]) {
-        const cedula = row['CÉDULA'] || row['CEDULA'];
-        const nombre = row['NOMBRE'];
-        if (!cedula && !nombre) continue;
-
-        const emp = employees.find(e => e.cedula === cedula || e.full_name === nombre);
-        if (emp) {
-          const updates: any = {};
-          if (row['CARTA DE INGRESO']) updates.carta_ingreso = row['CARTA DE INGRESO'];
-          if (row['CARNET VERDE']) updates.carnet_verde = parseExcelDate(row['CARNET VERDE']);
-          if (row['CARNET BLANCO']) updates.carnet_blanco = parseExcelDate(row['CARNET BLANCO']);
-          if (row['FECHA DE AVISO CSS']) updates.aviso_css = parseExcelDate(row['FECHA DE AVISO CSS']);
-          if (row['FECHA DE INICIO DE CONTRATO']) updates.contract_start = parseExcelDate(row['FECHA DE INICIO DE CONTRATO']);
-          if (row['FECHA DE TERMINACION DE CONTRATO']) updates.contract_end = parseExcelDate(row['FECHA DE TERMINACION DE CONTRATO']);
-          if (row['TIPO DE CONTRATOS']) updates.contract_type = row['TIPO DE CONTRATOS'];
-
-          if (Object.keys(updates).length > 0) {
-            await apiFetch(`/api/employees/${emp.id}/checklist`, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-user-role': user?.role || '',
-                'x-user-id': user?.id || '',
-                'x-user-name': user?.name || ''
-              },
-              body: JSON.stringify(updates)
-            });
-          }
-        }
-      }
-      
-      window.location.reload();
-    };
-    reader.readAsBinaryString(file);
-  };
-
   const exportToExcel = () => {
-    const allData = [...employees, ...manualRows];
-    
-    const dataToExport = allData.map((emp, index) => {
+    const toExport = employees.filter(
+      (emp) => (localEdits[emp.id]?.contract_type ?? emp.contract_type) === 'Definido 1 año'
+    );
+    const dataToExport = toExport.map((emp, index) => {
       let contractStartStr = getVal(emp, 'contract_start');
       let probatoryEndStr = '';
 
@@ -304,32 +204,8 @@ export default function ChecklistContratos() {
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Checklist: Contratos Definidos</h2>
           <p className="text-sm text-slate-500 mt-1">Lista de personal activo con contrato definido.</p>
-          {canEdit && (
-            <p className="text-xs text-amber-600 mt-1 font-medium">Nota: Las filas agregadas manualmente son temporales y solo sirven para exportar a Excel.</p>
-          )}
         </div>
         <div className="flex gap-3">
-          {canEdit && (
-            <>
-              <button
-                onClick={addManualRow}
-                className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Agregar Fila Manual
-              </button>
-              
-              <input type="file" accept=".xlsx, .xls" onChange={importFromExcel} className="hidden" id="excel-upload" />
-              <label
-                htmlFor="excel-upload"
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer"
-              >
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Importar Excel
-              </label>
-            </>
-          )}
-
           <button
             onClick={exportToExcel}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
