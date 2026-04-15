@@ -126,9 +126,15 @@ export default function Attendance() {
         const attData: AttendanceRecord[] = await attRes.json();
         const reqData: AttendanceRequest[] = await reqRes.json();
 
-        // Solo inactivos que tienen registros de asistencia en el período
+        // Inactivos que aparecen en el mes: los que tienen registros en el período
+        // O cuya fecha de baja cae dentro del mes (aunque aún no tengan registros)
         const attEmpIds = new Set(attData.map(a => a.employee_id));
-        const inactivosConDias = inactiveData.filter(e => attEmpIds.has(e.id));
+        const inactivosConDias = inactiveData.filter(e => {
+          if (attEmpIds.has(e.id)) return true;
+          if (!e.termination_date) return false;
+          const termDate = new Date(e.termination_date + 'T12:00:00');
+          return termDate >= monthStart && termDate <= monthEnd;
+        });
 
         setEmployees(activeData);
         setInactiveEmployees(inactivosConDias);
