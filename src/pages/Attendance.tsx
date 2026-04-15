@@ -2,34 +2,41 @@ import { apiFetch } from '../lib/api';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Save, 
+import {
+  ChevronLeft,
+  ChevronRight,
+  Save,
   Calendar as CalendarIcon,
   Check,
   X as CloseIcon,
   Clock,
   AlertCircle,
-  Coffee
+  Coffee,
+  FileSpreadsheet
 } from 'lucide-react';
-import { 
-  format, 
-  startOfMonth, 
-  endOfMonth, 
-  eachDayOfInterval, 
-  isSameDay, 
-  addMonths, 
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  isSameDay,
+  addMonths,
   subMonths,
   isWeekend
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import clsx from 'clsx';
+import * as XLSX from 'xlsx';
 
 interface Employee {
   id: string;
   full_name: string;
   club_id: string;
+  cedula?: string;
+  position?: string;
+  status?: string;
+  termination_date?: string;
+  termination_reason?: string;
 }
 
 interface AttendanceRecord {
@@ -60,6 +67,7 @@ export default function Attendance() {
   const { user } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [inactiveEmployees, setInactiveEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [requests, setRequests] = useState<AttendanceRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,7 +92,7 @@ export default function Attendance() {
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
-  
+
   const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
   const firstHalf = allDays.filter(d => d.getDate() <= 15);
   const secondHalf = allDays.filter(d => d.getDate() > 15);
@@ -94,6 +102,7 @@ export default function Attendance() {
   const fetchData = useCallback(async () => {
     if (!selectedClubId) {
       setEmployees([]);
+      setInactiveEmployees([]);
       setAttendance([]);
       setRequests([]);
       setLoading(false);
@@ -103,17 +112,28 @@ export default function Attendance() {
     try {
       const start = format(monthStart, 'yyyy-MM-dd');
       const end = format(monthEnd, 'yyyy-MM-dd');
-      
-      const [empRes, attRes, reqRes] = await Promise.all([
+
+      const [empRes, inactiveEmpRes, attRes, reqRes] = await Promise.all([
         apiFetch(`/api/employees?club_id=${selectedClubId}&status=activo`),
+        apiFetch(`/api/employees?club_id=${selectedClubId}&status=inactivo`),
         apiFetch(`/api/attendance?club_id=${selectedClubId}&start_date=${start}&end_date=${end}`),
         apiFetch(`/api/attendance-requests?club_id=${selectedClubId}&start_date=${start}&end_date=${end}`)
       ]);
 
-      if (empRes.ok && attRes.ok && reqRes.ok) {
-        setEmployees(await empRes.json());
-        setAttendance(await attRes.json());
-        setRequests(await reqRes.json());
+      if (empRes.ok && inactiveEmpRes.ok && attRes.ok && reqRes.ok) {
+        const activeData: Employee[] = await empRes.json();
+        const inactiveData: Employee[] = await inactiveEmpRes.json();
+        const attData: AttendanceRecord[] = await attRes.json();
+        const reqData: AttendanceRequest[] = await reqRes.json();
+
+        // Solo inactivos que tienen registros de asistencia en el período
+        const attEmpIds = new Set(attData.map(a => a.employee_id));
+        const inactivosConDias = inactiveData.filter(e => attEmpIds.has(e.id));
+
+        setEmployees(activeData);
+        setInactiveEmployees(inactivosConDias);
+        setAttendance(attData);
+        setRequests(reqData);
       }
     } catch (error) {
       console.error('Error fetching attendance data:', error);
@@ -132,10 +152,12 @@ export default function Attendance() {
 
   const handleStatusChange = (employeeId: string, date: Date) => {
     if (isReadOnly) return;
-    
+    // Los empleados dados de baja no son editables
+    if (inactiveEmployees.some(e => e.id === employeeId)) return;
+
     const dateStr = format(date, 'yyyy-MM-dd');
     const existing = attendance.find(a => a.employee_id === employeeId && a.date === dateStr);
-    
+
     let nextStatus = 'presente';
     if (existing) {
       const currentIndex = STATUS_ORDER.indexOf(existing.status);
@@ -151,10 +173,9 @@ export default function Attendance() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Save attendance records
       const attRes = await apiFetch('/api/attendance', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'x-user-role': user?.role || '',
           'x-user-id': user?.id || '',
@@ -163,16 +184,15 @@ export default function Attendance() {
         body: JSON.stringify({ records: attendance })
       });
 
-      // Save requests
       const reqRes = await apiFetch('/api/attendance-requests', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'x-user-role': user?.role || '',
           'x-user-id': user?.id || '',
           'x-user-name': user?.name || ''
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           records: requests.map(r => ({ ...r, club_id: selectedClubId }))
         })
       });
@@ -248,7 +268,7 @@ export default function Attendance() {
         stats.feriados++;
         stats.total++;
       } else if (status === 'presente' || status === 'capacitacion') {
-        if (isWeekend(day) && day.getDay() === 0) { // Sunday
+        if (isWeekend(day) && day.getDay() === 0) {
           stats.domingos++;
         } else {
           stats.regulares++;
@@ -260,6 +280,90 @@ export default function Attendance() {
     return stats;
   };
 
+  // Lista unificada para la grilla: activos + inactivos con días, orden alfabético
+  const allEmployeesForGrid = [
+    ...employees,
+    ...inactiveEmployees
+  ].sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+  const getPeriodoLabel = () => {
+    const monthName = format(currentMonth, 'MMMM yyyy', { locale: es });
+    const cap = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+    if (viewHalf === '1') return `1ra Quincena ${cap}`;
+    if (viewHalf === '2') return `2da Quincena ${cap}`;
+    return `Mes Completo ${cap}`;
+  };
+
+  const exportNomina = () => {
+    const clubName = clubs.find(c => c.id === selectedClubId)?.name || selectedClubId;
+    const periodo = getPeriodoLabel();
+    const fechaGeneracion = new Date().toLocaleDateString('es-PA');
+
+    const nominaData = allEmployeesForGrid.map((emp, index) => {
+      const bd = calculateBreakdown(emp.id, days);
+      const esBaja = emp.status === 'inactivo';
+      return {
+        'NO.': index + 1,
+        'NOMBRE': emp.full_name,
+        'CÉDULA': emp.cedula || '',
+        'CARGO': emp.position || '',
+        'REG': bd.regulares,
+        'DOM': bd.domingos,
+        'FER': bd.feriados,
+        'INC': bd.incapacidades,
+        'APO': bd.apoyo,
+        'TOTAL': bd.total,
+        'ESTADO': esBaja
+          ? `BAJA${emp.termination_date ? ' ' + new Date(emp.termination_date + 'T12:00:00').toLocaleDateString('es-PA') : ''}`
+          : 'Activo'
+      };
+    });
+
+    const wb = XLSX.utils.book_new();
+
+    const ws1 = XLSX.utils.json_to_sheet(nominaData, { origin: 'A4' });
+    XLSX.utils.sheet_add_aoa(ws1, [
+      [`Club: ${clubName}`],
+      [`Período: ${periodo}`],
+      [`Generado: ${fechaGeneracion}`],
+    ], { origin: 'A1' });
+    XLSX.utils.book_append_sheet(wb, ws1, 'Nómina');
+
+    if (inactiveEmployees.length > 0) {
+      const liquidacionData = inactiveEmployees.map((emp, index) => {
+        const bd = calculateBreakdown(emp.id, days);
+        return {
+          'NO.': index + 1,
+          'NOMBRE': emp.full_name,
+          'CÉDULA': emp.cedula || '',
+          'CARGO': emp.position || '',
+          'FECHA DE BAJA': emp.termination_date
+            ? new Date(emp.termination_date + 'T12:00:00').toLocaleDateString('es-PA')
+            : '',
+          'MOTIVO': emp.termination_reason || '',
+          'REG': bd.regulares,
+          'DOM': bd.domingos,
+          'FER': bd.feriados,
+          'INC': bd.incapacidades,
+          'APO': bd.apoyo,
+          'TOTAL': bd.total
+        };
+      });
+
+      const ws2 = XLSX.utils.json_to_sheet(liquidacionData, { origin: 'A4' });
+      XLSX.utils.sheet_add_aoa(ws2, [
+        [`Club: ${clubName}`],
+        [`Período: ${periodo} — Pendientes de Liquidación`],
+        [`Generado: ${fechaGeneracion}`],
+      ], { origin: 'A1' });
+      XLSX.utils.book_append_sheet(wb, ws2, 'Liquidaciones');
+    }
+
+    const safeClub = clubName.replace(/[^a-zA-Z0-9]/g, '_');
+    const safePeriodo = periodo.replace(/[^a-zA-Z0-9 ]/g, '').replace(/ /g, '_');
+    XLSX.writeFile(wb, `Nomina_${safeClub}_${safePeriodo}.xlsx`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -267,22 +371,22 @@ export default function Attendance() {
           <h2 className="text-2xl font-bold text-slate-800">Control de Asistencia</h2>
           <p className="text-slate-500 text-sm">Programación y cumplimiento mensual por club.</p>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-            <button 
+            <button
               onClick={() => setViewHalf('1')}
               className={clsx("px-3 py-1.5 text-xs font-medium rounded-md transition-all", viewHalf === '1' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700")}
             >
               1ra Quincena
             </button>
-            <button 
+            <button
               onClick={() => setViewHalf('2')}
               className={clsx("px-3 py-1.5 text-xs font-medium rounded-md transition-all", viewHalf === '2' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700")}
             >
               2da Quincena
             </button>
-            <button 
+            <button
               onClick={() => setViewHalf('full')}
               className={clsx("px-3 py-1.5 text-xs font-medium rounded-md transition-all", viewHalf === 'full' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700")}
             >
@@ -303,9 +407,9 @@ export default function Attendance() {
               ))}
             </select>
           )}
-          
+
           <div className="flex items-center bg-white border border-slate-300 rounded-lg overflow-hidden shadow-sm">
-            <button 
+            <button
               onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
               className="p-2 hover:bg-slate-50 border-r border-slate-300"
             >
@@ -314,7 +418,7 @@ export default function Attendance() {
             <div className="px-4 py-2 text-sm font-medium text-slate-700 min-w-[140px] text-center capitalize">
               {format(currentMonth, 'MMMM yyyy', { locale: es })}
             </div>
-            <button 
+            <button
               onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
               className="p-2 hover:bg-slate-50 border-l border-slate-300"
             >
@@ -330,6 +434,17 @@ export default function Attendance() {
             >
               <Clock className="h-4 w-4 mr-2" />
               Cuadrar Mes
+            </button>
+          )}
+
+          {(!isReadOnly || user?.role === 'Recursos Humanos') && (
+            <button
+              onClick={exportNomina}
+              disabled={!selectedClubId || loading}
+              className="inline-flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Generar Nómina
             </button>
           )}
 
@@ -417,8 +532,8 @@ export default function Attendance() {
                   Empleado
                 </th>
                 {days.map(day => (
-                  <th 
-                    key={day.toString()} 
+                  <th
+                    key={day.toString()}
                     className={clsx(
                       "p-1 text-center font-medium border-r border-slate-200 min-w-[30px] group relative",
                       isWeekend(day) ? "bg-slate-100 text-slate-400" : "text-slate-600"
@@ -538,23 +653,35 @@ export default function Attendance() {
                     </td>
                   </tr>
 
-                  {employees.map(emp => {
+                  {allEmployeesForGrid.map(emp => {
+                    const isBaja = emp.status === 'inactivo';
                     const breakdown = calculateBreakdown(emp.id, days);
                     return (
-                      <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="sticky left-0 z-10 bg-white p-2 font-medium text-slate-900 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)] truncate max-w-[150px]">
-                          {emp.full_name}
+                      <tr key={emp.id} className={clsx("hover:bg-slate-50 transition-colors", isBaja && "bg-red-50/20")}>
+                        <td className={clsx(
+                          "sticky left-0 z-10 p-2 font-medium text-slate-900 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)] max-w-[150px]",
+                          isBaja ? "bg-red-50" : "bg-white"
+                        )}>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="truncate text-[11px]">{emp.full_name}</span>
+                            {isBaja && (
+                              <span className="inline-block text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-200 w-fit leading-none">
+                                BAJA
+                              </span>
+                            )}
+                          </div>
                         </td>
                         {days.map(day => {
                           const status = getStatus(emp.id, day);
                           const config = status ? STATUS_MAP[status] : null;
-                          
+
                           return (
-                            <td 
+                            <td
                               key={day.toString()}
                               onClick={() => handleStatusChange(emp.id, day)}
                               className={clsx(
-                                "p-0 border-r border-slate-200 cursor-pointer transition-all hover:brightness-95",
+                                "p-0 border-r border-slate-200 transition-all",
+                                isBaja ? "cursor-default" : "cursor-pointer hover:brightness-95",
                                 isWeekend(day) && !status && "bg-slate-50/50"
                               )}
                             >
@@ -594,6 +721,70 @@ export default function Attendance() {
           </table>
         </div>
       </div>
+
+      {/* Panel: Pendientes de Liquidación */}
+      {inactiveEmployees.length > 0 && !loading && selectedClubId && (
+        <div className="bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 bg-red-50 border-b border-red-200 flex flex-wrap items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+            <h3 className="text-sm font-semibold text-red-800">Pendientes de Liquidación</h3>
+            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+              {inactiveEmployees.length}
+            </span>
+            <p className="text-xs text-red-500 ml-auto">
+              Empleados dados de baja con días trabajados en el período
+            </p>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {inactiveEmployees.map(emp => {
+              const bd = calculateBreakdown(emp.id, days);
+              return (
+                <div key={emp.id} className="px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{emp.full_name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Baja: {emp.termination_date
+                        ? new Date(emp.termination_date + 'T12:00:00').toLocaleDateString('es-PA')
+                        : 'Sin fecha'}
+                      {emp.termination_reason && ` · ${emp.termination_reason}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {bd.regulares > 0 && (
+                      <span className="px-2 py-1 rounded-md text-xs font-bold bg-green-100 text-green-700 border border-green-200">
+                        REG: {bd.regulares}
+                      </span>
+                    )}
+                    {bd.domingos > 0 && (
+                      <span className="px-2 py-1 rounded-md text-xs font-bold bg-blue-100 text-blue-700 border border-blue-200">
+                        DOM: {bd.domingos}
+                      </span>
+                    )}
+                    {bd.feriados > 0 && (
+                      <span className="px-2 py-1 rounded-md text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">
+                        FER: {bd.feriados}
+                      </span>
+                    )}
+                    {bd.incapacidades > 0 && (
+                      <span className="px-2 py-1 rounded-md text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                        INC: {bd.incapacidades}
+                      </span>
+                    )}
+                    {bd.apoyo > 0 && (
+                      <span className="px-2 py-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        APO: {bd.apoyo}
+                      </span>
+                    )}
+                    <span className="px-2 py-1 rounded-md text-xs font-bold bg-slate-800 text-white">
+                      TOTAL: {bd.total}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
         <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider w-full mb-1">Leyenda:</div>
