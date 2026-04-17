@@ -846,8 +846,14 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
       .from('document_types')
       .select('id, name');
       
-    const contractTiedDocTypeIds = docTypes
-      ?.filter(dt => ['Afiliación CSS', 'Contrato firmado', 'Solicitud de entrada al club', 'Aviso de entrada'].some(name => dt.name.includes(name)))
+    // Documentos cuya fecha de vencimiento = fecha FIN de contrato
+    const contractEndTiedDocTypeIds = docTypes
+      ?.filter(dt => ['Contrato firmado', 'Solicitud de entrada al club'].some(name => dt.name.includes(name)))
+      .map(dt => dt.id) || [];
+
+    // Documentos cuya fecha = fecha INICIO de contrato (aviso CSS se archiva el día que entra)
+    const contractStartTiedDocTypeIds = docTypes
+      ?.filter(dt => ['Afiliación CSS', 'Aviso de entrada'].some(name => dt.name.includes(name)))
       .map(dt => dt.id) || [];
 
     for (const record of records) {
@@ -918,13 +924,24 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
           .update(updateData)
           .eq('id', employee.id);
           
-        // Update all contract-tied documents for this employee
-        if (contractTiedDocTypeIds.length > 0 && ('contract_end' in updateData)) {
+        // Documentos atados al fin de contrato (contrato firmado, solicitud)
+        if (contractEndTiedDocTypeIds.length > 0 && ('contract_end' in updateData)) {
           await supabase
             .from('employee_documents')
             .update({ expiry_date: updateData.contract_end })
             .eq('employee_id', employee.id)
-            .in('document_type_id', contractTiedDocTypeIds)
+            .in('document_type_id', contractEndTiedDocTypeIds)
+            .eq('is_current', 1);
+        }
+
+        // Documentos atados al inicio de contrato (Aviso CSS, Afiliación CSS)
+        const startDate = updateData.contract_start || employee.contract_start;
+        if (contractStartTiedDocTypeIds.length > 0 && startDate) {
+          await supabase
+            .from('employee_documents')
+            .update({ expiry_date: startDate })
+            .eq('employee_id', employee.id)
+            .in('document_type_id', contractStartTiedDocTypeIds)
             .eq('is_current', 1);
         }
       }
