@@ -13,6 +13,11 @@ interface BirthdayEmployee {
   clubs: { name: string } | null;
 }
 
+interface Club {
+  id: string;
+  name: string;
+}
+
 const MONTHS = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
@@ -58,18 +63,30 @@ export default function Cumpleanos() {
   const isAdmin = user?.role === 'Administrador';
   const isSupervisor = user?.role === 'Supervisor Interno';
   const isRRHH = user?.role === 'Recursos Humanos';
+  const isSupervisorCliente = user?.role === 'Supervisor Cliente';
   const canEdit = isAdmin || isSupervisor || isRRHH;
+  const canFilterByClub = isAdmin || isRRHH || isSupervisorCliente;
+
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [selectedClubId, setSelectedClubId] = useState<string>('');
+
+  useEffect(() => {
+    if (canFilterByClub) {
+      apiFetch('/api/clubs').then(r => r.ok ? r.json() : []).then(setClubs).catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     fetchBirthdays();
-  }, [selectedMonth]);
+  }, [selectedMonth, selectedClubId]);
 
   const fetchBirthdays = async () => {
     setLoading(true);
     try {
-      const url = selectedMonth === 0
-        ? '/api/employees/birthdays'
-        : `/api/employees/birthdays?month=${selectedMonth}`;
+      const params = new URLSearchParams();
+      if (selectedMonth !== 0) params.set('month', String(selectedMonth));
+      if (selectedClubId) params.set('club_id', selectedClubId);
+      const url = `/api/employees/birthdays${params.toString() ? '?' + params.toString() : ''}`;
       const res = await apiFetch(url);
       if (res.ok) {
         setEmployees(await res.json());
@@ -220,6 +237,22 @@ export default function Cumpleanos() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {canFilterByClub && clubs.length > 0 && (
+            <div className="relative">
+              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <select
+                value={selectedClubId}
+                onChange={e => setSelectedClubId(e.target.value)}
+                className="pl-10 pr-8 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-pink-400 focus:border-pink-400 outline-none appearance-none bg-white"
+              >
+                <option value="">Todos los clubes</option>
+                {clubs.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="relative">
             <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <select

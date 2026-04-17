@@ -501,9 +501,14 @@ router.post('/employees', canModifyData, async (req, res) => {
 
 // GET /api/employees/birthdays — MUST be before /employees/:id to avoid route shadowing
 router.get('/employees/birthdays', canViewData, async (req, res) => {
-  const { month } = req.query;
+  const { month, club_id: queryClubId } = req.query;
   const user = (req as any).user;
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : undefined;
+
+  // Supervisors/Coordinadoras are always scoped to their own club
+  const scopedRoles = ['Supervisor Interno', 'Coordinadora'];
+  const club_id = scopedRoles.includes(user.role)
+    ? user.club_id
+    : (queryClubId as string | undefined);
 
   let query = supabase
     .from('employees')
