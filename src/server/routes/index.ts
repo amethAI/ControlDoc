@@ -2043,5 +2043,24 @@ router.post('/employees/import-birthdays', isAuthenticated, async (req, res) => 
   res.json({ updated, notFound });
 });
 
+// DELETE /api/employees/:id/birth-date — clear birth_date for a single employee
+router.delete('/employees/:id/birth-date', isAuthenticated, async (req, res) => {
+  const { id } = req.params;
+  const user = (req as any).user;
+
+  const allowedRoles = ['Administrador', 'Coordinadora', 'Supervisor Interno', 'Recursos Humanos'];
+  if (!allowedRoles.includes(user.role)) {
+    return res.status(403).json({ error: 'Sin permiso' });
+  }
+
+  const { error } = await supabase
+    .from('employees')
+    .update({ birth_date: null })
+    .eq('id', id);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 export default router;
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Cake, Upload, Building2, Calendar } from 'lucide-react';
+import { Cake, Upload, Building2, Calendar, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import { toast } from 'sonner';
@@ -52,10 +52,14 @@ export default function Cumpleanos() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = user?.role === 'Administrador';
   const isCoord = user?.role === 'Coordinadora';
+  const isSupervisor = user?.role === 'Supervisor Interno';
+  const isRRHH = user?.role === 'Recursos Humanos';
+  const canEdit = isAdmin || isCoord || isSupervisor || isRRHH;
 
   useEffect(() => {
     fetchBirthdays();
@@ -178,6 +182,27 @@ export default function Cumpleanos() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    if (confirmDelete !== id) {
+      setConfirmDelete(id);
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/employees/${id}/birth-date`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('Cumpleaños eliminado');
+        setEmployees(prev => prev.filter(e => e.id !== id));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || 'Error al eliminar');
+      }
+    } catch {
+      toast.error('Error al eliminar');
+    } finally {
+      setConfirmDelete(null);
+    }
+  };
+
   const todayBirthdays = employees.filter(e => isToday(e.birth_date));
   const sorted = [...employees].sort((a, b) => getDaysUntil(a.birth_date) - getDaysUntil(b.birth_date));
 
@@ -210,7 +235,7 @@ export default function Cumpleanos() {
             </select>
           </div>
 
-          {(isAdmin || isCoord) && (
+          {canEdit && (
             <>
               <input
                 ref={fileInputRef}
@@ -262,12 +287,13 @@ export default function Cumpleanos() {
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Fecha</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Edad</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Días</th>
+                {canEdit && <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-20"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
+                  <td colSpan={canEdit ? 6 : 5} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="h-8 w-8 border-4 border-pink-100 border-t-pink-500 rounded-full animate-spin" />
                       <p className="text-slate-500 text-sm">Cargando...</p>
@@ -276,11 +302,11 @@ export default function Cumpleanos() {
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
+                  <td colSpan={canEdit ? 6 : 5} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <Cake className="h-8 w-8 text-slate-300" />
                       <p className="text-slate-500 text-sm">No hay cumpleaños registrados para este mes.</p>
-                      {(isAdmin || isCoord) && (
+                      {canEdit && (
                         <p className="text-slate-400 text-xs">Importá el Excel con las fechas para comenzar.</p>
                       )}
                     </div>
@@ -321,6 +347,34 @@ export default function Cumpleanos() {
                           {today ? '¡Hoy!' : `${days}d`}
                         </span>
                       </td>
+                      {canEdit && (
+                        <td className="px-6 py-4 text-center">
+                          {confirmDelete === emp.id ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleDelete(emp.id)}
+                                className="px-2 py-1 text-xs font-bold bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all"
+                              >
+                                Confirmar
+                              </button>
+                              <button
+                                onClick={() => setConfirmDelete(null)}
+                                className="px-2 py-1 text-xs font-bold bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-all"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleDelete(emp.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                              title="Eliminar cumpleaños"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })
