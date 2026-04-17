@@ -56,10 +56,9 @@ export default function Cumpleanos() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = user?.role === 'Administrador';
-  const isCoord = user?.role === 'Coordinadora';
   const isSupervisor = user?.role === 'Supervisor Interno';
   const isRRHH = user?.role === 'Recursos Humanos';
-  const canEdit = isAdmin || isCoord || isSupervisor || isRRHH;
+  const canEdit = isAdmin || isSupervisor || isRRHH;
 
   useEffect(() => {
     fetchBirthdays();

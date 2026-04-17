@@ -2022,19 +2022,31 @@ router.post('/employees/import-birthdays', isAuthenticated, async (req, res) => 
   const records: { name: string; birth_date: string }[] = req.body;
   if (!Array.isArray(records)) return res.status(400).json({ error: 'Se esperaba un array' });
 
+  const user = (req as any).user;
+  const allowedEditRoles = ['Administrador', 'Supervisor Interno', 'Recursos Humanos'];
+  if (!allowedEditRoles.includes(user.role)) {
+    return res.status(403).json({ error: 'Sin permiso para importar cumpleaños' });
+  }
+  const scopedClubId = user.role === 'Supervisor Interno' ? user.club_id : undefined;
+
   let updated = 0;
   const notFound: string[] = [];
 
   for (const r of records) {
     if (!r.name || !r.birth_date) continue;
-    const { data } = await supabase
+
+    let lookup = supabase
       .from('employees')
       .select('id')
-      .ilike('full_name', r.name.trim())
-      .limit(1);
+      .ilike('full_name', r.name.trim());
+
+    if (scopedClubId) lookup = lookup.eq('club_id', scopedClubId);
+
+    const { data } = await lookup;
 
     if (data && data.length > 0) {
-      await supabase.from('employees').update({ birth_date: r.birth_date }).eq('id', data[0].id);
+      const ids = data.map((e: any) => e.id);
+      await supabase.from('employees').update({ birth_date: r.birth_date }).in('id', ids);
       updated++;
     } else {
       notFound.push(r.name);
@@ -2048,7 +2060,7 @@ router.delete('/employees/:id/birth-date', isAuthenticated, async (req, res) => 
   const { id } = req.params;
   const user = (req as any).user;
 
-  const allowedRoles = ['Administrador', 'Coordinadora', 'Supervisor Interno', 'Recursos Humanos'];
+  const allowedRoles = ['Administrador', 'Supervisor Interno', 'Recursos Humanos'];
   if (!allowedRoles.includes(user.role)) {
     return res.status(403).json({ error: 'Sin permiso' });
   }
