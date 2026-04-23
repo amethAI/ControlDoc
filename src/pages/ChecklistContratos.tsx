@@ -22,7 +22,7 @@ interface EmployeeChecklist {
 
 export default function ChecklistContratos() {
   const { user } = useAuth();
-  const canEdit = user?.role === 'Administrador' || user?.role === 'Supervisor Interno';
+  const canEdit = user?.role === 'Administrador' || user?.role === 'Super Administrador' || user?.role === 'Supervisor Interno';
   const [employees, setEmployees] = useState<EmployeeChecklist[]>([]);
   const [localEdits, setLocalEdits] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);

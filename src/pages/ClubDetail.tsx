@@ -96,7 +96,7 @@ export default function ClubDetail() {
           <h2 className="text-2xl font-bold text-slate-800">Detalle del Club</h2>
         </div>
         <div className="flex gap-3">
-          {user?.role === 'Administrador' && (
+          {(user?.role === 'Administrador' || user?.role === 'Super Administrador') && (
             <>
               <button 
                 onClick={() => setIsPermissionsModalOpen(true)}
@@ -147,7 +147,7 @@ export default function ClubDetail() {
               Empleados del Club ({employees.length})
             </h3>
             <div className="flex gap-2">
-              {(user?.role === 'Administrador' || user?.role === 'Supervisor Interno') && (
+              {((user?.role === 'Administrador' || user?.role === 'Super Administrador') || user?.role === 'Supervisor Interno') && (
                 <>
                   <button 
                     onClick={() => setIsBulkEmployeeModalOpen(true)}

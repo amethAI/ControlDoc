@@ -15,7 +15,7 @@ export default function Configuracion() {
   const [showTestAlertConfirm, setShowTestAlertConfirm] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  if (user?.role !== 'Administrador') {
+  if (user?.role !== 'Administrador' && user?.role !== 'Super Administrador') {
     return (
       <div className="p-8 text-center text-red-500">
         No tienes permisos para acceder a esta sección.

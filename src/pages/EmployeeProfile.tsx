@@ -250,7 +250,7 @@ export default function EmployeeProfile() {
           <h2 className="text-2xl font-bold text-slate-800">Perfil del Empleado</h2>
         </div>
         <div className="flex gap-3">
-          {employee.status === 'activo' && (user?.role === 'Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
+          {employee.status === 'activo' && ((user?.role === 'Administrador' || user?.role === 'Super Administrador') || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
             <button 
               onClick={() => setIsTerminateModalOpen(true)}
               className="inline-flex items-center px-4 py-2 border border-red-200 rounded-lg shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100"
@@ -259,7 +259,7 @@ export default function EmployeeProfile() {
               Dar de Baja
             </button>
           )}
-          {employee.status === 'inactivo' && (user?.role === 'Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
+          {employee.status === 'inactivo' && ((user?.role === 'Administrador' || user?.role === 'Super Administrador') || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
             <button 
               onClick={() => setIsReactivateModalOpen(true)}
               className="inline-flex items-center px-4 py-2 border border-green-200 rounded-lg shadow-sm text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100"
@@ -370,7 +370,7 @@ export default function EmployeeProfile() {
                       <p className="text-xs opacity-80 mt-0.5">{getStatusText(status)}</p>
                     </div>
                   </div>
-                  {(user?.role === 'Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
+                  {((user?.role === 'Administrador' || user?.role === 'Super Administrador') || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
                     <button 
                       onClick={() => handleUploadClick(type.id, type.name)}
                       className="p-2 bg-white/50 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200 shadow-sm"
@@ -402,7 +402,7 @@ export default function EmployeeProfile() {
                           <Eye className="h-3.5 w-3.5" />
                           Ver
                         </button>
-                        {type.id !== 'doc-personal-combined' && !isContractTiedDoc && (user?.role === 'Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
+                        {type.id !== 'doc-personal-combined' && !isContractTiedDoc && ((user?.role === 'Administrador' || user?.role === 'Super Administrador') || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
                           <button 
                             onClick={() => handleEditClick(doc, type.name)}
                             className="p-1.5 bg-white/80 hover:bg-white rounded-md text-slate-600 hover:text-blue-600 shadow-sm border border-slate-200 transition-all"
@@ -411,7 +411,7 @@ export default function EmployeeProfile() {
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
                         )}
-                        {(user?.role === 'Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
+                        {((user?.role === 'Administrador' || user?.role === 'Super Administrador') || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
                           <button 
                             onClick={() => handleDeleteClick(type.id, type.name)}
                             className="p-1.5 bg-white/80 hover:bg-white rounded-md text-slate-600 hover:text-red-600 shadow-sm border border-slate-200 transition-all"

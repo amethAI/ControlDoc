@@ -8,7 +8,7 @@ export default function RolesInfo() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user && user.role !== 'Administrador') {
+    if (user && user.role !== 'Administrador' && user.role !== 'Super Administrador') {
       navigate('/');
     }
   }, [user, navigate]);

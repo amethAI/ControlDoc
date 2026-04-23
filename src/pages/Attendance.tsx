@@ -87,7 +87,7 @@ export default function Attendance() {
     );
   }
 
-  const isReadOnly = user?.role !== 'Administrador' && user?.role !== 'Supervisor Interno';
+  const isReadOnly = user?.role !== 'Administrador' && user?.role !== 'Super Administrador' && user?.role !== 'Supervisor Interno';
   const isRestricted = user?.role === 'Supervisor Interno';
 
   const monthStart = startOfMonth(currentMonth);

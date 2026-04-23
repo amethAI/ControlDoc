@@ -146,9 +146,9 @@ export default function Employees() {
         </div>
 
         <div className="flex gap-3">
-          {user?.role === 'Administrador' && (
+          {(user?.role === 'Administrador' || user?.role === 'Super Administrador') && (
             <>
-              {user?.role === 'Administrador' && (
+              {(user?.role === 'Administrador' || user?.role === 'Super Administrador') && (
                 <button 
                   onClick={() => setIsImportDatesModalOpen(true)}
                   className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"

@@ -60,7 +60,7 @@ export default function Cumpleanos() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isAdmin = user?.role === 'Administrador';
+  const isAdmin = user?.role === 'Administrador' || user?.role === 'Super Administrador';
   const isSupervisor = user?.role === 'Supervisor Interno';
   const isRRHH = user?.role === 'Recursos Humanos';
   const isSupervisorCliente = user?.role === 'Supervisor Cliente';

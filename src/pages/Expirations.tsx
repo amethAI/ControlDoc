@@ -28,7 +28,7 @@ interface ChecklistEmployee {
 export default function Expirations() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const canEdit = user?.role === 'Administrador' || user?.role === 'Supervisor Interno';
+  const canEdit = user?.role === 'Administrador' || user?.role === 'Super Administrador' || user?.role === 'Supervisor Interno';
   const [employees, setEmployees] = useState<ChecklistEmployee[]>([]);
   const [manualRows, setManualRows] = useState<ChecklistEmployee[]>([]);
   const [localEdits, setLocalEdits] = useState<Record<string, any>>({});
