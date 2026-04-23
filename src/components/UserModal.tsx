@@ -1,6 +1,6 @@
 import { apiFetch } from '../lib/api';
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Shield, Building2, Lock, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { X, User, Mail, Shield, Building2, Lock, Eye, EyeOff, Trash2, Globe } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 
@@ -18,7 +18,8 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
     email: '',
     password: '',
     role: 'Coordinadora',
-    club_id: ''
+    club_id: '',
+    country: ''
   });
   const [clubs, setClubs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,7 +45,8 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
         email: user.email,
         password: user.password || '',
         role: user.role,
-        club_id: user.club_id || ''
+        club_id: user.club_id || '',
+        country: user.country || ''
       });
     } else {
       setFormData({
@@ -52,7 +54,8 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
         email: '',
         password: '',
         role: 'Coordinadora',
-        club_id: ''
+        club_id: '',
+        country: ''
       });
     }
   }, [user, isOpen]);
@@ -214,6 +217,26 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
               </select>
             </div>
           </div>
+
+          {formData.role === 'Administrador' && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">País <span className="text-red-500">*</span></label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Globe className="h-4 w-4 text-slate-400" />
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={formData.country}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Ej: Panama, Costa Rica, Colombia..."
+                />
+              </div>
+              <p className="text-xs text-slate-400">Debe coincidir exactamente con el país asignado a los clubes.</p>
+            </div>
+          )}
 
           {['Coordinadora', 'Supervisor Interno', 'Supervisor Cliente'].includes(formData.role) && (
             <div className="space-y-1">

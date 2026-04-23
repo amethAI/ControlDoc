@@ -1764,13 +1764,14 @@ router.post('/users', isAdmin, async (req, res) => {
 });
 
 router.patch('/users/:id', isAdmin, async (req, res) => {
-  const { email, password, name, role, club_id, is_active } = req.body;
+  const { email, password, name, role, club_id, country, is_active } = req.body;
   try {
     const updateData: any = {
-      email, 
-      name, 
-      role, 
-      club_id: club_id || null, 
+      email,
+      name,
+      role,
+      club_id: club_id || null,
+      country: country || null,
       is_active: is_active === undefined ? 1 : is_active,
       updated_at: new Date().toISOString()
     };
