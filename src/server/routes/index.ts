@@ -52,7 +52,7 @@ const isAuthenticated = async (req: any, res: any, next: any) => {
     // Fetch latest user data from DB to ensure club_id is up to date
     const { data: user } = await supabase
       .from('users')
-      .select('id, email, name, role, club_id')
+      .select('id, email, name, role, club_id, country')
       .eq('id', decoded.id)
       .single();
       
@@ -69,9 +69,9 @@ const isAuthenticated = async (req: any, res: any, next: any) => {
   }
 };
 
-// Middleware to check if user is Administrator
+// Middleware to check if user is Administrator (or Super Administrador)
 const isAdmin = (req: any, res: any, next: any) => {
-  if (!req.user || req.user.role !== 'Administrador') {
+  if (!req.user || !['Administrador', 'Super Administrador'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Acceso denegado. Solo el administrador puede realizar esta acción.' });
   }
   next();
@@ -79,7 +79,7 @@ const isAdmin = (req: any, res: any, next: any) => {
 
 // Middleware to check if user can view data (Employees, Attendance, Dashboard)
 const canViewData = (req: any, res: any, next: any) => {
-  const allowedRoles = ['Administrador', 'Supervisor Interno', 'Supervisora', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos'];
+  const allowedRoles = ['Super Administrador', 'Administrador', 'Supervisor Interno', 'Supervisora', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos'];
   const user = (req as any).user;
   
   if (!user || !allowedRoles.includes(user.role)) {
@@ -96,7 +96,7 @@ const canViewData = (req: any, res: any, next: any) => {
 
 // Middleware to check if user can modify data
 const canModifyData = (req: any, res: any, next: any) => {
-  const allowedRoles = ['Administrador', 'Supervisor Interno'];
+  const allowedRoles = ['Super Administrador', 'Administrador', 'Supervisor Interno'];
   const user = (req as any).user;
   
   if (!user || !allowedRoles.includes(user.role)) {
@@ -113,7 +113,7 @@ const canModifyData = (req: any, res: any, next: any) => {
 
 // Middleware to check if user is Internal (Admin or Internal Supervisor)
 const isInternal = (req: any, res: any, next: any) => {
-  const internalRoles = ['Administrador', 'Supervisor Interno'];
+  const internalRoles = ['Super Administrador', 'Administrador', 'Supervisor Interno'];
   const user = (req as any).user;
   
   if (!user || !internalRoles.includes(user.role)) {
@@ -252,7 +252,7 @@ router.post('/auth/login', async (req, res) => {
 
       // Generate JWT
       const token = jwt.sign(
-        { id: user.id, email: user.email, name: user.name, role: user.role, club_id: user.club_id },
+        { id: user.id, email: user.email, name: user.name, role: user.role, club_id: user.club_id, country: user.country || null },
         JWT_SECRET,
         { expiresIn: '24h' }
       );
@@ -278,7 +278,8 @@ router.post('/auth/login', async (req, res) => {
           email: user.email,
           name: user.name,
           role: user.role,
-          club_id: user.club_id
+          club_id: user.club_id,
+          country: user.country || null
         }
       });
     } else {
@@ -364,10 +365,21 @@ router.get('/audit-logs', isAdmin, async (req, res) => {
 router.get('/clubs', isAuthenticated, async (req, res) => {
   try {
     const user = (req as any).user;
-    console.log(`[API] /clubs called by ${user?.email} (Role: ${user?.role}, Club: ${user?.club_id})`);
-    const { data: clubs, error } = await supabase.from('clubs').select('*');
+    let query = supabase.from('clubs').select('*').neq('id', 'global');
+
+    // Scoped roles: only see their own club
+    if (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') {
+      query = query.eq('id', user.club_id);
+    }
+    // Admin de País: only see clubs in their country
+    else if (user.role === 'Administrador' && user.country) {
+      query = query.eq('country', user.country);
+    }
+    // Super Administrador: see all clubs (no filter)
+
+    const { data: clubs, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
-    res.json(clubs ? clubs.filter(c => c.id !== 'global') : []);
+    res.json(clubs || []);
   } catch (error: any) {
     console.error('Error in /clubs:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
@@ -392,13 +404,13 @@ router.get('/clubs/:id', isAuthenticated, async (req, res) => {
 
 // Create club
 router.post('/clubs', isAdmin, async (req, res) => {
-  const { name, description, address } = req.body;
+  const { name, description, address, country } = req.body;
   
   try {
     const id = `club-${Date.now()}`;
     const { data: newClub, error } = await supabase
       .from('clubs')
-      .insert([{ id, name, description, address }])
+      .insert([{ id, name, description, address, country: country || null }])
       .select()
       .single();
       
@@ -429,26 +441,34 @@ router.get('/employees', canViewData, async (req, res) => {
   try {
     const { club_id: queryClubId, status } = req.query;
     const user = (req as any).user;
-    
-    // If user is Supervisor Interno or Coordinadora, they can only see their club
-    const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
-    
-    // Debug check
-    const isMock = !process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY;
-    if (isMock) {
-      console.warn('⚠️ API /employees called but Supabase is NOT configured. Using mock data or returning empty.');
-    }
-    
+
     let query = supabase.from('employees').select('*').order('full_name', { ascending: true });
-    
-    if (club_id) {
-      query = query.eq('club_id', club_id);
+
+    // Scoped roles: only their club
+    if (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') {
+      query = query.eq('club_id', user.club_id);
+    }
+    // Admin de País: filter by clubs in their country
+    else if (user.role === 'Administrador' && user.country) {
+      if (queryClubId) {
+        query = query.eq('club_id', queryClubId as string);
+      } else {
+        const { data: countryClubs } = await supabase
+          .from('clubs')
+          .select('id')
+          .eq('country', user.country);
+        const clubIds = (countryClubs || []).map((c: any) => c.id);
+        if (clubIds.length > 0) query = query.in('club_id', clubIds);
+        else return res.json([]);
+      }
+    }
+    // Super Administrador: filter by specific club if requested, otherwise all
+    else if (queryClubId) {
+      query = query.eq('club_id', queryClubId as string);
     }
 
-    if (status) {
-      query = query.eq('status', status);
-    }
-    
+    if (status) query = query.eq('status', status);
+
     const { data: employees, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
     res.json(employees);
@@ -1696,7 +1716,16 @@ router.get('/dashboard', canViewData, async (req, res) => {
 // User management routes
 router.get('/users', isAdmin, async (req, res) => {
   try {
-    const { data: users, error } = await supabase.from('users').select('id, email, name, role, club_id, is_active');
+    const user = (req as any).user;
+    let query = supabase.from('users').select('id, email, name, role, club_id, country, is_active');
+
+    // Admin de País solo ve usuarios de su país
+    if (user.role === 'Administrador' && user.country) {
+      query = query.eq('country', user.country);
+    }
+    // Super Administrador ve todos
+
+    const { data: users, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
     res.json(users);
   } catch (error: any) {
@@ -1706,14 +1735,14 @@ router.get('/users', isAdmin, async (req, res) => {
 });
 
 router.post('/users', isAdmin, async (req, res) => {
-  const { email, password, name, role, club_id } = req.body;
+  const { email, password, name, role, club_id, country } = req.body;
   try {
     const id = `user-${Date.now()}`;
     const hashedPassword = bcrypt.hashSync(password, 10);
-    
+
     const { data: newUser, error } = await supabase
       .from('users')
-      .insert([{ id, email, password_hash: hashedPassword, name, role, club_id: club_id || null }])
+      .insert([{ id, email, password_hash: hashedPassword, name, role, club_id: club_id || null, country: country || null }])
       .select('id, email, name, role, club_id, is_active')
       .single();
       

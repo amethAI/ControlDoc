@@ -4,8 +4,9 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'Administrador' | 'Supervisora' | 'Coordinadora' | 'Supervisor Interno' | 'Supervisor Cliente';
+  role: 'Super Administrador' | 'Administrador' | 'Supervisora' | 'Coordinadora' | 'Supervisor Interno' | 'Supervisor Cliente' | 'Recursos Humanos';
   club_id?: string;
+  country?: string;
 }
 
 interface AuthContextType {

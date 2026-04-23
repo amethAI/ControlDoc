@@ -30,26 +30,26 @@ export default function Layout() {
   };
 
   const isRRHH = user?.role === 'Recursos Humanos';
+  const isSuperAdmin = user?.role === 'Super Administrador';
+  const isAdmin = user?.role === 'Administrador' || isSuperAdmin;
 
   const navigation = [
     ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' ? [{ name: 'Dashboard', href: '/', icon: LayoutDashboard }] : []),
     ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' && user?.role !== 'Supervisor Cliente' ? [{ name: 'Empleados', href: '/empleados', icon: Users }] : []),
     { name: 'Check List', href: '/vencimientos', icon: CalendarClock },
     { name: 'Check List 1 Año', href: '/checklist-contratos', icon: ClipboardList },
-    ...((user?.role === 'Administrador' || user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente' || isRRHH) ? [
+    ...((isAdmin || user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente' || isRRHH) ? [
       { name: 'Cumpleaños', href: '/cumpleanos', icon: Cake }
     ] : []),
     ...(user?.role !== 'Supervisor Cliente' && user?.role !== 'Coordinadora' ? [{ name: 'Asistencia', href: '/asistencia', icon: CalendarCheck }] : []),
-    ...((user?.role === 'Administrador' || user?.role === 'Supervisor Interno') ? [
+    ...((isAdmin || user?.role === 'Supervisor Interno') ? [
       { name: 'Rendimiento', href: '/rendimiento', icon: TrendingUp }
     ] : []),
-    ...((user?.role === 'Administrador' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente' || isRRHH) ? [
+    ...((isAdmin || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente' || isRRHH) ? [
       { name: 'Clubes', href: '/clubes', icon: Building2 }
     ] : []),
-    ...(user?.role === 'Administrador' ? [{ name: 'Roles y Permisos', href: '/roles', icon: Info }] : []),
-    ...(user?.role === 'Administrador' ? [
-      { name: 'Configuración', href: '/configuracion', icon: Settings }
-    ] : [])
+    ...(isAdmin ? [{ name: 'Roles y Permisos', href: '/roles', icon: Info }] : []),
+    ...(isAdmin ? [{ name: 'Configuración', href: '/configuracion', icon: Settings }] : [])
   ];
 
   const [isOnline, setIsOnline] = React.useState(true);
@@ -125,6 +125,12 @@ export default function Layout() {
             <div className="ml-3 overflow-hidden">
               <p className="text-sm font-medium truncate">{user?.name}</p>
               <p className="text-xs text-slate-400 truncate">{user?.role}</p>
+              {user?.country && (
+                <p className="text-[10px] text-blue-400 font-semibold truncate mt-0.5">🌎 {user.country}</p>
+              )}
+              {isSuperAdmin && (
+                <p className="text-[10px] text-amber-400 font-semibold truncate mt-0.5">🌐 Global</p>
+              )}
             </div>
           </div>
           <button

@@ -1,7 +1,7 @@
 import { apiFetch } from '../lib/api';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Building2, Plus, Search, X } from 'lucide-react';
+import { Building2, Plus, Search, X, Globe } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface Club {
@@ -9,18 +9,21 @@ interface Club {
   name: string;
   description: string;
   address: string;
+  country: string | null;
   is_active: number;
 }
 
 export default function Clubs() {
   const { user } = useAuth();
-  console.log('Clubs Page Loaded - Version 1.0.7');
   const [clubs, setClubs] = useState<Club[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newClub, setNewClub] = useState({ name: '', description: '', address: '' });
+  const [newClub, setNewClub] = useState({ name: '', description: '', address: '', country: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const isSuperAdmin = user?.role === 'Super Administrador';
+  const isAdmin = user?.role === 'Administrador' || isSuperAdmin;
 
   const fetchClubs = async () => {
     try {
@@ -46,19 +49,14 @@ export default function Clubs() {
     try {
       const res = await apiFetch('/api/clubs', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-role': user?.role || '',
-          'x-user-id': user?.id || '',
-          'x-user-name': user?.name || ''
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newClub)
       });
 
       if (res.ok) {
         await fetchClubs();
         setIsModalOpen(false);
-        setNewClub({ name: '', description: '', address: '' });
+        setNewClub({ name: '', description: '', address: '', country: '' });
       } else {
         const data = await res.json();
         setError(data.error || 'Error al crear el club');
@@ -70,13 +68,9 @@ export default function Clubs() {
     }
   };
 
-  const filteredClubs = clubs.filter(club => {
-    const matchesSearch = club.name.toLowerCase().includes(searchTerm.toLowerCase());
-    if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno') {
-      return matchesSearch && club.id === user.club_id;
-    }
-    return matchesSearch;
-  });
+  const filteredClubs = clubs.filter(club =>
+    club.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -94,9 +88,8 @@ export default function Clubs() {
           />
         </div>
         <div className="flex gap-3 items-center">
-          <span className="text-xs font-bold text-orange-600 mr-2 bg-orange-50 px-2 py-1 rounded">DEBUG: {user?.role || 'Sin Rol'} | Club: {user?.club_id || 'Ninguno'}</span>
-          {user?.role === 'Administrador' && (
-            <button 
+          {isAdmin && (
+            <button
               onClick={() => setIsModalOpen(true)}
               className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
@@ -116,11 +109,19 @@ export default function Clubs() {
                   <div className="h-12 w-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
                     <Building2 className="h-6 w-6" />
                   </div>
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                    club.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'
-                  }`}>
-                    {club.is_active ? 'Activo' : 'Inactivo'}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                      club.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'
+                    }`}>
+                      {club.is_active ? 'Activo' : 'Inactivo'}
+                    </span>
+                    {club.country && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                        <Globe className="h-2.5 w-2.5" />
+                        {club.country}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <h3 className="text-lg font-semibold text-slate-900">{club.name}</h3>
                 <p className="mt-1 text-sm text-slate-500 line-clamp-2">
@@ -139,8 +140,8 @@ export default function Clubs() {
             <Building2 className="mx-auto h-12 w-12 text-slate-400" />
             <h3 className="mt-2 text-sm font-medium text-slate-900">No hay clubes</h3>
             <p className="mt-1 text-sm text-slate-500">
-              {(user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora') 
-                ? 'No tienes ningún club asignado actualmente.' 
+              {(user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora')
+                ? 'No tienes ningún club asignado actualmente.'
                 : 'No se encontraron clubes con los filtros actuales.'}
             </p>
           </div>
@@ -152,7 +153,7 @@ export default function Clubs() {
         <div className="fixed inset-0 z-[9999] overflow-y-auto">
           <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
             <div className="fixed inset-0 bg-slate-900/50 transition-opacity" onClick={() => setIsModalOpen(false)} />
-            
+
             <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div className="flex justify-between items-center mb-4">
@@ -163,9 +164,7 @@ export default function Clubs() {
                 </div>
                 <form onSubmit={handleCreateClub} className="space-y-4">
                   {error && (
-                    <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm">
-                      {error}
-                    </div>
+                    <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm">{error}</div>
                   )}
                   <div>
                     <label className="block text-sm font-medium text-slate-700">Nombre del Club</label>
@@ -175,6 +174,17 @@ export default function Clubs() {
                       className="mt-1 block w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                       value={newClub.name}
                       onChange={(e) => setNewClub({ ...newClub, name: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">País <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej: Panama, Costa Rica, Colombia..."
+                      className="mt-1 block w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      value={newClub.country}
+                      onChange={(e) => setNewClub({ ...newClub, country: e.target.value })}
                     />
                   </div>
                   <div>
@@ -206,7 +216,7 @@ export default function Clubs() {
                     <button
                       type="submit"
                       disabled={isLoading}
-                      className="flex-1 px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                      className="flex-1 px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
                     >
                       {isLoading ? 'Creando...' : 'Crear Club'}
                     </button>
