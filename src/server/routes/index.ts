@@ -1506,19 +1506,46 @@ router.get('/dashboard', canViewData, async (req, res) => {
 
   if (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') {
     club_id = user.club_id;
-  } else if (user.role === 'Administrador' && user.country) {
+  } else if (user.role === 'Administrador') {
+    // Always scope Administrador by country (even if country is null → no clubs visible)
+    const countryVal = user.country || '__no_country__';
     const { data: countryClubs } = await supabase
-      .from('clubs').select('id').eq('country', user.country);
+      .from('clubs').select('id').eq('country', countryVal);
     allowedClubIds = (countryClubs || []).map((c: any) => c.id);
+    console.log(`[DASHBOARD] Admin de País "${user.email}" country="${user.country}" → clubs:`, allowedClubIds);
   } else {
+    // Super Administrador or other roles: use optional query param (no forced filter)
     club_id = queryClubId as string | undefined;
   }
 
-  // Helper: apply club filter — handles single club, country-scoped list, or global
+  // Pre-fetch employee IDs for country-scoped queries.
+  // PostgREST doesn't support .in() on nested join fields (employees.club_id),
+  // so we resolve employee IDs here and filter by employee_id directly.
+  let allowedEmployeeIds: string[] | null = null;
+  if (allowedClubIds !== null) {
+    if (allowedClubIds.length > 0) {
+      const { data: scopedEmps } = await supabase
+        .from('employees').select('id').in('club_id', allowedClubIds);
+      allowedEmployeeIds = (scopedEmps || []).map((e: any) => e.id);
+    } else {
+      allowedEmployeeIds = [];
+    }
+  }
+
+  // Helper: apply club filter on queries with a direct club_id column
   const applyFilter = (q: any, field = 'club_id') => {
     if (club_id) return q.eq(field, club_id);
     if (allowedClubIds !== null) {
       return allowedClubIds.length > 0 ? q.in(field, allowedClubIds) : q.in(field, ['__none__']);
+    }
+    return q;
+  };
+
+  // Helper: apply employee filter on employee_documents (use employee_id, not nested join)
+  const applyDocFilter = (q: any) => {
+    if (club_id) return q.eq('employees.club_id', club_id); // single club: join filter works
+    if (allowedEmployeeIds !== null) {
+      return allowedEmployeeIds.length > 0 ? q.in('employee_id', allowedEmployeeIds) : q.in('employee_id', ['__none__']);
     }
     return q;
   };
@@ -1542,7 +1569,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
       .lt('expiry_date', todayStr)
       .eq('employees.status', 'activo');
       
-    expiredDocsQuery = applyFilter(expiredDocsQuery, 'employees.club_id');
+    expiredDocsQuery = applyDocFilter(expiredDocsQuery);
     
     const { data: expiredDocsData } = await expiredDocsQuery;
     
@@ -1613,7 +1640,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
       .lte('expiry_date', dateStr)
       .eq('employees.status', 'activo');
       
-    expiringDocsQuery = applyFilter(expiringDocsQuery, 'employees.club_id');
+    expiringDocsQuery = applyDocFilter(expiringDocsQuery);
     
     const { data: expiringDocsData } = await expiringDocsQuery;
     
@@ -1674,13 +1701,15 @@ router.get('/dashboard', canViewData, async (req, res) => {
     const incompleteEmployees = 0;
 
     // 5. Uploaded Today
-    const needsClubJoin = !!club_id || allowedClubIds !== null;
+    const needsFilter = !!club_id || allowedClubIds !== null;
+    // For single club_id: need inner join to filter on employees.club_id
+    // For allowedEmployeeIds: filter directly on employee_id (no join needed)
     let uploadedTodayQuery = supabase
       .from('employee_documents')
-      .select(needsClubJoin ? 'id, uploaded_at, employees!inner(club_id)' : 'id, uploaded_at')
+      .select(club_id ? 'id, uploaded_at, employees!inner(club_id)' : 'id, uploaded_at')
       .gte('uploaded_at', todayStr + 'T00:00:00.000Z');
-    if (needsClubJoin) {
-      uploadedTodayQuery = applyFilter(uploadedTodayQuery, 'employees.club_id');
+    if (needsFilter) {
+      uploadedTodayQuery = applyDocFilter(uploadedTodayQuery);
     }
     const { data: uploadedTodayDocs } = await uploadedTodayQuery;
     const documentsUploadedToday = uploadedTodayDocs?.length || 0;
