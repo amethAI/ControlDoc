@@ -1499,14 +1499,34 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
 router.get('/dashboard', canViewData, async (req, res) => {
   const { club_id: queryClubId } = req.query;
   const user = (req as any).user;
-  
-  // If user is Supervisor Interno or Coordinadora, they can only see their club
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
-  
+
+  // Resolve club filter based on role
+  let club_id: string | undefined = undefined;
+  let allowedClubIds: string[] | null = null;
+
+  if (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') {
+    club_id = user.club_id;
+  } else if (user.role === 'Administrador' && user.country) {
+    const { data: countryClubs } = await supabase
+      .from('clubs').select('id').eq('country', user.country);
+    allowedClubIds = (countryClubs || []).map((c: any) => c.id);
+  } else {
+    club_id = queryClubId as string | undefined;
+  }
+
+  // Helper: apply club filter — handles single club, country-scoped list, or global
+  const applyFilter = (q: any, field = 'club_id') => {
+    if (club_id) return q.eq(field, club_id);
+    if (allowedClubIds !== null) {
+      return allowedClubIds.length > 0 ? q.in(field, allowedClubIds) : q.in(field, ['__none__']);
+    }
+    return q;
+  };
+
   try {
     // 1. Total Employees
     let empQuery = supabase.from('employees').select('id', { count: 'exact', head: true }).eq('status', 'activo');
-    if (club_id) empQuery = empQuery.eq('club_id', club_id);
+    empQuery = applyFilter(empQuery);
     const { count: totalEmployees } = await empQuery;
 
     // 2. Expired Documents
@@ -1522,7 +1542,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
       .lt('expiry_date', todayStr)
       .eq('employees.status', 'activo');
       
-    if (club_id) expiredDocsQuery = expiredDocsQuery.eq('employees.club_id', club_id);
+    expiredDocsQuery = applyFilter(expiredDocsQuery, 'employees.club_id');
     
     const { data: expiredDocsData } = await expiredDocsQuery;
     
@@ -1534,7 +1554,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
       .not('contract_end', 'is', null)
       .lt('contract_end', todayStr);
       
-    if (club_id) expiredContractsQuery = expiredContractsQuery.eq('club_id', club_id);
+    expiredContractsQuery = applyFilter(expiredContractsQuery);
     
     const { data: expiredContractsData } = await expiredContractsQuery;
     
@@ -1593,7 +1613,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
       .lte('expiry_date', dateStr)
       .eq('employees.status', 'activo');
       
-    if (club_id) expiringDocsQuery = expiringDocsQuery.eq('employees.club_id', club_id);
+    expiringDocsQuery = applyFilter(expiringDocsQuery, 'employees.club_id');
     
     const { data: expiringDocsData } = await expiringDocsQuery;
     
@@ -1605,7 +1625,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
       .gte('contract_end', todayStr)
       .lte('contract_end', dateStr);
       
-    if (club_id) expiringContractsQuery = expiringContractsQuery.eq('club_id', club_id);
+    expiringContractsQuery = applyFilter(expiringContractsQuery);
     
     const { data: expiringContractsData } = await expiringContractsQuery;
     
@@ -1654,23 +1674,29 @@ router.get('/dashboard', canViewData, async (req, res) => {
     const incompleteEmployees = 0;
 
     // 5. Uploaded Today
-    const { data: uploadedTodayDocs } = await supabase
+    const needsClubJoin = !!club_id || allowedClubIds !== null;
+    let uploadedTodayQuery = supabase
       .from('employee_documents')
-      .select('id, uploaded_at' + (club_id ? ', employees!inner(club_id)' : ''))
+      .select(needsClubJoin ? 'id, uploaded_at, employees!inner(club_id)' : 'id, uploaded_at')
       .gte('uploaded_at', todayStr + 'T00:00:00.000Z');
-      
-    let documentsUploadedToday = 0;
-    if (uploadedTodayDocs) {
-      if (club_id) {
-        documentsUploadedToday = uploadedTodayDocs.filter(d => (d as any).employees?.club_id === club_id).length;
-      } else {
-        documentsUploadedToday = uploadedTodayDocs.length;
-      }
+    if (needsClubJoin) {
+      uploadedTodayQuery = applyFilter(uploadedTodayQuery, 'employees.club_id');
     }
+    const { data: uploadedTodayDocs } = await uploadedTodayQuery;
+    const documentsUploadedToday = uploadedTodayDocs?.length || 0;
 
     // 6. Club Distribution
-    const { data: clubs } = await supabase.from('clubs').select('id, name').neq('id', 'global').neq('id', 'hr');
-    const { data: activeEmployees } = await supabase.from('employees').select('club_id').eq('status', 'activo');
+    let clubsQuery = supabase.from('clubs').select('id, name').neq('id', 'global').neq('id', 'hr');
+    if (club_id) {
+      clubsQuery = clubsQuery.eq('id', club_id);
+    } else if (allowedClubIds !== null) {
+      clubsQuery = allowedClubIds.length > 0 ? clubsQuery.in('id', allowedClubIds) : clubsQuery.in('id', ['__none__']);
+    }
+    const { data: clubs } = await clubsQuery;
+
+    let activeEmpDistQuery = supabase.from('employees').select('club_id').eq('status', 'activo');
+    activeEmpDistQuery = applyFilter(activeEmpDistQuery);
+    const { data: activeEmployees } = await activeEmpDistQuery;
     
     const clubDistribution = clubs?.map(club => {
       const count = activeEmployees?.filter(e => e.club_id === club.id).length || 0;
@@ -1679,8 +1705,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
 
     // 7. Performance Stats (Internal Only)
     let performanceStats = null;
-    const internalRoles = ['Administrador', 'Supervisor Interno'];
-    const user = (req as any).user;
+    const internalRoles = ['Super Administrador', 'Administrador', 'Supervisor Interno'];
     if (user && internalRoles.includes(user.role)) {
       const { data: perfData } = await supabase
         .from('daily_performance')
