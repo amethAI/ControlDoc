@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "mcp__plugin_engram_engram__mem_context",
+      "mcp__plugin_engram_engram__mem_save",
+      "mcp__plugin_engram_engram__mem_session_summary",
+      "Skill(fullstack-web-dev)",
+      "Skill(fullstack-web-dev:*)",
+      "mcp__ebe2e0ae-15c3-46af-9678-73450e45d1a8__apply_migration",
+      "mcp__ebe2e0ae-15c3-46af-9678-73450e45d1a8__execute_sql",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(python3 -c \"import sys,json; p=json.load\\(sys.stdin\\); deps={**p.get\\('dependencies',{}\\), **p.get\\('devDependencies',{}\\)}; print\\('zod' in deps, deps.get\\('zod','NOT FOUND'\\)\\)\")",
+      "Bash(node -e \"const p = require\\('./package.json'\\); const d = {...p.dependencies, ...p.devDependencies}; console.log\\('zod:', d.zod || 'NOT FOUND'\\)\")",
+      "Bash(node -e \"const z = require\\('zod'\\); console.log\\('zod version:', z.ZodVersion || z.version || 'unknown'\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(node -e \"const pkg = require\\('./node_modules/zod/package.json'\\); console.log\\(pkg.version\\)\")",
+      "Bash(ls tsconfig*.json)",
+      "Bash(dir tsconfig*.json)"
+    ]
+  }
+}
