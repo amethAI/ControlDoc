@@ -11,6 +11,7 @@ import { Toaster } from 'sonner';
 // Static imports — always needed on first render
 import Login from './pages/Login';
 import Layout from './components/Layout';
+import PageErrorBoundary from './components/PageErrorBoundary';
 
 // Lazy imports — each page loads only when navigated to
 const Dashboard        = React.lazy(() => import('./pages/Dashboard'));
@@ -57,22 +58,22 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Dashboard />} />
-          <Route path="empleados" element={<Employees />} />
-          <Route path="empleados/:id" element={<EmployeeProfile />} />
-          <Route path="checklist-contratos" element={<ChecklistContratos />} />
-          <Route path="clubes" element={<Clubs />} />
-          <Route path="clubes/:id" element={<ClubDetail />} />
-          <Route path="asistencia" element={<Attendance />} />
-          <Route path="rendimiento" element={<RendimientoVentas />} />
-          <Route path="vencimientos" element={<Expirations />} />
-          <Route path="configuracion" element={<Configuracion />} />
-          <Route path="configuracion/usuarios" element={<GestionUsuarios />} />
-          <Route path="configuracion/alertas" element={<DestinatariosAlertas />} />
-          <Route path="configuracion/auditoria" element={<LogAuditoria />} />
-          <Route path="configuracion/accesos" element={<AccessLogs />} />
-          <Route path="roles" element={<RolesInfo />} />
-          <Route path="cumpleanos" element={<Cumpleanos />} />
+          <Route index element={<PageErrorBoundary pageName="Dashboard"><Dashboard /></PageErrorBoundary>} />
+          <Route path="empleados" element={<PageErrorBoundary pageName="Empleados"><Employees /></PageErrorBoundary>} />
+          <Route path="empleados/:id" element={<PageErrorBoundary pageName="Perfil de Empleado"><EmployeeProfile /></PageErrorBoundary>} />
+          <Route path="checklist-contratos" element={<PageErrorBoundary pageName="Check List"><ChecklistContratos /></PageErrorBoundary>} />
+          <Route path="clubes" element={<PageErrorBoundary pageName="Clubes"><Clubs /></PageErrorBoundary>} />
+          <Route path="clubes/:id" element={<PageErrorBoundary pageName="Detalle del Club"><ClubDetail /></PageErrorBoundary>} />
+          <Route path="asistencia" element={<PageErrorBoundary pageName="Asistencia"><Attendance /></PageErrorBoundary>} />
+          <Route path="rendimiento" element={<PageErrorBoundary pageName="Rendimiento"><RendimientoVentas /></PageErrorBoundary>} />
+          <Route path="vencimientos" element={<PageErrorBoundary pageName="Vencimientos"><Expirations /></PageErrorBoundary>} />
+          <Route path="configuracion" element={<PageErrorBoundary pageName="Configuración"><Configuracion /></PageErrorBoundary>} />
+          <Route path="configuracion/usuarios" element={<PageErrorBoundary pageName="Gestión de Usuarios"><GestionUsuarios /></PageErrorBoundary>} />
+          <Route path="configuracion/alertas" element={<PageErrorBoundary pageName="Destinatarios"><DestinatariosAlertas /></PageErrorBoundary>} />
+          <Route path="configuracion/auditoria" element={<PageErrorBoundary pageName="Auditoría"><LogAuditoria /></PageErrorBoundary>} />
+          <Route path="configuracion/accesos" element={<PageErrorBoundary pageName="Accesos"><AccessLogs /></PageErrorBoundary>} />
+          <Route path="roles" element={<PageErrorBoundary pageName="Roles y Permisos"><RolesInfo /></PageErrorBoundary>} />
+          <Route path="cumpleanos" element={<PageErrorBoundary pageName="Cumpleaños"><Cumpleanos /></PageErrorBoundary>} />
         </Route>
       </Routes>
     </Suspense>

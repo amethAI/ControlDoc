@@ -8,6 +8,40 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import { GoogleGenAI } from '@google/genai';
+import { z } from 'zod';
+
+// ─── Zod validation schemas ───────────────────────────────────────────────────
+const dateOrEmpty = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').or(z.literal('').transform(() => undefined)).optional();
+
+const createEmployeeSchema = z.object({
+  full_name:      z.string().min(2, 'Nombre requerido').max(120),
+  cedula:         z.string().min(3, 'Cédula requerida').max(20),
+  position:       z.string().max(100).optional(),
+  contract_type:  z.string().max(50).optional(),
+  contract_start: dateOrEmpty,
+  contract_end:   dateOrEmpty,
+  club_id:        z.string().min(1, 'Club requerido'),
+});
+
+const createUserSchema = z.object({
+  email:    z.string().email('Email inválido'),
+  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+  name:     z.string().min(2, 'Nombre requerido').max(100),
+  role:     z.enum(['Super Administrador', 'Administrador', 'Supervisor Interno', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos', 'Supervisora']),
+  club_id:  z.string().optional().nullable(),
+  country:  z.string().optional().nullable(),
+});
+
+const updateUserSchema = z.object({
+  email:     z.string().email('Email inválido'),
+  name:      z.string().min(2, 'Nombre requerido').max(100),
+  role:      z.enum(['Super Administrador', 'Administrador', 'Supervisor Interno', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos', 'Supervisora']),
+  password:  z.string().min(6).optional().or(z.literal('')).transform(v => v || undefined),
+  club_id:   z.string().optional().nullable(),
+  country:   z.string().optional().nullable(),
+  is_active: z.number().int().min(0).max(1).optional(),
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 const router = Router();
 const ALLOWED_MIME_TYPES = new Set([
@@ -552,20 +586,28 @@ router.get('/employees', canViewData, async (req, res) => {
 
 // Create employee
 router.post('/employees', canModifyData, async (req, res) => {
-  const { full_name, cedula, position, contract_type, contract_start, contract_end, club_id } = req.body;
   const user = (req as any).user;
+
+  const parsed = createEmployeeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+  }
+  const { full_name, cedula, position, contract_type, contract_start, contract_end, club_id } = parsed.data;
 
   // Restriction: Supervisor Interno can only create for their club
   if (user.role === 'Supervisor Interno' && club_id !== user.club_id) {
     return res.status(403).json({ error: 'Acceso denegado. Solo puede crear empleados para su club asignado.' });
   }
-  
+
   try {
     const id = `emp-${Date.now()}`;
     const { data: newEmployee, error } = await supabase
       .from('employees')
-      .insert([{ 
-        id, full_name, cedula, position, contract_type, contract_start, contract_end, club_id, status: 'activo' 
+      .insert([{
+        id, full_name, cedula, position, contract_type,
+        contract_start: contract_start || null,
+        contract_end:   contract_end   || null,
+        club_id, status: 'activo'
       }])
       .select()
       .single();
@@ -1876,7 +1918,11 @@ router.get('/users', isAdmin, async (req, res) => {
 });
 
 router.post('/users', isAdmin, async (req, res) => {
-  const { email, password, name, role, club_id, country } = req.body;
+  const parsed = createUserSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+  }
+  const { email, password, name, role, club_id, country } = parsed.data;
   try {
     const id = `user-${Date.now()}`;
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -1905,7 +1951,11 @@ router.post('/users', isAdmin, async (req, res) => {
 });
 
 router.patch('/users/:id', isAdmin, async (req, res) => {
-  const { email, password, name, role, club_id, country, is_active } = req.body;
+  const parsed = updateUserSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+  }
+  const { email, password, name, role, club_id, country, is_active } = parsed.data;
   try {
     const updateData: any = {
       email,
@@ -1916,7 +1966,7 @@ router.patch('/users/:id', isAdmin, async (req, res) => {
       is_active: is_active === undefined ? 1 : is_active,
       updated_at: new Date().toISOString()
     };
-    
+
     if (password) {
       updateData.password_hash = await bcrypt.hash(password, 10);
     }
@@ -2205,29 +2255,41 @@ router.post('/employees/import-birthdays', isAuthenticated, async (req, res) => 
   }
   const scopedClubId = user.role === 'Supervisor Interno' ? user.club_id : undefined;
 
-  let updated = 0;
+  // Validate date format for each record upfront
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  const validRecords = records.filter(r => r.name?.trim() && r.birth_date && dateRegex.test(r.birth_date));
+
+  // Lookup all employees in parallel (instead of sequential await per record)
+  const lookups = await Promise.all(
+    validRecords.map(async (r) => {
+      let q = supabase.from('employees').select('id').ilike('full_name', r.name.trim());
+      if (scopedClubId) q = q.eq('club_id', scopedClubId);
+      const { data } = await q;
+      return { record: r, ids: (data || []).map((e: any) => e.id) };
+    })
+  );
+
+  // Collect all updates as {id, birth_date} pairs
+  const updates: { id: string; birth_date: string }[] = [];
   const notFound: string[] = [];
 
-  for (const r of records) {
-    if (!r.name || !r.birth_date) continue;
-
-    let lookup = supabase
-      .from('employees')
-      .select('id')
-      .ilike('full_name', r.name.trim());
-
-    if (scopedClubId) lookup = lookup.eq('club_id', scopedClubId);
-
-    const { data } = await lookup;
-
-    if (data && data.length > 0) {
-      const ids = data.map((e: any) => e.id);
-      await supabase.from('employees').update({ birth_date: r.birth_date }).in('id', ids);
-      updated++;
+  for (const { record, ids } of lookups) {
+    if (ids.length > 0) {
+      ids.forEach(id => updates.push({ id, birth_date: record.birth_date }));
     } else {
-      notFound.push(r.name);
+      notFound.push(record.name);
     }
   }
+
+  // Single batch upsert instead of N individual updates
+  let updated = 0;
+  if (updates.length > 0) {
+    const { error } = await supabase
+      .from('employees')
+      .upsert(updates, { onConflict: 'id' });
+    if (!error) updated = new Set(updates.map(u => u.id)).size;
+  }
+
   res.json({ updated, notFound });
 });
 

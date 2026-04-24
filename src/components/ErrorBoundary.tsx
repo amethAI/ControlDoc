@@ -53,9 +53,11 @@ class ErrorBoundary extends Component<Props, State> {
             <button
               onClick={() => {
                 try {
-                  localStorage.clear();
+                  // Only clear auth tokens, not all stored state
+                  sessionStorage.removeItem('token');
+                  sessionStorage.removeItem('user');
                 } catch (e) {
-                  console.warn('localStorage not available', e);
+                  console.warn('sessionStorage not available', e);
                 }
                 window.location.href = window.location.origin + '?force=' + Date.now();
               }}
