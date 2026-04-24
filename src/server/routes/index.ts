@@ -128,6 +128,56 @@ const isInternal = (req: any, res: any, next: any) => {
   next();
 };
 
+// ─── Shared country-scoping helper ────────────────────────────────────────────
+// Resolves club_id / allowedClubIds / allowedEmployeeIds based on role.
+// - Supervisor Interno / Coordinadora → single club_id from user profile
+// - Administrador → all clubs in user.country (country-scoped list)
+// - Super Administrador / others → no forced filter (use queryClubId if passed)
+async function resolveClubScope(user: any, queryClubId?: string) {
+  let club_id: string | undefined = undefined;
+  let allowedClubIds: string[] | null = null;
+  let allowedEmployeeIds: string[] | null = null;
+
+  if (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') {
+    club_id = user.club_id;
+  } else if (user.role === 'Administrador') {
+    const countryVal = user.country || '__no_country__';
+    const { data: countryClubs } = await supabase
+      .from('clubs').select('id').eq('country', countryVal);
+    allowedClubIds = (countryClubs || []).map((c: any) => c.id);
+    if (allowedClubIds.length > 0) {
+      const { data: scopedEmps } = await supabase
+        .from('employees').select('id').in('club_id', allowedClubIds);
+      allowedEmployeeIds = (scopedEmps || []).map((e: any) => e.id);
+    } else {
+      allowedEmployeeIds = [];
+    }
+  } else {
+    club_id = queryClubId;
+  }
+
+  // Apply filter to a query on a direct club_id column
+  const applyFilter = (q: any, field = 'club_id') => {
+    if (club_id) return q.eq(field, club_id);
+    if (allowedClubIds !== null) {
+      return allowedClubIds.length > 0 ? q.in(field, allowedClubIds) : q.in(field, ['__none__']);
+    }
+    return q;
+  };
+
+  // Apply filter to employee_documents (uses employee_id to avoid nested .in() bug)
+  const applyDocFilter = (q: any) => {
+    if (club_id) return q.eq('employees.club_id', club_id);
+    if (allowedEmployeeIds !== null) {
+      return allowedEmployeeIds.length > 0 ? q.in('employee_id', allowedEmployeeIds) : q.in('employee_id', ['__none__']);
+    }
+    return q;
+  };
+
+  return { club_id, allowedClubIds, allowedEmployeeIds, applyFilter, applyDocFilter };
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 // Performance Routes
 router.get('/performance', isAuthenticated, isInternal, async (req, res) => {
   const { date, club_id: queryClubId } = req.query;
@@ -1314,10 +1364,9 @@ router.post('/attendance-requests', canModifyData, async (req, res) => {
 router.get('/documents/expirations', canViewData, async (req, res) => {
   const { club_id: queryClubId, status } = req.query;
   const user = (req as any).user;
-  
-  // If user is Supervisor Interno or Coordinadora, they can only see their club
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
-  
+
+  const { applyDocFilter } = await resolveClubScope(user, queryClubId as string | undefined);
+
   try {
     let query = supabase
       .from('employee_documents')
@@ -1334,9 +1383,7 @@ router.get('/documents/expirations', canViewData, async (req, res) => {
       .not('expiry_date', 'is', null)
       .eq('employees.status', 'activo');
 
-    if (club_id) {
-      query = query.eq('employees.club_id', club_id);
-    }
+    query = applyDocFilter(query);
 
     const todayStr = new Date().toISOString().split('T')[0];
     const thirtyDaysFromNow = new Date();
@@ -1415,10 +1462,9 @@ router.get('/reports/missing-document', canViewData, async (req, res) => {
 router.get('/reports/checklist', canViewData, async (req, res) => {
   const { club_id: queryClubId } = req.query;
   const user = (req as any).user;
-  
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
-  console.log(`[API] /reports/checklist called by ${user?.email} (Role: ${user?.role}, UserClub: ${user?.club_id}, QueryClub: ${queryClubId}, FinalClub: ${club_id})`);
-  
+
+  const { club_id, applyFilter } = await resolveClubScope(user, queryClubId as string | undefined);
+
   try {
     let query = supabase
       .from('employees')
@@ -1444,6 +1490,8 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
 
     if (club_id && club_id !== 'all') {
       query = query.eq('club_id', club_id);
+    } else {
+      query = applyFilter(query);
     }
 
     const { data: employees, error } = await query;
@@ -1500,55 +1548,8 @@ router.get('/dashboard', canViewData, async (req, res) => {
   const { club_id: queryClubId } = req.query;
   const user = (req as any).user;
 
-  // Resolve club filter based on role
-  let club_id: string | undefined = undefined;
-  let allowedClubIds: string[] | null = null;
-
-  if (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') {
-    club_id = user.club_id;
-  } else if (user.role === 'Administrador') {
-    // Always scope Administrador by country (even if country is null → no clubs visible)
-    const countryVal = user.country || '__no_country__';
-    const { data: countryClubs } = await supabase
-      .from('clubs').select('id').eq('country', countryVal);
-    allowedClubIds = (countryClubs || []).map((c: any) => c.id);
-    console.log(`[DASHBOARD] Admin de País "${user.email}" country="${user.country}" → clubs:`, allowedClubIds);
-  } else {
-    // Super Administrador or other roles: use optional query param (no forced filter)
-    club_id = queryClubId as string | undefined;
-  }
-
-  // Pre-fetch employee IDs for country-scoped queries.
-  // PostgREST doesn't support .in() on nested join fields (employees.club_id),
-  // so we resolve employee IDs here and filter by employee_id directly.
-  let allowedEmployeeIds: string[] | null = null;
-  if (allowedClubIds !== null) {
-    if (allowedClubIds.length > 0) {
-      const { data: scopedEmps } = await supabase
-        .from('employees').select('id').in('club_id', allowedClubIds);
-      allowedEmployeeIds = (scopedEmps || []).map((e: any) => e.id);
-    } else {
-      allowedEmployeeIds = [];
-    }
-  }
-
-  // Helper: apply club filter on queries with a direct club_id column
-  const applyFilter = (q: any, field = 'club_id') => {
-    if (club_id) return q.eq(field, club_id);
-    if (allowedClubIds !== null) {
-      return allowedClubIds.length > 0 ? q.in(field, allowedClubIds) : q.in(field, ['__none__']);
-    }
-    return q;
-  };
-
-  // Helper: apply employee filter on employee_documents (use employee_id, not nested join)
-  const applyDocFilter = (q: any) => {
-    if (club_id) return q.eq('employees.club_id', club_id); // single club: join filter works
-    if (allowedEmployeeIds !== null) {
-      return allowedEmployeeIds.length > 0 ? q.in('employee_id', allowedEmployeeIds) : q.in('employee_id', ['__none__']);
-    }
-    return q;
-  };
+  const { club_id, allowedClubIds, applyFilter, applyDocFilter } =
+    await resolveClubScope(user, queryClubId as string | undefined);
 
   try {
     // 1. Total Employees
