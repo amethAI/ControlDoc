@@ -128,6 +128,25 @@ const isInternal = (req: any, res: any, next: any) => {
   next();
 };
 
+// ─── Access control helper ────────────────────────────────────────────────────
+// Checks if a user can access a resource belonging to a specific club/country.
+// Call AFTER fetching the resource so you have its club_id and country.
+function canAccessResource(user: any, targetClubId: string | null, targetCountry?: string | null): boolean {
+  const role = user.role;
+  if (role === 'Super Administrador') return true;
+  if (role === 'Administrador') {
+    // Must match by country — both user and club must have a country set
+    if (!user.country || !targetCountry) return false;
+    return targetCountry === user.country;
+  }
+  if (role === 'Supervisor Interno' || role === 'Coordinadora') {
+    return targetClubId === user.club_id;
+  }
+  // Recursos Humanos, Supervisor Cliente, Supervisora: read access allowed
+  return true;
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 // ─── Shared country-scoping helper ────────────────────────────────────────────
 // Resolves club_id / allowedClubIds / allowedEmployeeIds based on role.
 // - Supervisor Interno / Coordinadora → single club_id from user profile
@@ -295,7 +314,7 @@ router.post('/auth/login', async (req, res) => {
     // Verify bcrypt-hashed password only
     const isValidPassword = user &&
       user.password_hash?.startsWith('$2') &&
-      bcrypt.compareSync(password, user.password_hash);
+      await bcrypt.compare(password, user.password_hash);
     
     if (user && isValidPassword) {
       console.log(`Login exitoso para: ${email}`);
@@ -438,14 +457,17 @@ router.get('/clubs', isAuthenticated, async (req, res) => {
 
 // Get single club
 router.get('/clubs/:id', isAuthenticated, async (req, res) => {
+  const user = (req as any).user;
   try {
     const { data: club, error } = await supabase.from('clubs').select('*').eq('id', req.params.id).single();
     if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
-    if (club) {
-      res.json(club);
-    } else {
-      res.status(404).json({ error: 'Club no encontrado' });
+    if (!club) return res.status(404).json({ error: 'Club no encontrado' });
+
+    if (!canAccessResource(user, club.id, club.country)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
     }
+
+    res.json(club);
   } catch (error: any) {
     console.error('Error in /clubs/:id:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
@@ -609,14 +631,25 @@ router.get('/employees/birthdays', canViewData, async (req, res) => {
 
 // Get single employee
 router.get('/employees/:id', isAuthenticated, async (req, res) => {
+  const user = (req as any).user;
   try {
-    const { data: employee, error } = await supabase.from('employees').select('*').eq('id', req.params.id).single();
+    // Join clubs to get country for Administrador scoping check
+    const { data: employee, error } = await supabase
+      .from('employees')
+      .select('*, clubs(country)')
+      .eq('id', req.params.id)
+      .single();
     if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
-    if (employee) {
-      res.json(employee);
-    } else {
-      res.status(404).json({ error: 'Empleado no encontrado' });
+    if (!employee) return res.status(404).json({ error: 'Empleado no encontrado' });
+
+    const clubCountry = (employee.clubs as any)?.country ?? null;
+    if (!canAccessResource(user, employee.club_id, clubCountry)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
     }
+
+    // Strip the joined clubs field before returning (not part of the employee schema)
+    const { clubs, ...emp } = employee as any;
+    res.json(emp);
   } catch (error: any) {
     console.error('Error in /employees/:id:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
@@ -658,13 +691,28 @@ router.get('/document-types', isAuthenticated, async (req, res) => {
 
 // Get employee documents
 router.get('/employees/:id/documents', isAuthenticated, async (req, res) => {
+  const user = (req as any).user;
   try {
+    // Verify the employee exists and user has access to their club
+    const { data: emp } = await supabase
+      .from('employees')
+      .select('club_id, clubs(country)')
+      .eq('id', req.params.id)
+      .single();
+
+    if (!emp) return res.status(404).json({ error: 'Empleado no encontrado' });
+
+    const clubCountry = (emp.clubs as any)?.country ?? null;
+    if (!canAccessResource(user, emp.club_id, clubCountry)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+
     const { data: documents, error } = await supabase
       .from('employee_documents')
       .select('*, document_types(id, name)')
       .eq('employee_id', req.params.id)
       .eq('is_current', 1);
-      
+
     if (error) return res.status(500).json({ error: error.message });
     res.json(documents);
   } catch (error: any) {
@@ -808,14 +856,26 @@ router.patch('/documents/:id', canModifyData, async (req, res) => {
 // Return a short-lived Supabase signed URL for a document (used by frontend to open in new tab)
 router.get('/documents/:docId/signed-url', isAuthenticated, async (req: any, res: any) => {
   const { docId } = req.params;
+  const user = req.user;
 
   const { data: doc, error } = await supabase
     .from('employee_documents')
-    .select('id, file_url, file_name')
+    .select('id, file_url, file_name, employee_id')
     .eq('id', docId)
     .single();
 
   if (error || !doc) return res.status(404).json({ error: 'Documento no encontrado' });
+
+  // Authorization: verify user has access to the employee's club
+  const { data: emp } = await supabase
+    .from('employees')
+    .select('club_id, clubs(country)')
+    .eq('id', doc.employee_id)
+    .single();
+
+  if (emp && !canAccessResource(user, emp.club_id, (emp.clubs as any)?.country ?? null)) {
+    return res.status(403).json({ error: 'Acceso denegado' });
+  }
 
   // Legacy local uploads
   if (doc.file_url.startsWith('/uploads/')) {
@@ -824,7 +884,7 @@ router.get('/documents/:docId/signed-url', isAuthenticated, async (req: any, res
 
   const { data: signedData, error: signedError } = await supabase.storage
     .from('documents')
-    .createSignedUrl(doc.file_url, 3600, { download: false });
+    .createSignedUrl(doc.file_url, 900, { download: false }); // 15 min (reduced from 1h)
 
   if (signedError || !signedData) {
     return res.status(500).json({ error: 'Error al generar URL del documento' });
@@ -836,14 +896,26 @@ router.get('/documents/:docId/signed-url', isAuthenticated, async (req: any, res
 // Download document content (used server-side for ZIP generation)
 router.get('/documents/:docId/download', isAuthenticated, async (req: any, res: any) => {
   const { docId } = req.params;
+  const user = req.user;
 
   const { data: doc, error } = await supabase
     .from('employee_documents')
-    .select('id, file_url, file_name')
+    .select('id, file_url, file_name, employee_id')
     .eq('id', docId)
     .single();
 
   if (error || !doc) return res.status(404).json({ error: 'Documento no encontrado' });
+
+  // Authorization: verify user has access to the employee's club
+  const { data: emp } = await supabase
+    .from('employees')
+    .select('club_id, clubs(country)')
+    .eq('id', doc.employee_id)
+    .single();
+
+  if (emp && !canAccessResource(user, emp.club_id, (emp.clubs as any)?.country ?? null)) {
+    return res.status(403).json({ error: 'Acceso denegado' });
+  }
 
   if (doc.file_url.startsWith('/uploads/')) {
     return res.redirect(doc.file_url);
@@ -1543,6 +1615,10 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
   }
 });
 
+// In-memory cache for dashboard stats (TTL: 5 minutes per country/club scope)
+const dashboardCache = new Map<string, { data: any; ts: number }>();
+const DASHBOARD_CACHE_TTL = 5 * 60 * 1000;
+
 // Get dashboard stats
 router.get('/dashboard', canViewData, async (req, res) => {
   const { club_id: queryClubId } = req.query;
@@ -1550,6 +1626,13 @@ router.get('/dashboard', canViewData, async (req, res) => {
 
   const { club_id, allowedClubIds, applyFilter, applyDocFilter } =
     await resolveClubScope(user, queryClubId as string | undefined);
+
+  // Cache key: scoped by country + club filter (never mixes data between scopes)
+  const cacheKey = `${user.country || 'global'}_${club_id || 'all'}`;
+  const cached = dashboardCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < DASHBOARD_CACHE_TTL) {
+    return res.json(cached.data);
+  }
 
   try {
     // 1. Total Employees
@@ -1751,7 +1834,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
       }
     }
 
-    res.json({
+    const result = {
       totalEmployees: totalEmployees || 0,
       expiredDocuments,
       expiringSoonDocuments,
@@ -1761,7 +1844,10 @@ router.get('/dashboard', canViewData, async (req, res) => {
       performanceStats,
       expiredList,
       expiringList
-    });
+    };
+
+    dashboardCache.set(cacheKey, { data: result, ts: Date.now() });
+    res.json(result);
   } catch (error: any) {
     console.error('Dashboard stats error:', error);
     res.status(500).json({ error: 'Error al obtener estadísticas' });
@@ -1793,7 +1879,7 @@ router.post('/users', isAdmin, async (req, res) => {
   const { email, password, name, role, club_id, country } = req.body;
   try {
     const id = `user-${Date.now()}`;
-    const hashedPassword = bcrypt.hashSync(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const { data: newUser, error } = await supabase
       .from('users')
@@ -1832,7 +1918,7 @@ router.patch('/users/:id', isAdmin, async (req, res) => {
     };
     
     if (password) {
-      updateData.password_hash = bcrypt.hashSync(password, 10);
+      updateData.password_hash = await bcrypt.hash(password, 10);
     }
     
     const { data: updatedUser, error } = await supabase

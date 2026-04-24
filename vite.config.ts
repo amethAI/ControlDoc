@@ -70,6 +70,17 @@ export default defineConfig(({mode}) => {
         },
       }),
     ],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-charts':  ['recharts'],
+            'vendor-excel':   ['xlsx', 'pptxgenjs'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

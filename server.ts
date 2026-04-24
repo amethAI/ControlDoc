@@ -432,8 +432,18 @@ async function startServer() {
   // Configurar tarea programada (Cron Job)
   // Se ejecuta todos los días a las 8:00 AM
   cron.schedule('0 8 * * *', async () => {
-    console.log('Ejecutando tarea programada: Alertas de Vencimiento');
-    await sendExpirationAlerts(false);
+    console.log('[CRON] Ejecutando alertas de vencimiento...');
+    try {
+      await Promise.race([
+        sendExpirationAlerts(false),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout: alertas tardaron más de 60s')), 60_000)
+        )
+      ]);
+      console.log('[CRON] Alertas enviadas correctamente');
+    } catch (err) {
+      console.error('[CRON] Error al enviar alertas:', err);
+    }
   });
 
   app.listen(PORT, '0.0.0.0', () => {

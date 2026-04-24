@@ -26,8 +26,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(null);
     setUser(null);
     try {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
     } catch (_) {}
   };
 
@@ -42,8 +42,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     try {
-      const storedToken = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
+      const storedToken = sessionStorage.getItem('token');
+      const storedUser = sessionStorage.getItem('user');
       if (storedToken && storedUser) {
         // M-5: Validate token expiry client-side before using it
         if (isTokenExpired(storedToken)) {
@@ -68,7 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .then(data => {
             if (data?.user) {
               setUser(data.user);
-              localStorage.setItem('user', JSON.stringify(data.user));
+              sessionStorage.setItem('user', JSON.stringify(data.user));
             }
           })
           .catch(() => clearSession());
@@ -77,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (e) {
-      console.warn('localStorage not available', e);
+      console.warn('sessionStorage not available', e);
     }
   }, []);
 
@@ -85,10 +85,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(newToken);
     setUser(newUser);
     try {
-      localStorage.setItem('token', newToken);
-      localStorage.setItem('user', JSON.stringify(newUser));
+      sessionStorage.setItem('token', newToken);
+      sessionStorage.setItem('user', JSON.stringify(newUser));
     } catch (e) {
-      console.warn('localStorage not available', e);
+      console.warn('sessionStorage not available', e);
     }
   };
 
