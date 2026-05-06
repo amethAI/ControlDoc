@@ -59,97 +59,63 @@ export async function sendExpirationAlerts(isTest = false) {
 
     // Agrupar por club
     const alertsByClub: Record<string, any> = {};
-    
-    // Process expiring documents
+
+    // Track (employee_id + date) combos already added to avoid true duplicates
+    const addedAlerts = new Set<string>();
+
+    const addAlert = (clubId: string, clubName: string, employeeId: string, full_name: string, doc_name: string, expiry_date: string) => {
+      const key = `${employeeId}|${doc_name}|${expiry_date}`;
+      if (addedAlerts.has(key)) return;
+      addedAlerts.add(key);
+      if (!alertsByClub[clubId]) alertsByClub[clubId] = { club_name: clubName, docs: [] };
+      alertsByClub[clubId].docs.push({ full_name, doc_name, expiry_date });
+    };
+
+    // Process ALL expiring documents (including contracts — previously excluded by mistake)
     if (expiringDocs && expiringDocs.length > 0) {
       for (const doc of expiringDocs) {
-        const docName = (doc.document_types as any).name?.toLowerCase() || '';
-        const contractType = (doc.employees as any).contract_type?.toLowerCase() || '';
-        
-        // Exclude all contract documents — they are not actionable alerts
-        if (docName.includes('contrato')) {
-          continue;
-        }
-
         // Skip inactive employees (extra guard in case the join filter doesn't apply)
-        if ((doc.employees as any).status && (doc.employees as any).status !== 'activo') {
-          continue;
-        }
+        if ((doc.employees as any).status && (doc.employees as any).status !== 'activo') continue;
 
         const clubId = (doc.employees as any).club_id;
         const clubName = clubMap.get(clubId) || 'Desconocido';
-        
-        if (!alertsByClub[clubId]) {
-          alertsByClub[clubId] = {
-            club_name: clubName,
-            docs: []
-          };
-        }
-        alertsByClub[clubId].docs.push({
-          ...doc,
-          full_name: (doc.employees as any).full_name,
-          doc_name: (doc.document_types as any).name
-        });
+        addAlert(
+          clubId, clubName,
+          doc.employee_id,
+          (doc.employees as any).full_name,
+          (doc.document_types as any).name,
+          doc.expiry_date
+        );
       }
     }
 
-    // Build set of employee IDs that already have a contract document in the alerts
-    // to avoid duplicating "Terminación de Contrato" when "Contrato firmado" is already present
-    const employeesWithContractDoc = new Set<string>();
-    if (expiringDocs) {
-      for (const doc of expiringDocs) {
-        const docName = (doc.document_types as any).name?.toLowerCase() || '';
-        const contractType = (doc.employees as any).contract_type?.toLowerCase() || '';
-        if (docName.includes('contrato') && contractType !== 'indefinido') {
-          employeesWithContractDoc.add(doc.employee_id);
-        }
-      }
-    }
-
-    // Process expiring contracts and probationary periods
+    // Process expiring contracts and probationary periods from employees table
     if (activeEmployees && activeEmployees.length > 0) {
       const targetThreshold = isTest ? new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000) : thresholdDate;
+      const todayStr = today.toISOString().split('T')[0];
 
       for (const emp of activeEmployees) {
         const clubId = emp.club_id;
         const clubName = clubMap.get(clubId) || 'Desconocido';
 
-        // Check contract_end
-        // Skip if employee already has a contract document alert (e.g. "Contrato firmado")
-        // to avoid showing the same expiration twice
-        if (emp.contract_end && emp.contract_type?.toLowerCase() !== 'indefinido' && !employeesWithContractDoc.has(emp.id)) {
-          const contractEnd = new Date(emp.contract_end);
-          if (contractEnd <= targetThreshold) {
-            if (!alertsByClub[clubId]) {
-              alertsByClub[clubId] = { club_name: clubName, docs: [] };
-            }
-            alertsByClub[clubId].docs.push({
-              full_name: emp.full_name,
-              doc_name: 'Terminación de Contrato',
-              expiry_date: emp.contract_end
-            });
+        // contract_end: alert only for finite contracts within window [today - 15d, threshold]
+        if (emp.contract_end && emp.contract_type?.toLowerCase() !== 'indefinido') {
+          const contractEnd = new Date(emp.contract_end + 'T12:00:00');
+          const fifteenDaysAgo = new Date(today);
+          fifteenDaysAgo.setDate(today.getDate() - 15);
+          if (contractEnd >= fifteenDaysAgo && contractEnd <= targetThreshold) {
+            addAlert(clubId, clubName, emp.id, emp.full_name, 'Terminación de Contrato', emp.contract_end);
           }
         }
 
-        // Check probatorio_end (contract_start + 3 months)
+        // Probationary period: contract_start + 3 months, within window [today - 15d, threshold]
         if (emp.contract_start) {
-          const probatorioEnd = new Date(emp.contract_start);
+          const probatorioEnd = new Date(emp.contract_start + 'T12:00:00');
           probatorioEnd.setMonth(probatorioEnd.getMonth() + 3);
-          
-          // Only alert for probationary periods that are upcoming or recently expired (within last 15 days)
-          // to avoid spamming for employees who have been working for years.
           const fifteenDaysAgo = new Date(today);
           fifteenDaysAgo.setDate(today.getDate() - 15);
-          
-          if (probatorioEnd <= targetThreshold && probatorioEnd >= fifteenDaysAgo) {
-            if (!alertsByClub[clubId]) {
-              alertsByClub[clubId] = { club_name: clubName, docs: [] };
-            }
-            alertsByClub[clubId].docs.push({
-              full_name: emp.full_name,
-              doc_name: 'Terminación de Periodo Probatorio',
-              expiry_date: probatorioEnd.toISOString().split('T')[0]
-            });
+          if (probatorioEnd >= fifteenDaysAgo && probatorioEnd <= targetThreshold) {
+            addAlert(clubId, clubName, emp.id, emp.full_name, 'Terminación de Periodo Probatorio', probatorioEnd.toISOString().split('T')[0]);
           }
         }
       }
