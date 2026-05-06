@@ -812,17 +812,19 @@ router.post('/documents', canModifyData, (req, res, next) => {
     // Handle the special 'doc-personal-combined' type
     if (document_type_id === 'doc-personal-combined') {
       // Mark previous versions as not current for all related types
-      await supabase
+      const { error: updateCombinedError } = await supabase
         .from('employee_documents')
         .update({ is_current: 0 })
         .eq('employee_id', employee_id)
         .in('document_type_id', ['doc-3', 'doc-4', 'doc-5']); // Carnet blanco, Carnet verde, Cédula
+      if (updateCombinedError) throw updateCombinedError;
 
-      // Insert document records for each type
+      // Insert document records for each type — use same base ts with suffix to guarantee unique IDs
+      const ts = Date.now();
       const docsToInsert = [
-        { id: `doc-${Date.now()}-1`, employee_id, document_type_id: 'doc-3', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status }, // Carnet blanco
-        { id: `doc-${Date.now()}-2`, employee_id, document_type_id: 'doc-4', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status }, // Carnet verde
-        { id: `doc-${Date.now()}-3`, employee_id, document_type_id: 'doc-5', file_url, file_name, file_size_kb, expiry_date: null, status: 'sin_fecha' } // Cédula (no expiry)
+        { id: `doc-${ts}-1`, employee_id, document_type_id: 'doc-3', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1 }, // Carnet blanco
+        { id: `doc-${ts}-2`, employee_id, document_type_id: 'doc-4', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1 }, // Carnet verde
+        { id: `doc-${ts}-3`, employee_id, document_type_id: 'doc-5', file_url, file_name, file_size_kb, expiry_date: null, status: 'sin_fecha', is_current: 1 }  // Cédula (no expiry)
       ];
 
       const { data: newDocs, error } = await supabase
@@ -844,17 +846,18 @@ router.post('/documents', canModifyData, (req, res, next) => {
     }
 
     // Mark previous versions as not current
-    await supabase
+    const { error: updateError } = await supabase
       .from('employee_documents')
       .update({ is_current: 0 })
       .eq('employee_id', employee_id)
       .eq('document_type_id', document_type_id);
-    
-    // Insert document record
+    if (updateError) throw updateError;
+
+    // Insert document record — is_current: 1 set explicitly, never rely on DB default
     const { data: newDoc, error } = await supabase
       .from('employee_documents')
       .insert([{
-        id, employee_id, document_type_id, file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status
+        id, employee_id, document_type_id, file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1
       }])
       .select()
       .single();
