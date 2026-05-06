@@ -191,9 +191,14 @@ async function resolveClubScope(user: any, queryClubId?: string) {
   let allowedClubIds: string[] | null = null;
   let allowedEmployeeIds: string[] | null = null;
 
-  if (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') {
+  const CLUB_SCOPED_ROLES  = ['Supervisor Interno', 'Coordinadora', 'Supervisor Cliente', 'Supervisora'];
+  const COUNTRY_SCOPED_ROLES = ['Administrador', 'Recursos Humanos'];
+
+  if (CLUB_SCOPED_ROLES.includes(user.role)) {
+    // Scoped to their assigned club only
     club_id = user.club_id;
-  } else if (user.role === 'Administrador') {
+  } else if (COUNTRY_SCOPED_ROLES.includes(user.role)) {
+    // Scoped to all clubs in their country
     const countryVal = user.country || '__no_country__';
     const { data: countryClubs } = await supabase
       .from('clubs').select('id').eq('country', countryVal);
@@ -206,6 +211,7 @@ async function resolveClubScope(user: any, queryClubId?: string) {
       allowedEmployeeIds = [];
     }
   } else {
+    // Super Administrador — no restriction, pass-through any explicit club filter
     club_id = queryClubId;
   }
 
@@ -470,15 +476,14 @@ router.get('/clubs', isAuthenticated, async (req, res) => {
     const user = (req as any).user;
     let query = supabase.from('clubs').select('*').neq('id', 'global');
 
-    // Scoped roles: only see their own club
-    if (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') {
+    if (['Supervisor Interno', 'Coordinadora', 'Supervisor Cliente', 'Supervisora'].includes(user.role)) {
+      // Club-scoped: only their assigned club
       query = query.eq('id', user.club_id);
-    }
-    // Admin de País: only see clubs in their country
-    else if (user.role === 'Administrador' && user.country) {
+    } else if (['Administrador', 'Recursos Humanos'].includes(user.role) && user.country) {
+      // Country-scoped: only clubs in their country
       query = query.eq('country', user.country);
     }
-    // Super Administrador: see all clubs (no filter)
+    // Super Administrador: no filter — sees all clubs
 
     const { data: clubs, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
