@@ -191,8 +191,8 @@ async function resolveClubScope(user: any, queryClubId?: string) {
   let allowedClubIds: string[] | null = null;
   let allowedEmployeeIds: string[] | null = null;
 
-  const CLUB_SCOPED_ROLES  = ['Supervisor Interno', 'Coordinadora', 'Supervisor Cliente', 'Supervisora'];
-  const COUNTRY_SCOPED_ROLES = ['Administrador', 'Recursos Humanos'];
+  const CLUB_SCOPED_ROLES  = ['Supervisor Interno', 'Coordinadora', 'Supervisora'];
+  const COUNTRY_SCOPED_ROLES = ['Administrador', 'Recursos Humanos', 'Supervisor Cliente'];
 
   if (CLUB_SCOPED_ROLES.includes(user.role)) {
     // Scoped to their assigned club only
@@ -476,10 +476,10 @@ router.get('/clubs', isAuthenticated, async (req, res) => {
     const user = (req as any).user;
     let query = supabase.from('clubs').select('*').neq('id', 'global');
 
-    if (['Supervisor Interno', 'Coordinadora', 'Supervisor Cliente', 'Supervisora'].includes(user.role)) {
+    if (['Supervisor Interno', 'Coordinadora', 'Supervisora'].includes(user.role)) {
       // Club-scoped: only their assigned club
       query = query.eq('id', user.club_id);
-    } else if (['Administrador', 'Recursos Humanos'].includes(user.role) && user.country) {
+    } else if (['Administrador', 'Recursos Humanos', 'Supervisor Cliente'].includes(user.role) && user.country) {
       // Country-scoped: only clubs in their country
       query = query.eq('country', user.country);
     }
