@@ -33,7 +33,7 @@ export default function Employees() {
   const [isBulkEmployeeModalOpen, setIsBulkEmployeeModalOpen] = useState(false);
   const [isImportDatesModalOpen, setIsImportDatesModalOpen] = useState(false);
 
-  if (user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
+  if (user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora') {
     return (
       <div className="p-8 text-center">
         <div className="bg-red-50 text-red-700 p-4 rounded-lg inline-block">

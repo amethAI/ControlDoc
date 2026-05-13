@@ -553,30 +553,10 @@ router.get('/employees', canViewData, async (req, res) => {
     const { club_id: queryClubId, status } = req.query;
     const user = (req as any).user;
 
-    let query = supabase.from('employees').select('*').order('full_name', { ascending: true });
+    const { applyFilter } = await resolveClubScope(user, queryClubId as string | undefined);
 
-    // Scoped roles: only their club
-    if (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') {
-      query = query.eq('club_id', user.club_id);
-    }
-    // Admin de País: filter by clubs in their country
-    else if (user.role === 'Administrador' && user.country) {
-      if (queryClubId) {
-        query = query.eq('club_id', queryClubId as string);
-      } else {
-        const { data: countryClubs } = await supabase
-          .from('clubs')
-          .select('id')
-          .eq('country', user.country);
-        const clubIds = (countryClubs || []).map((c: any) => c.id);
-        if (clubIds.length > 0) query = query.in('club_id', clubIds);
-        else return res.json([]);
-      }
-    }
-    // Super Administrador: filter by specific club if requested, otherwise all
-    else if (queryClubId) {
-      query = query.eq('club_id', queryClubId as string);
-    }
+    let query = supabase.from('employees').select('*').order('full_name', { ascending: true });
+    query = applyFilter(query);
 
     if (status) query = query.eq('status', status);
 
