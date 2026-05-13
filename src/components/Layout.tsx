@@ -35,7 +35,7 @@ export default function Layout() {
 
   const navigation = [
     ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' ? [{ name: 'Dashboard', href: '/', icon: LayoutDashboard }] : []),
-    ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' ? [{ name: 'Empleados', href: '/empleados', icon: Users }] : []),
+    ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' && user?.role !== 'Supervisor Cliente' ? [{ name: 'Empleados', href: '/empleados', icon: Users }] : []),
     { name: 'Check List', href: '/vencimientos', icon: CalendarClock },
     { name: 'Check List 1 Año', href: '/checklist-contratos', icon: ClipboardList },
     ...((isAdmin || user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente' || isRRHH) ? [
