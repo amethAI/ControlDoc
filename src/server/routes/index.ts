@@ -202,13 +202,23 @@ async function resolveClubScope(user: any, queryClubId?: string) {
     const countryVal = user.country || '__no_country__';
     const { data: countryClubs } = await supabase
       .from('clubs').select('id').eq('country', countryVal);
-    allowedClubIds = (countryClubs || []).map((c: any) => c.id);
-    if (allowedClubIds.length > 0) {
+    const countryClubIds = (countryClubs || []).map((c: any) => c.id);
+
+    // If a specific club was requested and it belongs to the user's country, scope to it
+    if (queryClubId && countryClubIds.includes(queryClubId)) {
+      club_id = queryClubId;
       const { data: scopedEmps } = await supabase
-        .from('employees').select('id').in('club_id', allowedClubIds);
+        .from('employees').select('id').eq('club_id', club_id);
       allowedEmployeeIds = (scopedEmps || []).map((e: any) => e.id);
     } else {
-      allowedEmployeeIds = [];
+      allowedClubIds = countryClubIds;
+      if (allowedClubIds.length > 0) {
+        const { data: scopedEmps } = await supabase
+          .from('employees').select('id').in('club_id', allowedClubIds);
+        allowedEmployeeIds = (scopedEmps || []).map((e: any) => e.id);
+      } else {
+        allowedEmployeeIds = [];
+      }
     }
   } else {
     // Super Administrador — no restriction, pass-through any explicit club filter

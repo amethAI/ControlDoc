@@ -139,8 +139,7 @@ export default function ClubDetail() {
         </div>
       </div>
 
-      {user?.role !== 'Supervisor Cliente' && (
-        <div className="space-y-4">
+      <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-medium text-slate-900 flex items-center">
               <Users className="h-5 w-5 mr-2 text-slate-500" />
@@ -240,7 +239,7 @@ export default function ClubDetail() {
             </table>
           </div>
         </div>
-      )}
+      </div>
 
       <NewEmployeeModal 
         isOpen={isModalOpen}
