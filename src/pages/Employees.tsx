@@ -33,20 +33,13 @@ export default function Employees() {
   const [isBulkEmployeeModalOpen, setIsBulkEmployeeModalOpen] = useState(false);
   const [isImportDatesModalOpen, setIsImportDatesModalOpen] = useState(false);
 
-  if (user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
-    return (
-      <div className="p-8 text-center">
-        <div className="bg-red-50 text-red-700 p-4 rounded-lg inline-block">
-          No tienes permiso para acceder a esta sección.
-        </div>
-      </div>
-    );
-  }
+  // All hooks must be declared unconditionally before any early return
+  const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
+  const noAccess = user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente';
 
   const fetchEmployees = useCallback(async () => {
     if (showMissingContract) return;
     try {
-      const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
       let url = isRestricted
         ? `/api/employees?club_id=${user?.club_id}&status=${statusFilter}`
         : `/api/employees?status=${statusFilter}`;
@@ -58,11 +51,22 @@ export default function Employees() {
     } catch (error) {
       console.error('Error fetching employees:', error);
     }
-  }, [user, statusFilter, showMissingContract]);
+  }, [user, statusFilter, showMissingContract, isRestricted]);
 
   useEffect(() => {
+    if (noAccess) return; // Don't fetch if user has no access
     fetchEmployees();
-  }, [fetchEmployees]);
+  }, [fetchEmployees, noAccess]);
+
+  if (noAccess) {
+    return (
+      <div className="p-8 text-center">
+        <div className="bg-red-50 text-red-700 p-4 rounded-lg inline-block">
+          No tienes permiso para acceder a esta sección.
+        </div>
+      </div>
+    );
+  }
 
   const fetchMissingContract = async () => {
     setLoadingMissing(true);

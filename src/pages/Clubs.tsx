@@ -30,7 +30,7 @@ export default function Clubs() {
       const res = await apiFetch('/api/clubs');
       if (res.ok) {
         const data = await res.json();
-        setClubs(data);
+        setClubs(Array.isArray(data) ? data : []);
       }
     } catch (error) {
       console.error('Error fetching clubs:', error);
@@ -68,8 +68,8 @@ export default function Clubs() {
     }
   };
 
-  const filteredClubs = clubs.filter(club =>
-    club.name.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredClubs = (Array.isArray(clubs) ? clubs : []).filter(club =>
+    (club.name ?? '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
