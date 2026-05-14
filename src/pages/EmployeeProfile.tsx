@@ -9,6 +9,7 @@ import EditExpiryModal from '../components/EditExpiryModal';
 import DeleteDocumentModal from '../components/DeleteDocumentModal';
 import TerminateEmployeeModal from '../components/TerminateEmployeeModal';
 import ReactivateEmployeeModal from '../components/ReactivateEmployeeModal';
+import EditEmployeeModal from '../components/EditEmployeeModal';
 import JSZip from 'jszip';
 import { toast } from 'sonner';
 
@@ -57,6 +58,7 @@ export default function EmployeeProfile() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isTerminateModalOpen, setIsTerminateModalOpen] = useState(false);
   const [isReactivateModalOpen, setIsReactivateModalOpen] = useState(false);
+  const [isEditEmployeeModalOpen, setIsEditEmployeeModalOpen] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState<{id: string, name: string} | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<EmployeeDocument | null>(null);
 
@@ -250,8 +252,17 @@ export default function EmployeeProfile() {
           <h2 className="text-2xl font-bold text-slate-800">Perfil del Empleado</h2>
         </div>
         <div className="flex gap-3">
+          {(user?.role === 'Administrador' || user?.role === 'Super Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
+            <button
+              onClick={() => setIsEditEmployeeModalOpen(true)}
+              className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50"
+            >
+              <Edit2 className="h-4 w-4 mr-2 text-slate-500" />
+              Editar
+            </button>
+          )}
           {employee.status === 'activo' && ((user?.role === 'Administrador' || user?.role === 'Super Administrador') || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
-            <button 
+            <button
               onClick={() => setIsTerminateModalOpen(true)}
               className="inline-flex items-center px-4 py-2 border border-red-200 rounded-lg shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100"
             >
@@ -480,6 +491,13 @@ export default function EmployeeProfile() {
         onSuccess={fetchData}
         employeeId={employee.id}
         employeeName={employee.full_name}
+      />
+
+      <EditEmployeeModal
+        isOpen={isEditEmployeeModalOpen}
+        onClose={() => setIsEditEmployeeModalOpen(false)}
+        onSuccess={fetchData}
+        employee={employee}
       />
     </div>
   );

@@ -693,6 +693,75 @@ router.get('/employees/:id', isAuthenticated, async (req, res) => {
   }
 });
 
+// Update employee basic info
+router.patch('/employees/:id', canModifyData, async (req, res) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+
+  const updateSchema = z.object({
+    full_name:      z.string().min(2, 'Nombre requerido').max(120).optional(),
+    cedula:         z.string().min(3, 'Cédula requerida').max(20).optional(),
+    position:       z.string().max(100).optional(),
+    contract_type:  z.string().max(50).optional(),
+    contract_start: dateOrEmpty,
+    contract_end:   dateOrEmpty,
+    club_id:        z.string().min(1).optional(),
+  });
+
+  const parsed = updateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+  }
+
+  try {
+    // Fetch employee to verify access
+    const { data: emp, error: fetchErr } = await supabase
+      .from('employees')
+      .select('*, clubs(country)')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !emp) return res.status(404).json({ error: 'Empleado no encontrado' });
+
+    const clubCountry = (emp.clubs as any)?.country ?? null;
+    if (!canAccessResource(user, emp.club_id, clubCountry)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+    // Supervisor Interno can only edit employees in their own club
+    if (user.role === 'Supervisor Interno' && emp.club_id !== user.club_id) {
+      return res.status(403).json({ error: 'Acceso denegado. Solo puede editar empleados de su club.' });
+    }
+
+    const { clubs: _clubs, ...cleanEmp } = emp as any;
+    const updates = { ...parsed.data };
+    // Prevent changing club_id for non-admins
+    if (user.role === 'Supervisor Interno') delete updates.club_id;
+
+    const { data: updated, error } = await supabase
+      .from('employees')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    await supabase.from('audit_logs').insert([{
+      action_type: 'UPDATE',
+      entity_type: 'Employee',
+      entity_id: id,
+      entity_name: updated.full_name,
+      performed_by: user.id,
+      performed_by_name: user.name,
+    }]);
+
+    res.json(updated);
+  } catch (error: any) {
+    console.error('Error in PATCH /employees/:id:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 // Get document types
 router.get('/document-types', isAuthenticated, async (req, res) => {
   try {
