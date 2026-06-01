@@ -73,11 +73,12 @@ export default function Expirations() {
     }
   };
 
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch =
-      emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.cedula.includes(searchTerm);
-    return matchesSearch;
+  const filteredEmployees = (Array.isArray(employees) ? employees : []).filter(emp => {
+    if (!emp || typeof emp !== 'object') return false;
+    const name   = (emp.full_name ?? '').toLowerCase();
+    const cedula = emp.cedula ?? '';
+    const term   = searchTerm.toLowerCase();
+    return name.includes(term) || cedula.includes(term);
   });
 
   const groupedEmployees = filteredEmployees.reduce((acc, emp) => {
@@ -270,10 +271,11 @@ export default function Expirations() {
     if (field === 'contract_end') return emp.contract_end ? emp.contract_end.split('T')[0] : '';
     if (field === 'contract_type') return emp.contract_type || '';
     
-    if (field === 'doc_carta_ingreso') return emp.documents.carta_ingreso?.exists ? 'SÍ' : 'NO';
-    if (field === 'doc_carnet_verde') return emp.documents.carnet_verde?.expiry_date ? emp.documents.carnet_verde.expiry_date.split('T')[0] : '';
-    if (field === 'doc_carnet_blanco') return emp.documents.carnet_blanco?.expiry_date ? emp.documents.carnet_blanco.expiry_date.split('T')[0] : '';
-    if (field === 'doc_aviso_css') return emp.documents.aviso_css?.expiry_date ? emp.documents.aviso_css.expiry_date.split('T')[0] : '';
+    const docs = emp.documents ?? { carta_ingreso: { exists: false }, carnet_verde: null, carnet_blanco: null, aviso_css: null };
+    if (field === 'doc_carta_ingreso') return docs.carta_ingreso?.exists ? 'SÍ' : 'NO';
+    if (field === 'doc_carnet_verde') return docs.carnet_verde?.expiry_date ? docs.carnet_verde.expiry_date.split('T')[0] : '';
+    if (field === 'doc_carnet_blanco') return docs.carnet_blanco?.expiry_date ? docs.carnet_blanco.expiry_date.split('T')[0] : '';
+    if (field === 'doc_aviso_css') return docs.aviso_css?.expiry_date ? docs.aviso_css.expiry_date.split('T')[0] : '';
     
     return '';
   };
