@@ -84,11 +84,13 @@ async function startServer() {
 
   // Security + cache headers
   app.use((req, res, next) => {
-    res.set('X-App-Version', '1.0.8');
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-    res.set('Surrogate-Control', 'no-store');
+    res.set('X-App-Version', '1.2.4');
+    // Default: no-cache for all API responses
+    if (req.path.startsWith('/api')) {
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+    }
     next();
   });
 
@@ -413,18 +415,23 @@ async function startServer() {
     console.log(`Serving static files from: ${distPath}`);
     
     app.use(express.static(distPath, {
-      maxAge: '1h',
-      setHeaders: (res, path) => {
-        if (path.endsWith('.html')) {
+      // Content-hashed assets (JS/CSS/images) — safe to cache long-term
+      // HTML files are excluded via setHeaders below
+      maxAge: '1y',
+      immutable: true,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          // index.html must NEVER be cached — it holds the latest chunk hashes
           res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+          res.set('Pragma', 'no-cache');
+          res.set('Expires', '0');
         }
       }
     }));
-    
-    // Catch-all route for SPA in production
+
+    // Catch-all route for SPA in production — always serves fresh index.html
     app.get('*', noCache, (req, res) => {
       const indexPath = path.join(distPath, 'index.html');
-      console.log(`Serving index.html from: ${indexPath}`);
       res.sendFile(indexPath);
     });
   }
