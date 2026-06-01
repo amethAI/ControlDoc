@@ -335,6 +335,19 @@ export default function Expirations() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+
+        {/* ── Redvolution logo header ── */}
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center select-none">
+            <span className="text-2xl font-black tracking-tight" style={{ color: '#e11d48' }}>RED</span>
+            <span className="text-2xl font-black tracking-tight text-slate-500">VOLUTION</span>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">Check List</p>
+            <p className="text-xs text-slate-400">Control de Documentos y Vencimientos</p>
+          </div>
+        </div>
+
         <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
