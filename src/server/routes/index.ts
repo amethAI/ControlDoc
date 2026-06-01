@@ -373,7 +373,7 @@ router.post('/auth/login', async (req, res) => {
       const token = jwt.sign(
         { id: user.id, email: user.email, name: user.name, role: user.role, club_id: user.club_id, country: user.country || null },
         JWT_SECRET,
-        { expiresIn: '24h' }
+        { expiresIn: '8h' }
       );
 
       // Log login event to audit_logs
