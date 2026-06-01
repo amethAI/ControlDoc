@@ -102,16 +102,24 @@ export default function Layout() {
         <div className="p-4 border-t border-slate-800">
           <div className="mb-4 px-2 flex flex-col gap-1">
             <div className="flex items-center justify-between text-slate-500">
-              <span className="text-[10px] font-bold tracking-widest uppercase">Sistema v1.0.8</span>
-              <button 
-                onClick={() => {
-                  try {
-                    localStorage.clear();
-                  } catch (e) {
-                    console.warn('localStorage not available', e);
+              <span className="text-[10px] font-bold tracking-widest uppercase">Sistema v1.2.4</span>
+              <button
+                onClick={async () => {
+                  // 1. Unregister all service workers
+                  if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations().catch(() => []);
+                    await Promise.all(regs.map(r => r.unregister()));
                   }
-                  window.location.href = window.location.origin + '?force=' + Date.now();
-                }} 
+                  // 2. Clear all browser caches
+                  if ('caches' in window) {
+                    const keys = await caches.keys().catch(() => [] as string[]);
+                    await Promise.all(keys.map(k => caches.delete(k)));
+                  }
+                  // 3. Clear storage (keep session token so user stays logged in)
+                  try { localStorage.clear(); } catch (_) {}
+                  // 4. Hard reload bypassing cache
+                  window.location.href = window.location.origin + '?v=' + Date.now();
+                }}
                 className="text-[9px] hover:text-white transition-colors underline decoration-slate-700"
               >
                 Refrescar
