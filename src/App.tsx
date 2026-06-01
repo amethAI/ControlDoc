@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 
 // Static imports — always needed on first render
 import Login from './pages/Login';
@@ -80,7 +80,41 @@ function AppRoutes() {
   );
 }
 
+/**
+ * Listens for Service Worker updates and auto-reloads the page.
+ *
+ * Flow:
+ *  1. Render deploys new code → new SW downloads in background (skipWaiting: true)
+ *  2. New SW activates immediately and claims all open tabs (clientsClaim: true)
+ *  3. `controllerchange` fires in every tab
+ *  4. We show a toast and reload after 1.5s — users always get latest version
+ *     without having to click anything.
+ */
+function useAutoUpdate() {
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    let reloading = false;
+
+    const handleControllerChange = () => {
+      if (reloading) return; // prevent double reload
+      reloading = true;
+      toast.success('🚀 Nueva versión disponible — actualizando...', {
+        duration: 1500,
+      });
+      setTimeout(() => window.location.reload(), 1500);
+    };
+
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+    };
+  }, []);
+}
+
 export default function App() {
+  useAutoUpdate();
+
   return (
     <AuthProvider>
       <Router>
