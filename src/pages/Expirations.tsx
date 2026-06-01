@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Filter, Search, FileSpreadsheet, Plus, Trash2 } from 'lucide-react';
+import { Filter, Search, FileSpreadsheet, Plus, Trash2, FileDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
@@ -278,6 +278,114 @@ export default function Expirations() {
     return '';
   };
 
+  // Returns 'green' | 'yellow' | 'red' | '' for use in the PDF HTML
+  const getPDFColorClass = (dateStr: string | null): string => {
+    if (!dateStr) return '';
+    let dateToParse = dateStr;
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) dateToParse = `${dateStr}T12:00:00`;
+    const end = new Date(dateToParse);
+    if (isNaN(end.getTime())) return '';
+    const diffDays = Math.ceil((end.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return 'red';
+    if (diffDays <= 30) return 'yellow';
+    return 'green';
+  };
+
+  const handleExportPDF = () => {
+    const groups = Object.entries(groupedEmployees);
+    if (groups.length === 0) { toast.error('No hay datos para exportar'); return; }
+
+    const today = new Date().toLocaleDateString('es-PA', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    const tableRows = (emps: ChecklistEmployee[]) =>
+      emps.map((emp, i) => {
+        const verde  = getVal(emp, 'doc_carnet_verde');
+        const blanco = getVal(emp, 'doc_carnet_blanco');
+        const css    = getVal(emp, 'doc_aviso_css');
+        const prob   = getVal(emp, 'probatorio_end');
+        const end    = getVal(emp, 'contract_end');
+        return `<tr>
+          <td class="num">${i + 1}</td>
+          <td class="name">${getVal(emp, 'full_name')}</td>
+          <td>${getVal(emp, 'cedula')}</td>
+          <td class="center">${getVal(emp, 'doc_carta_ingreso')}</td>
+          <td class="center ${getPDFColorClass(verde)}">${formatDate(verde)}</td>
+          <td class="center ${getPDFColorClass(blanco)}">${formatDate(blanco)}</td>
+          <td class="center">${formatDate(css)}</td>
+          <td class="center">${formatDate(getVal(emp, 'contract_start'))}</td>
+          <td class="center ${getPDFColorClass(prob)}">${formatDate(prob)}</td>
+          <td class="center ${getPDFColorClass(end)}">${formatDate(end)}</td>
+          <td class="center">${getVal(emp, 'contract_type')}</td>
+        </tr>`;
+      }).join('');
+
+    const sections = groups.map(([clubName, emps], idx) => `
+      ${idx > 0 ? '<div class="page-break"></div>' : ''}
+      <div class="logo-bar">
+        <span class="logo-red">RED</span><span class="logo-gray">VOLUTION</span>
+        <span class="date-label">Generado: ${today}</span>
+      </div>
+      <div class="club-banner">CHECK LIST ${clubName.toUpperCase()}</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:28px">No.</th>
+            <th style="text-align:left;min-width:130px">NOMBRE</th>
+            <th style="min-width:80px">CÉDULA</th>
+            <th>CARTA DE<br>INGRESO</th>
+            <th>CARNET<br>VERDE</th>
+            <th>CARNET<br>BLANCO</th>
+            <th>FECHA<br>AVISO CSS</th>
+            <th>INICIO<br>CONTRATO</th>
+            <th>FIN PERÍODO<br>PROBATORIO</th>
+            <th>FIN<br>CONTRATO</th>
+            <th>TIPO<br>CONTRATO</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows(emps)}</tbody>
+      </table>
+      <p class="footer">ControlDoc — REDVOLUTION · ${emps.length} empleado(s) · ${clubName}</p>
+    `).join('');
+
+    const html = `<!DOCTYPE html><html lang="es"><head>
+      <meta charset="UTF-8">
+      <title>Check List — ${today}</title>
+      <style>
+        @page { size: A4 landscape; margin: 0.8cm 1cm; }
+        @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 8px; color: #1e293b; }
+        .page-break { page-break-before: always; }
+        .logo-bar { display: flex; align-items: baseline; gap: 4px; margin-bottom: 8px; }
+        .logo-red  { font-size: 18px; font-weight: 900; color: #e11d48; letter-spacing: -0.5px; }
+        .logo-gray { font-size: 18px; font-weight: 900; color: #64748b; letter-spacing: -0.5px; }
+        .date-label { margin-left: auto; font-size: 8px; color: #64748b; }
+        .club-banner { background: #dc2626; color: #fff; text-align: center; padding: 6px 12px;
+          font-size: 13px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase;
+          margin-bottom: 0; border-radius: 4px 4px 0 0; }
+        table { width: 100%; border-collapse: collapse; font-size: 8px; }
+        thead tr { background: #1e3a5f; color: white; }
+        th { padding: 5px 4px; text-align: center; border: 1px solid #cbd5e1; font-size: 7.5px; line-height: 1.2; }
+        td { padding: 3px 4px; border: 1px solid #e2e8f0; vertical-align: middle; }
+        td.num { text-align: center; color: #64748b; width: 24px; }
+        td.name { text-align: left; }
+        td.center { text-align: center; }
+        tr:nth-child(even) td { background: #f8fafc; }
+        .green  { background: #dcfce7 !important; color: #166534; font-weight: 600; }
+        .yellow { background: #fef9c3 !important; color: #854d0e; font-weight: 600; }
+        .red    { background: #fee2e2 !important; color: #991b1b; font-weight: 600; }
+        .footer { margin-top: 6px; font-size: 7px; color: #94a3b8; text-align: right; }
+      </style>
+    </head><body>${sections}</body></html>`;
+
+    const win = window.open('', '_blank', 'width=1100,height=800');
+    if (!win) { toast.error('El navegador bloqueó la ventana. Permitir popups e intentar de nuevo.'); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 600);
+  };
+
   const exportToExcel = () => {
     const allData = [...filteredEmployees, ...manualRows];
     
@@ -325,11 +433,18 @@ export default function Expirations() {
             </button>
           )}
           <button
+            onClick={handleExportPDF}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-sm"
+          >
+            <FileDown className="h-4 w-4" />
+            Guardar PDF
+          </button>
+          <button
             onClick={exportToExcel}
             className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium shadow-sm"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Exportar a Excel
+            Exportar Excel
           </button>
         </div>
       </div>
