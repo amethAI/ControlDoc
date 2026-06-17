@@ -11,6 +11,7 @@ interface Employee {
   contract_type: string;
   contract_start: string;
   contract_end: string | null;
+  birth_date: string | null;
 }
 
 interface Props {
@@ -36,6 +37,7 @@ export default function EditEmployeeModal({ isOpen, onClose, onSuccess, employee
     contract_type: '',
     contract_start: '',
     contract_end: '',
+    birth_date: '',
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -49,6 +51,7 @@ export default function EditEmployeeModal({ isOpen, onClose, onSuccess, employee
         contract_type: employee.contract_type || '',
         contract_start: employee.contract_start || '',
         contract_end: employee.contract_end || '',
+        birth_date: employee.birth_date || '',
       });
       setErrors({});
     }
@@ -70,6 +73,7 @@ export default function EditEmployeeModal({ isOpen, onClose, onSuccess, employee
       };
       if (form.contract_start) body.contract_start = form.contract_start;
       if (form.contract_end) body.contract_end = form.contract_end;
+      if (form.birth_date) body.birth_date = form.birth_date;
 
       const res = await apiFetch(`/api/employees/${employee.id}`, {
         method: 'PATCH',
@@ -188,6 +192,16 @@ export default function EditEmployeeModal({ isOpen, onClose, onSuccess, employee
                     className="block w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Fecha de Nacimiento</label>
+                <input
+                  type="date"
+                  value={form.birth_date}
+                  onChange={e => setForm(f => ({ ...f, birth_date: e.target.value }))}
+                  className="block w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
 
               <div className="flex gap-3 pt-2">

@@ -21,6 +21,7 @@ interface Employee {
   contract_type: string;
   contract_start: string;
   contract_end: string | null;
+  birth_date: string | null;
   status: string;
   club_id: string;
   termination_reason?: string;

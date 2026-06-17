@@ -20,6 +20,7 @@ const createEmployeeSchema = z.object({
   contract_type:  z.string().max(50).optional(),
   contract_start: dateOrEmpty,
   contract_end:   dateOrEmpty,
+  birth_date:     dateOrEmpty,
   club_id:        z.string().min(1, 'Club requerido'),
 });
 
@@ -587,7 +588,7 @@ router.post('/employees', canModifyData, async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
   }
-  const { full_name, cedula, position, contract_type, contract_start, contract_end, club_id } = parsed.data;
+  const { full_name, cedula, position, contract_type, contract_start, contract_end, birth_date, club_id } = parsed.data;
 
   // Restriction: Supervisor Interno can only create for their club
   if (user.role === 'Supervisor Interno' && club_id !== user.club_id) {
@@ -602,6 +603,7 @@ router.post('/employees', canModifyData, async (req, res) => {
         id, full_name, cedula, position, contract_type,
         contract_start: contract_start || null,
         contract_end:   contract_end   || null,
+        birth_date:     birth_date     || null,
         club_id, status: 'activo'
       }])
       .select()
@@ -705,6 +707,7 @@ router.patch('/employees/:id', canModifyData, async (req, res) => {
     contract_type:  z.string().max(50).optional(),
     contract_start: dateOrEmpty,
     contract_end:   dateOrEmpty,
+    birth_date:     dateOrEmpty,
     club_id:        z.string().min(1).optional(),
   });
 

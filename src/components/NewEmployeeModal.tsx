@@ -19,6 +19,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
     contract_type: 'Indefinido',
     contract_start: new Date().toISOString().split('T')[0],
     contract_end: '',
+    birth_date: '',
     club_id: clubId || ''
   });
   const [clubs, setClubs] = useState<{id: string, name: string}[]>([]);
@@ -76,6 +77,7 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
           contract_type: 'Indefinido',
           contract_start: new Date().toISOString().split('T')[0],
           contract_end: '',
+          birth_date: '',
           club_id: clubId || ''
         });
       } else {
@@ -159,6 +161,16 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
                   required
                   value={formData.position}
                   onChange={e => setFormData({...formData, position: e.target.value})}
+                  className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Fecha de Nacimiento</label>
+                <input
+                  type="date"
+                  value={formData.birth_date}
+                  onChange={e => setFormData({...formData, birth_date: e.target.value})}
                   className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
                 />
               </div>
