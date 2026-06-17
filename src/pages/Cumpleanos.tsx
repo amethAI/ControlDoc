@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Cake, Upload, Building2, Calendar, Trash2 } from 'lucide-react';
+import { Cake, Upload, Building2, Calendar, Trash2, Download } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import { toast } from 'sonner';
@@ -98,6 +98,35 @@ export default function Cumpleanos() {
       toast.error('Error al cargar cumpleaños');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const params = new URLSearchParams({ status: 'active' });
+      if (user?.role === 'Supervisor Interno' && user?.club_id) {
+        params.set('club_id', user.club_id);
+      }
+      const res = await apiFetch(`/api/employees?${params}`);
+      if (!res.ok) throw new Error();
+      const emps: { full_name: string; birth_date?: string; clubs?: { name: string } }[] = await res.json();
+
+      const rows = [
+        ['NOMBRE', 'FECHA DE NACIMIENTO', 'CLUB'],
+        ...emps.map(e => [
+          e.full_name,
+          e.birth_date ? new Date(e.birth_date + 'T12:00:00').toLocaleDateString('es-PA', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
+          e.clubs?.name ?? '',
+        ]),
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{ wch: 35 }, { wch: 22 }, { wch: 18 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Cumpleaños');
+      XLSX.writeFile(wb, 'Plantilla_Cumpleanos.xlsx');
+    } catch {
+      toast.error('Error al generar la plantilla');
     }
   };
 
@@ -276,6 +305,13 @@ export default function Cumpleanos() {
                 className="hidden"
                 onChange={handleFileChange}
               />
+              <button
+                onClick={handleDownloadTemplate}
+                className="inline-flex items-center px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 shadow-sm transition-all active:scale-95"
+              >
+                <Download className="h-4 w-4 mr-2 text-slate-500" />
+                Descargar plantilla
+              </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={importing}
