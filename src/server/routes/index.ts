@@ -2316,7 +2316,7 @@ router.post('/employees/import-birthdays', isAuthenticated, async (req, res) => 
   if (!Array.isArray(records)) return res.status(400).json({ error: 'Se esperaba un array' });
 
   const user = (req as any).user;
-  const allowedEditRoles = ['Administrador', 'Supervisor Interno', 'Recursos Humanos'];
+  const allowedEditRoles = ['Super Administrador', 'Administrador', 'Supervisor Interno', 'Recursos Humanos'];
   if (!allowedEditRoles.includes(user.role)) {
     return res.status(403).json({ error: 'Sin permiso para importar cumpleaños' });
   }
