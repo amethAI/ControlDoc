@@ -103,7 +103,7 @@ export default function Cumpleanos() {
 
   const handleDownloadTemplate = async () => {
     try {
-      const params = new URLSearchParams({ status: 'active' });
+      const params = new URLSearchParams({ status: 'activo' });
       if (user?.role === 'Supervisor Interno' && user?.club_id) {
         params.set('club_id', user.club_id);
       }
