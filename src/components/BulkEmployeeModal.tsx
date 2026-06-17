@@ -18,6 +18,7 @@ interface NewEmployeeRow {
   full_name: string;
   cedula: string;
   position: string;
+  birth_date: string;
   club_id: string;
   status: 'pending' | 'saving' | 'success' | 'error';
   error?: string;
@@ -35,21 +36,22 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
       apiFetch('/api/clubs').then(res => res.json()).then(setClubs);
       // Add initial 3 rows
       setRows([
-        { id: '1', full_name: '', cedula: '', position: '', club_id: clubId || '', status: 'pending' },
-        { id: '2', full_name: '', cedula: '', position: '', club_id: clubId || '', status: 'pending' },
-        { id: '3', full_name: '', cedula: '', position: '', club_id: clubId || '', status: 'pending' },
+        { id: '1', full_name: '', cedula: '', position: '', birth_date: '', club_id: clubId || '', status: 'pending' },
+        { id: '2', full_name: '', cedula: '', position: '', birth_date: '', club_id: clubId || '', status: 'pending' },
+        { id: '3', full_name: '', cedula: '', position: '', birth_date: '', club_id: clubId || '', status: 'pending' },
       ]);
     }
   }, [isOpen, clubId]);
 
   const addRow = () => {
-    setRows(prev => [...prev, { 
-      id: Math.random().toString(36).substr(2, 9), 
-      full_name: '', 
-      cedula: '', 
-      position: '', 
-      club_id: clubId || '', 
-      status: 'pending' 
+    setRows(prev => [...prev, {
+      id: Math.random().toString(36).substr(2, 9),
+      full_name: '',
+      cedula: '',
+      position: '',
+      birth_date: '',
+      club_id: clubId || '',
+      status: 'pending'
     }]);
   };
 
@@ -97,11 +99,25 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
             );
           }
 
+          const rawBirth = getValueByKeywords(normalizedRow, ['nacimiento', 'cumpleano', 'fechanac', 'birth']);
+          let birth_date = '';
+          if (rawBirth) {
+            const parts = rawBirth.split(/[\/\-]/);
+            if (parts.length === 3) {
+              if (parts[0].length === 4) {
+                birth_date = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+              } else {
+                birth_date = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+              }
+            }
+          }
+
           return {
             id: Math.random().toString(36).substr(2, 9),
             full_name: getValueByKeywords(normalizedRow, ['nombre', 'empleado']),
             cedula: getValueByKeywords(normalizedRow, ['cedula', 'cdula', 'identificacion', 'identidad', 'documento', 'id']),
             position: getValueByKeywords(normalizedRow, ['cargo', 'posicion', 'posicin', 'puesto', 'rol']),
+            birth_date,
             club_id: clubId || matchedClub?.id || '',
             status: 'pending' as const
           };
@@ -153,6 +169,7 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
             full_name: row.full_name,
             cedula: row.cedula,
             position: row.position,
+            birth_date: row.birth_date || undefined,
             club_id: row.club_id,
             contract_type: 'Indefinido',
             contract_start: new Date().toISOString().split('T')[0],
@@ -209,6 +226,7 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Nombre Completo</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Cédula</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Cargo / Posición</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">F. Nacimiento</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Club / Sede</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Estado</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider"></th>
@@ -264,6 +282,15 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
                           placeholder="Ej. Promotora"
                         />
                       </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="date"
+                        value={row.birth_date}
+                        onChange={(e) => updateRow(row.id, { birth_date: e.target.value })}
+                        disabled={row.status === 'saving' || row.status === 'success'}
+                        className="block w-full px-3 py-2 text-sm border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      />
                     </td>
                     <td className="px-3 py-2">
                       <div className="relative">
@@ -338,7 +365,7 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
               />
             </div>
             <p className="text-xs text-slate-500">
-              * Para importar correctamente, asegúrate de que tu archivo Excel tenga las columnas: <b>Nombre</b>, <b>Cédula</b>, <b>Cargo</b> y <b>Sede</b>.
+              * Para importar correctamente, asegúrate de que tu archivo CSV tenga las columnas: <b>Nombre</b>, <b>Cédula</b>, <b>Cargo</b>, <b>Sede</b> y (opcional) <b>Fecha de Nacimiento</b>.
             </p>
           </div>
         </div>
