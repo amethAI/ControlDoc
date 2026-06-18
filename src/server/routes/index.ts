@@ -749,6 +749,22 @@ router.patch('/employees/:id', canModifyData, async (req, res) => {
 
     if (error) return res.status(500).json({ error: error.message });
 
+    // Sync contract_end → expiry_date for "Contrato firmado" and "Solicitud de entrada al club"
+    if ('contract_end' in updates && updates.contract_end) {
+      const { data: contractDocTypes } = await supabase
+        .from('document_types')
+        .select('id, name')
+        .in('name', ['Contrato firmado', 'Solicitud de entrada al club']);
+      if (contractDocTypes && contractDocTypes.length > 0) {
+        await supabase
+          .from('employee_documents')
+          .update({ expiry_date: updates.contract_end })
+          .eq('employee_id', id)
+          .in('document_type_id', contractDocTypes.map((dt: any) => dt.id))
+          .eq('is_current', 1);
+      }
+    }
+
     await supabase.from('audit_logs').insert([{
       action_type: 'UPDATE',
       entity_type: 'Employee',
