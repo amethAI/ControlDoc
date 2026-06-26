@@ -38,7 +38,7 @@ export default function Dashboard() {
     expiringList: [] as { id: string, employee_id: string, employee_name: string, type: string, date: string, status: string }[]
   });
   const [loading, setLoading] = useState(true);
-  const [projections, setProjections] = useState<{ label: string; count: number; month: string }[]>([]);
+  const [projections, setProjections] = useState<{ label: string; count: number; month: string; clubs: { name: string; count: number }[] }[]>([]);
   const [compliance, setCompliance] = useState<{ name: string; total: number; withExpired: number; compliance: number }[]>([]);
   const [renewModal, setRenewModal] = useState<{ show: boolean; employeeId: string; employeeName: string; newDate: string }>({
     show: false, employeeId: '', employeeName: '', newDate: ''
@@ -154,8 +154,19 @@ export default function Dashboard() {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} allowDecimals={false} width={24} />
                   <Tooltip
                     cursor={{ fill: '#f8fafc' }}
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                    formatter={(value: number) => [value, 'Contratos']}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', padding: '10px 14px' }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const entry = payload[0].payload;
+                      return (
+                        <div className="text-xs">
+                          <p className="font-bold text-slate-800 mb-1">{entry.label} — {entry.count} contrato{entry.count !== 1 ? 's' : ''}</p>
+                          {entry.clubs?.map((c: { name: string; count: number }) => (
+                            <p key={c.name} className="text-slate-500">{c.name}: <span className="font-semibold text-slate-700">{c.count}</span></p>
+                          ))}
+                        </div>
+                      );
+                    }}
                   />
                   <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                     {projections.map((entry, index) => (

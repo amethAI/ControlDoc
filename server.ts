@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import apiRouter from './src/server/routes/index.ts';
 import cron from 'node-cron';
-import { sendExpirationAlerts } from './src/server/services/alertService.ts';
+import { sendExpirationAlerts, sendMonthlyReport } from './src/server/services/alertService.ts';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -450,6 +450,17 @@ async function startServer() {
       console.log('[CRON] Alertas enviadas correctamente');
     } catch (err) {
       console.error('[CRON] Error al enviar alertas:', err);
+    }
+  });
+
+  // Reporte ejecutivo mensual — 1° de cada mes a las 7:00 AM
+  cron.schedule('0 7 1 * *', async () => {
+    console.log('[CRON] Generando reporte mensual...');
+    try {
+      await sendMonthlyReport();
+      console.log('[CRON] Reporte mensual enviado');
+    } catch (err) {
+      console.error('[CRON] Error al enviar reporte mensual:', err);
     }
   });
 

@@ -2001,14 +2001,20 @@ router.get('/analytics/projections', canViewData, async (req, res) => {
 
     let q = supabase
       .from('employees')
-      .select('contract_end')
+      .select('contract_end, club_id')
       .eq('status', 'activo')
       .not('contract_end', 'is', null)
       .neq('contract_type', 'Indefinido')
       .gte('contract_end', today.toISOString().split('T')[0])
       .lte('contract_end', endDate.toISOString().split('T')[0]);
     q = applyFilter(q);
-    const { data: employees } = await q;
+
+    const [{ data: employees }, { data: clubs }] = await Promise.all([
+      q,
+      supabase.from('clubs').select('id, name'),
+    ]);
+
+    const clubMap = new Map((clubs || []).map(c => [c.id, c.name]));
 
     const months = Array.from({ length: 12 }, (_, i) => {
       const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
@@ -2016,13 +2022,19 @@ router.get('/analytics/projections', canViewData, async (req, res) => {
         month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
         label: d.toLocaleDateString('es-PA', { month: 'short', year: '2-digit' }),
         count: 0,
+        clubs: [] as { name: string; count: number }[],
       };
     });
 
     (employees || []).forEach(emp => {
       const ym = (emp.contract_end as string).substring(0, 7);
       const bucket = months.find(m => m.month === ym);
-      if (bucket) bucket.count++;
+      if (!bucket) return;
+      bucket.count++;
+      const clubName = clubMap.get(emp.club_id) || 'Sin club';
+      const existing = bucket.clubs.find(c => c.name === clubName);
+      if (existing) existing.count++;
+      else bucket.clubs.push({ name: clubName, count: 1 });
     });
 
     res.json(months);

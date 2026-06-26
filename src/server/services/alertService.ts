@@ -575,3 +575,212 @@ export async function sendExpirationAlerts(isTest = false) {
     return { success: false, error: 'Error al enviar alertas' };
   }
 }
+
+export async function sendMonthlyReport() {
+  try {
+    const today = new Date();
+    const monthLabel = today.toLocaleDateString('es-PA', { month: 'long', year: 'numeric' });
+
+    const { data: clubs } = await supabase.from('clubs').select('id, name');
+    const clubMap = new Map((clubs || []).map(c => [c.id, c.name]));
+
+    const { data: employees } = await supabase
+      .from('employees')
+      .select('id, full_name, club_id, contract_end, contract_type, status')
+      .eq('status', 'activo');
+
+    const totalActive = employees?.length || 0;
+
+    // Contracts expiring in the next 12 months grouped by month+club
+    const next12 = new Date(today.getFullYear(), today.getMonth() + 12, today.getDate());
+    const expiringContracts = (employees || []).filter(e =>
+      e.contract_end &&
+      e.contract_type?.toLowerCase() !== 'indefinido' &&
+      new Date(e.contract_end + 'T12:00:00') >= today &&
+      new Date(e.contract_end + 'T12:00:00') <= next12
+    );
+
+    // Group by month with club breakdown
+    const monthBuckets: Record<string, { label: string; clubs: Record<string, { name: string; employees: string[] }> }> = {};
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthBuckets[key] = {
+        label: d.toLocaleDateString('es-PA', { month: 'long', year: 'numeric' }),
+        clubs: {},
+      };
+    }
+
+    for (const emp of expiringContracts) {
+      const ym = (emp.contract_end as string).substring(0, 7);
+      if (!monthBuckets[ym]) continue;
+      const clubName = clubMap.get(emp.club_id) || 'Sin club';
+      if (!monthBuckets[ym].clubs[emp.club_id]) {
+        monthBuckets[ym].clubs[emp.club_id] = { name: clubName, employees: [] };
+      }
+      monthBuckets[ym].clubs[emp.club_id].employees.push(emp.full_name);
+    }
+
+    // Compliance by club
+    const { data: expiredDocs } = await supabase
+      .from('employee_documents')
+      .select('employee_id, employees!inner(club_id, status)')
+      .eq('is_current', 1)
+      .lt('expiry_date', today.toISOString().split('T')[0])
+      .eq('employees.status', 'activo');
+
+    const expiredByClub = new Set<string>();
+    for (const doc of expiredDocs || []) {
+      expiredByClub.add(`${(doc.employees as any).club_id}:${doc.employee_id}`);
+    }
+
+    const employeesByClub: Record<string, { name: string; total: number; withExpired: number }> = {};
+    for (const emp of employees || []) {
+      if (!employeesByClub[emp.club_id]) {
+        employeesByClub[emp.club_id] = { name: clubMap.get(emp.club_id) || 'Sin club', total: 0, withExpired: 0 };
+      }
+      employeesByClub[emp.club_id].total++;
+      if (expiredByClub.has(`${emp.club_id}:${emp.id}`)) employeesByClub[emp.club_id].withExpired++;
+    }
+
+    // Build HTML
+    let html = `
+      <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+        <div style="background-color:#1d4ed8;color:white;padding:24px;text-align:center;">
+          <h2 style="margin:0;font-size:20px;">📊 Reporte Ejecutivo Mensual</h2>
+          <p style="margin:6px 0 0;opacity:.85;text-transform:capitalize;">${monthLabel}</p>
+        </div>
+        <div style="padding:24px;">
+
+          <!-- KPIs -->
+          <table style="width:100%;margin-bottom:24px;">
+            <tr>
+              <td style="background:#f0f9ff;border-radius:8px;padding:14px;text-align:center;width:50%;">
+                <div style="font-size:28px;font-weight:bold;color:#1d4ed8;">${totalActive}</div>
+                <div style="font-size:12px;color:#64748b;margin-top:4px;">Empleados Activos</div>
+              </td>
+              <td style="width:16px;"></td>
+              <td style="background:#fef9f0;border-radius:8px;padding:14px;text-align:center;">
+                <div style="font-size:28px;font-weight:bold;color:#d97706;">${expiringContracts.length}</div>
+                <div style="font-size:12px;color:#64748b;margin-top:4px;">Contratos por Vencer (12 meses)</div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Proyección de contratos por mes y club -->
+          <h3 style="color:#1e293b;border-bottom:2px solid #e2e8f0;padding-bottom:8px;margin-top:0;">
+            📅 Proyección de Vencimientos por Club
+          </h3>
+    `;
+
+    const activeBuckets = Object.entries(monthBuckets).filter(([, b]) => Object.keys(b.clubs).length > 0);
+    if (activeBuckets.length === 0) {
+      html += `<p style="color:#64748b;font-size:14px;">No hay contratos por vencer en los próximos 12 meses.</p>`;
+    } else {
+      for (const [, bucket] of activeBuckets) {
+        const total = Object.values(bucket.clubs).reduce((s, c) => s + c.employees.length, 0);
+        html += `
+          <div style="margin-bottom:16px;">
+            <div style="font-weight:bold;color:#1e293b;font-size:14px;margin-bottom:6px;text-transform:capitalize;">
+              ${bucket.label} — <span style="color:#d97706;">${total} contrato${total !== 1 ? 's' : ''}</span>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead>
+                <tr style="background:#f8fafc;">
+                  <th style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:left;">Club</th>
+                  <th style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:left;">Empleados</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+        for (const club of Object.values(bucket.clubs)) {
+          html += `
+            <tr>
+              <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9;font-weight:600;">${club.name}</td>
+              <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">${club.employees.join(', ')}</td>
+            </tr>
+          `;
+        }
+        html += `</tbody></table></div>`;
+      }
+    }
+
+    // Compliance by club
+    html += `
+          <h3 style="color:#1e293b;border-bottom:2px solid #e2e8f0;padding-bottom:8px;margin-top:24px;">
+            ✅ Cumplimiento por Club
+          </h3>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="background:#f8fafc;">
+                <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:left;">Club</th>
+                <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;">Empleados</th>
+                <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;">Con docs vencidos</th>
+                <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;">Cumplimiento</th>
+              </tr>
+            </thead>
+            <tbody>
+    `;
+
+    for (const club of Object.values(employeesByClub).sort((a, b) => a.name.localeCompare(b.name))) {
+      const pct = club.total > 0 ? Math.round((club.total - club.withExpired) / club.total * 100) : 100;
+      const color = pct >= 80 ? '#10b981' : pct >= 60 ? '#f59e0b' : '#ef4444';
+      html += `
+        <tr>
+          <td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;">${club.name}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:center;">${club.total}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:center;color:#ef4444;">${club.withExpired}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:center;font-weight:bold;color:${color};">${pct}%</td>
+        </tr>
+      `;
+    }
+
+    html += `
+            </tbody>
+          </table>
+        </div>
+        <div style="background:#f8fafc;padding:15px;text-align:center;color:#64748b;font-size:12px;border-top:1px solid #e2e8f0;">
+          Reporte automático mensual — Sistema de Gestión ControlDoc PSMT
+        </div>
+      </div>
+    `;
+
+    // Send to global + hr recipients
+    const { data: recipients } = await supabase
+      .from('alert_recipients')
+      .select('email')
+      .in('club_id', ['global', 'hr']);
+
+    if (!recipients?.length) {
+      console.log('[MONTHLY] No hay destinatarios configurados para el reporte mensual.');
+      return { success: false, error: 'Sin destinatarios' };
+    }
+
+    const toEmails = Array.from(new Set(recipients.map(r => r.email)));
+    const subject = `📊 Reporte Mensual PSMT — ${monthLabel}`;
+    const sender = { name: 'Sistema PSMT', email: process.env.EMAIL_USER || 'alertaspsmt@gmail.com' };
+
+    if (process.env.BREVO_API_KEY) {
+      await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'accept': 'application/json', 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json' },
+        body: JSON.stringify({ sender, to: toEmails.map(e => ({ email: e })), subject, htmlContent: html }),
+      });
+    } else if (process.env.RESEND_API_KEY) {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({ from: process.env.EMAIL_FROM || 'Sistema PSMT <onboarding@resend.dev>', to: toEmails, subject, html });
+    } else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail', host: 'smtp.gmail.com', port: 465, secure: true, family: 4,
+        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      });
+      await transporter.sendMail({ from: `"Sistema PSMT" <${process.env.EMAIL_USER}>`, to: toEmails.join(', '), subject, html });
+    }
+
+    console.log(`[MONTHLY] Reporte mensual enviado a: ${toEmails.join(', ')}`);
+    return { success: true };
+  } catch (err) {
+    console.error('[MONTHLY] Error al enviar reporte mensual:', err);
+    return { success: false, error: 'Error al generar el reporte' };
+  }
+}
