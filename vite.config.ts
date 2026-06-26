@@ -17,7 +17,7 @@ export default defineConfig(({mode}) => {
           name: 'ControlDoc PSMT',
           short_name: 'ControlDoc',
           description: 'Gestión de documentos y contratos PSMT',
-          version: '1.2.4',
+          version: '1.3.0',
           theme_color: '#1d4ed8',
           background_color: '#f8fafc',
           display: 'standalone',
@@ -48,6 +48,7 @@ export default defineConfig(({mode}) => {
         workbox: {
           skipWaiting: true,
           clientsClaim: true,
+          importScripts: ['/push-sw.js'],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           runtimeCaching: [
             {

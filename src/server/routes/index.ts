@@ -2504,5 +2504,35 @@ router.delete('/employees/:id/birth-date', isAuthenticated, async (req, res) => 
   res.json({ ok: true });
 });
 
+// ─── Push Notifications ──────────────────────────────────────────────────────
+router.get('/push/vapid-public-key', isAuthenticated, (_req, res) => {
+  const key = process.env.VAPID_PUBLIC_KEY;
+  if (!key) return res.status(503).json({ error: 'Push notifications not configured' });
+  res.json({ publicKey: key });
+});
+
+router.post('/push/subscribe', isAuthenticated, async (req, res) => {
+  const user = (req as any).user;
+  const { endpoint, p256dh, auth } = req.body;
+  if (!endpoint || !p256dh || !auth) return res.status(400).json({ error: 'Datos incompletos' });
+
+  const { error } = await supabase.from('push_subscriptions').upsert(
+    { user_id: user.id, endpoint, p256dh, auth },
+    { onConflict: 'endpoint' }
+  );
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+router.delete('/push/subscribe', isAuthenticated, async (req, res) => {
+  const { endpoint } = req.body;
+  if (!endpoint) return res.status(400).json({ error: 'Endpoint requerido' });
+
+  const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default router;
 

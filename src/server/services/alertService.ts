@@ -2,10 +2,63 @@ import { supabase } from '../db.ts';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import dns from 'dns';
+import webpush from 'web-push';
 
 // Forzar a Node.js a preferir IPv4 sobre IPv6 en todas las resoluciones DNS
 // Esto soluciona el error ENETUNREACH en servidores como Render que no tienen salida IPv6
 dns.setDefaultResultOrder('ipv4first');
+
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:admin@controldoc.com',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
+
+async function sendPushToSubscribers(alertsByClub: Record<string, { club_name: string; docs: any[] }>) {
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
+
+  const { data: subscriptions, error } = await supabase
+    .from('push_subscriptions')
+    .select('id, endpoint, p256dh, auth, users!inner(id, club_id, role)');
+
+  if (error || !subscriptions?.length) return;
+
+  const alertedClubIds = new Set(Object.keys(alertsByClub));
+  const globalRoles = ['Super Administrador', 'Administrador'];
+
+  for (const sub of subscriptions) {
+    const user = (sub as any).users;
+    const isGlobal = globalRoles.includes(user.role);
+    const hasAlert = isGlobal ? alertedClubIds.size > 0 : alertedClubIds.has(user.club_id);
+    if (!hasAlert) continue;
+
+    const relevantClubs = isGlobal
+      ? Object.values(alertsByClub)
+      : [alertsByClub[user.club_id]].filter(Boolean);
+
+    const totalAlerts = relevantClubs.reduce((sum, c) => sum + c.docs.length, 0);
+    const clubNames = relevantClubs.map(c => c.club_name).join(', ');
+
+    const payload = JSON.stringify({
+      title: 'ControlDoc — Alerta',
+      body: `${totalAlerts} documento${totalAlerts !== 1 ? 's' : ''} por atender en ${clubNames}`,
+      url: '/',
+    });
+
+    try {
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        payload
+      );
+    } catch (err: any) {
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        await supabase.from('push_subscriptions').delete().eq('id', sub.id);
+      }
+    }
+  }
+}
 
 export async function sendExpirationAlerts(isTest = false) {
   try {
@@ -509,9 +562,12 @@ export async function sendExpirationAlerts(isTest = false) {
        return { success: false, error: `No se pudo enviar el correo. Detalle técnico: ${lastError || 'Verifique credenciales y destinatarios.'}` };
     }
 
-    return { 
-      success: true, 
-      previewUrls, 
+    // Send push notifications in parallel (non-blocking — email success is enough)
+    sendPushToSubscribers(alertsByClub).catch(err => console.error('Push send error:', err));
+
+    return {
+      success: true,
+      previewUrls,
       isRealEmail: !!process.env.EMAIL_USER || useResend || useBrevo
     };
   } catch (error) {

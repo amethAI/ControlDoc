@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "node dist/server.js",
-    "build": "vite build && npx esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express --external:vite --external:cors --external:dotenv --external:multer --external:better-sqlite3 --external:archiver --external:bcryptjs --external:jsonwebtoken --external:node-cron --external:nodemailer --external:resend --external:@supabase/supabase-js --external:papaparse --external:date-fns --external:pptxgenjs --external:@google/genai",
+    "build": "vite build && npx esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express --external:vite --external:cors --external:dotenv --external:multer --external:better-sqlite3 --external:archiver --external:bcryptjs --external:jsonwebtoken --external:node-cron --external:nodemailer --external:resend --external:@supabase/supabase-js --external:papaparse --external:date-fns --external:pptxgenjs --external:@google/genai --external:web-push",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
@@ -53,6 +53,8 @@
     "react-router-dom": "^7.13.1",
     "recharts": "^3.7.0",
     "resend": "^6.9.3",
+    "web-push": "^3.6.7",
+    "@types/web-push": "^3.6.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.1.14",

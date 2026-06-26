@@ -15,9 +15,13 @@ import {
   CalendarClock,
   ClipboardList,
   Info,
-  Cake
+  Cake,
+  Bell,
+  BellOff,
+  BellRing,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -52,6 +56,7 @@ export default function Layout() {
     ...(isAdmin ? [{ name: 'Configuración', href: '/configuracion', icon: Settings }] : [])
   ];
 
+  const push = usePushNotifications();
   const [isOnline, setIsOnline] = React.useState(true);
 
   React.useEffect(() => {
@@ -157,7 +162,35 @@ export default function Layout() {
           <h1 className="text-xl font-semibold text-slate-800">
             {navigation.find(n => location.pathname === n.href || (n.href !== '/' && location.pathname.startsWith(n.href)))?.name || 'ControlDoc'}
           </h1>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* Notification bell */}
+            {push.status !== 'unsupported' && (
+              <button
+                onClick={push.toggle}
+                disabled={push.loading || push.status === 'denied'}
+                title={
+                  push.status === 'subscribed' ? 'Desactivar notificaciones'
+                  : push.status === 'denied' ? 'Notificaciones bloqueadas en el navegador'
+                  : 'Activar notificaciones push'
+                }
+                className={clsx(
+                  'p-2 rounded-full transition-colors',
+                  push.status === 'subscribed'
+                    ? 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+                    : push.status === 'denied'
+                    ? 'text-slate-300 cursor-not-allowed'
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                )}
+              >
+                {push.status === 'subscribed' ? (
+                  <BellRing className="h-5 w-5" />
+                ) : push.status === 'denied' ? (
+                  <BellOff className="h-5 w-5" />
+                ) : (
+                  <Bell className="h-5 w-5" />
+                )}
+              </button>
+            )}
             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-50 border border-slate-200">
               <div className={clsx("w-2 h-2 rounded-full animate-pulse", isOnline ? "bg-emerald-500" : "bg-red-500")}></div>
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
