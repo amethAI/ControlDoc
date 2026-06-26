@@ -110,68 +110,146 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="flex flex-col gap-5 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Panel de Control</h1>
-          <p className="text-slate-500 mt-1">Resumen ejecutivo del estado de personal y documentación.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Panel de Control</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Resumen ejecutivo del estado de personal y documentación.</p>
         </div>
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm">
           <TrendingUp className="h-4 w-4 text-emerald-500" />
           <span className="text-sm font-medium text-slate-700">Actualizado: {new Date().toLocaleDateString('es-PA')}</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      {/* KPIs — compact inline */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {kpis.map((kpi) => (
-          <div key={kpi.name} className="bg-white overflow-hidden shadow-sm rounded-2xl border border-slate-200 hover:shadow-md transition-shadow">
-            <div className="p-6">
-              <div className="flex items-center justify-between">
-                <div className={`rounded-xl p-3 ${kpi.color} bg-opacity-10 ${kpi.textColor}`}>
-                  <kpi.icon className="h-6 w-6" aria-hidden="true" />
-                </div>
-                <div className="text-right">
-                  <dt className="text-sm font-medium text-slate-500 truncate">{kpi.name}</dt>
-                  <dd className="text-3xl font-bold text-slate-900">{kpi.value}</dd>
-                </div>
-              </div>
+          <div key={kpi.name} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow">
+            <div className={`rounded-lg p-2 ${kpi.color} bg-opacity-10 ${kpi.textColor} shrink-0`}>
+              <kpi.icon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-2xl font-bold text-slate-900 leading-none">{kpi.value}</p>
+              <p className="text-xs text-slate-500 mt-1 leading-tight">{kpi.name}</p>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Row 2: Proyección + Alertas */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <h3 className="text-sm font-bold text-slate-800">Proyección de Vencimientos de Contratos</h3>
+            <p className="text-xs text-slate-500">Próximos 12 meses — contratos no indefinidos</p>
+          </div>
+          <div className="p-4 h-[200px]">
+            {projections.some(p => p.count > 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={projections}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} allowDecimals={false} width={24} />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                    formatter={(value: number) => [value, 'Contratos']}
+                  />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {projections.map((entry, index) => (
+                      <Cell key={`proj-${index}`} fill={entry.count > 5 ? '#ef4444' : entry.count > 2 ? '#f59e0b' : '#3b82f6'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-400 text-sm">
+                Sin contratos por vencer en los próximos 12 meses
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Alertas — promoted above the fold */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+            <h3 className="text-sm font-bold text-slate-800">Alertas</h3>
+            <div className="flex gap-1.5">
+              {stats.expiredDocuments > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">{stats.expiredDocuments} Venc.</span>
+              )}
+              {stats.expiringSoonDocuments > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700">{stats.expiringSoonDocuments} Próx.</span>
+              )}
+            </div>
+          </div>
+          <div className="divide-y divide-slate-100 overflow-y-auto flex-1 max-h-[240px]">
+            {[...stats.expiredList, ...stats.expiringList].length > 0 ? (
+              [...stats.expiredList, ...stats.expiringList].map((doc, idx) => (
+                <div key={`${doc.id}-${idx}`} className="p-3 flex items-start gap-3 hover:bg-slate-50 transition-colors">
+                  <div className={`p-1.5 rounded-lg shrink-0 ${doc.status === 'expired' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
+                    {doc.status === 'expired' ? <AlertTriangle className="h-4 w-4" /> : <FileWarning className="h-4 w-4" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex justify-between items-start gap-1">
+                      <p className="text-xs font-bold text-slate-900 truncate">{doc.employee_name}</p>
+                      <span className={`text-[10px] font-bold whitespace-nowrap ${doc.status === 'expired' ? 'text-red-600' : 'text-amber-600'}`}>
+                        {new Date(doc.date).toLocaleDateString('es-PA', { timeZone: 'UTC' })}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <p className="text-[11px] text-slate-500 truncate">{doc.type}</p>
+                      {doc.status === 'expired' && doc.type?.toLowerCase().includes('contrato') && (
+                        <button
+                          onClick={() => setRenewModal({ show: true, employeeId: doc.employee_id, employeeName: doc.employee_name, newDate: '' })}
+                          className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 ml-1 shrink-0"
+                        >
+                          <RefreshCw className="h-2.5 w-2.5" />
+                          Renovar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center flex flex-col items-center justify-center h-full">
+                <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-2">
+                  <FileWarning className="h-5 w-5" />
+                </div>
+                <p className="font-medium text-slate-900 text-sm">Todo al día</p>
+                <p className="text-xs text-slate-400 mt-1">Sin alertas críticas</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3: Distribución + Estado Docs + Cumplimiento */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Distribución por Club */}
-        <div className="lg:col-span-2 bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-slate-400" />
-              Distribución de Personal por Club
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-slate-400" />
+              Distribución por Club
             </h3>
           </div>
-          <div className="p-6 h-[350px]">
+          <div className="p-4 h-[190px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.clubDistribution}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#64748b', fontSize: 12 }}
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#64748b', fontSize: 12 }}
-                />
-                <Tooltip 
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 9 }} dy={6} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 9 }} width={20} />
+                <Tooltip
                   cursor={{ fill: '#f8fafc' }}
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                 />
-                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {stats.clubDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={`dist-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Bar>
               </BarChart>
@@ -180,12 +258,12 @@ export default function Dashboard() {
         </div>
 
         {/* Estado de Documentación */}
-        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50">
-            <h3 className="text-lg font-bold text-slate-800">Estado de Documentación</h3>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <h3 className="text-sm font-bold text-slate-800">Estado de Documentación</h3>
           </div>
-          <div className="p-6 h-[350px] flex flex-col items-center justify-center">
-            <ResponsiveContainer width="100%" height="80%">
+          <div className="p-4 flex items-center gap-4 h-[190px]">
+            <ResponsiveContainer width="55%" height="100%">
               <PieChart>
                 <Pie
                   data={[
@@ -195,9 +273,9 @@ export default function Dashboard() {
                   ]}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
+                  innerRadius={42}
+                  outerRadius={62}
+                  paddingAngle={4}
                   dataKey="value"
                 >
                   <Cell fill="#ef4444" />
@@ -207,144 +285,31 @@ export default function Dashboard() {
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
-            <div className="mt-4 grid grid-cols-3 gap-4 w-full text-center">
-              <div>
-                <div className="w-3 h-3 rounded-full bg-red-500 mx-auto mb-1"></div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Vencidos</p>
-              </div>
-              <div>
-                <div className="w-3 h-3 rounded-full bg-amber-500 mx-auto mb-1"></div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Próximos</p>
-              </div>
-              <div>
-                <div className="w-3 h-3 rounded-full bg-emerald-500 mx-auto mb-1"></div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Al día</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Alertas de Documentación */}
-        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden flex flex-col h-[400px]">
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-            <h3 className="text-lg font-bold text-slate-800">Alertas de Documentos</h3>
-            <div className="flex gap-2">
-              {stats.expiredDocuments > 0 && (
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">
-                  {stats.expiredDocuments} Vencidos
-                </span>
-              )}
-              {stats.expiringSoonDocuments > 0 && (
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
-                  {stats.expiringSoonDocuments} Próximos
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="divide-y divide-slate-100 overflow-y-auto flex-1">
-            {stats.expiredList.length > 0 || stats.expiringList.length > 0 ? (
-              [...stats.expiredList, ...stats.expiringList].map((doc, idx) => (
-                <div key={`${doc.id}-${idx}`} className="p-4 flex items-start gap-4 hover:bg-slate-50 transition-colors">
-                  <div className={`p-2 rounded-lg shrink-0 ${doc.status === 'expired' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
-                    {doc.status === 'expired' ? <AlertTriangle className="h-5 w-5" /> : <FileWarning className="h-5 w-5" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex justify-between items-start gap-2">
-                      <p className="text-sm font-bold text-slate-900 truncate">{doc.employee_name}</p>
-                      <span className={`text-xs font-bold whitespace-nowrap ${doc.status === 'expired' ? 'text-red-600' : 'text-amber-600'}`}>
-                        {new Date(doc.date).toLocaleDateString('es-PA', { timeZone: 'UTC' })}
-                      </span>
-                    </div>
-                    <p className="text-sm text-slate-500 mt-0.5 truncate">{doc.type}</p>
-                    <div className="flex items-center justify-between mt-1">
-                      <p className={`text-xs font-medium ${doc.status === 'expired' ? 'text-red-500' : 'text-amber-500'}`}>
-                        {doc.status === 'expired' ? 'Vencido' : 'Próximo a vencer'}
-                      </p>
-                      {doc.status === 'expired' && doc.type?.toLowerCase().includes('contrato') && (
-                        <button
-                          onClick={() => setRenewModal({ show: true, employeeId: doc.employee_id, employeeName: doc.employee_name, newDate: '' })}
-                          className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                        >
-                          <RefreshCw className="h-3 w-3" />
-                          Renovar
-                        </button>
-                      )}
-                    </div>
+            <div className="space-y-3 flex-1">
+              {[
+                { label: 'Vencidos', value: stats.expiredDocuments, color: 'bg-red-500' },
+                { label: 'Próximos', value: stats.expiringSoonDocuments, color: 'bg-amber-500' },
+                { label: 'Al día', value: Math.max(0, stats.totalEmployees * 8 - stats.expiredDocuments - stats.expiringSoonDocuments), color: 'bg-emerald-500' },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-2">
+                  <div className={`w-2.5 h-2.5 rounded-full ${item.color} shrink-0`} />
+                  <div>
+                    <p className="text-[10px] text-slate-500 leading-none">{item.label}</p>
+                    <p className="text-sm font-bold text-slate-900">{item.value}</p>
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center h-full">
-                <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-3">
-                  <FileWarning className="h-6 w-6" />
-                </div>
-                <p className="font-medium text-slate-900">Todo al día</p>
-                <p className="text-sm mt-1">No hay alertas críticas en este momento.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Actividad Reciente */}
-        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden flex flex-col h-[400px]">
-          <div className="px-6 py-5 border-b border-slate-100 shrink-0">
-            <h3 className="text-lg font-bold text-slate-800">Actividad Reciente</h3>
-          </div>
-          <div className="divide-y divide-slate-100 overflow-y-auto flex-1">
-            <div className="p-6 flex items-start gap-4 hover:bg-slate-50 transition-colors">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0">
-                <UploadCloud className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-slate-900">Carga de Documentos</p>
-                <p className="text-sm text-slate-500 mt-1">Se han cargado {stats.documentsUploadedToday} nuevos documentos en las últimas 24 horas.</p>
-              </div>
+              ))}
             </div>
           </div>
         </div>
-      </div>
-      {/* Analytics: Proyección de Vencimientos + Cumplimiento por Club */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50">
-            <h3 className="text-lg font-bold text-slate-800">Proyección de Vencimientos de Contratos</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Contratos no indefinidos que vencen en los próximos 12 meses</p>
-          </div>
-          <div className="p-6 h-[300px]">
-            {projections.some(p => p.count > 0) ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={projections}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} allowDecimals={false} />
-                  <Tooltip
-                    cursor={{ fill: '#f8fafc' }}
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                    formatter={(value: number) => [value, 'Contratos']}
-                  />
-                  <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                    {projections.map((entry, index) => (
-                      <Cell key={`proj-${index}`} fill={entry.count > 5 ? '#ef4444' : entry.count > 2 ? '#f59e0b' : '#3b82f6'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-slate-400 text-sm">
-                No hay contratos por vencer en los próximos 12 meses
-              </div>
-            )}
-          </div>
-        </div>
 
-        <div className="bg-white shadow-sm rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50">
-            <h3 className="text-lg font-bold text-slate-800">Cumplimiento por Club</h3>
-            <p className="text-xs text-slate-500 mt-0.5">% de empleados sin documentos vencidos</p>
+        {/* Cumplimiento por Club */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <h3 className="text-sm font-bold text-slate-800">Cumplimiento por Club</h3>
+            <p className="text-xs text-slate-500">% sin documentos vencidos</p>
           </div>
-          <div className="p-6 space-y-4 overflow-y-auto max-h-[270px]">
+          <div className="p-4 space-y-3 overflow-y-auto h-[190px]">
             {compliance.length > 0 ? compliance.map(club => (
               <div key={club.name}>
                 <div className="flex justify-between text-xs mb-1">
@@ -353,19 +318,25 @@ export default function Dashboard() {
                     {club.compliance}%
                   </span>
                 </div>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${club.compliance >= 80 ? 'bg-emerald-500' : club.compliance >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                    className={`h-full rounded-full ${club.compliance >= 80 ? 'bg-emerald-500' : club.compliance >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
                     style={{ width: `${club.compliance}%` }}
                   />
                 </div>
                 <p className="text-[10px] text-slate-400 mt-0.5">{club.total - club.withExpired}/{club.total} empleados al día</p>
               </div>
             )) : (
-              <div className="text-slate-400 text-sm text-center py-8">Sin datos disponibles</div>
+              <div className="text-slate-400 text-xs text-center py-6">Sin datos disponibles</div>
             )}
           </div>
         </div>
+      </div>
+
+      {/* Footer stat */}
+      <div className="flex items-center gap-2 text-xs text-slate-400 pb-2">
+        <UploadCloud className="h-3.5 w-3.5" />
+        <span>{stats.documentsUploadedToday} documentos cargados en las últimas 24 horas</span>
       </div>
 
       {/* Renewal Modal */}
