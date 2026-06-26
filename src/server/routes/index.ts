@@ -1822,6 +1822,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
         })
         .map(d => ({
         id: d.id,
+        employee_id: (d.employees as any).id,
         employee_name: (d.employees as any).full_name,
         type: (d.document_types as any).name,
         date: d.expiry_date,
@@ -1831,6 +1832,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
         .filter(e => e.contract_type?.toLowerCase() !== 'indefinido' && !expiredEmployeesWithContractDoc.has(e.id))
         .map(e => ({
         id: `contract-${e.id}`,
+        employee_id: e.id,
         employee_name: e.full_name,
         type: 'Contrato',
         date: e.contract_end,
@@ -1892,6 +1894,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
         })
         .map(d => ({
         id: d.id,
+        employee_id: (d.employees as any).id,
         employee_name: (d.employees as any).full_name,
         type: (d.document_types as any).name,
         date: d.expiry_date,
@@ -1901,6 +1904,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
         .filter(e => e.contract_type?.toLowerCase() !== 'indefinido' && !expiringEmployeesWithContractDoc.has(e.id))
         .map(e => ({
         id: `contract-${e.id}`,
+        employee_id: e.id,
         employee_name: e.full_name,
         type: 'Contrato',
         date: e.contract_end,
@@ -1982,6 +1986,105 @@ router.get('/dashboard', canViewData, async (req, res) => {
   } catch (error: any) {
     console.error('Dashboard stats error:', error);
     res.status(500).json({ error: 'Error al obtener estadísticas' });
+  }
+});
+
+// GET /api/analytics/projections — contract expirations bucketed by month for next 12 months
+router.get('/analytics/projections', canViewData, async (req, res) => {
+  const { club_id: queryClubId } = req.query;
+  const user = (req as any).user;
+  const { applyFilter } = await resolveClubScope(user, queryClubId as string | undefined);
+
+  try {
+    const today = new Date();
+    const endDate = new Date(today.getFullYear(), today.getMonth() + 12, today.getDate());
+
+    let q = supabase
+      .from('employees')
+      .select('contract_end')
+      .eq('status', 'activo')
+      .not('contract_end', 'is', null)
+      .neq('contract_type', 'Indefinido')
+      .gte('contract_end', today.toISOString().split('T')[0])
+      .lte('contract_end', endDate.toISOString().split('T')[0]);
+    q = applyFilter(q);
+    const { data: employees } = await q;
+
+    const months = Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      return {
+        month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: d.toLocaleDateString('es-PA', { month: 'short', year: '2-digit' }),
+        count: 0,
+      };
+    });
+
+    (employees || []).forEach(emp => {
+      const ym = (emp.contract_end as string).substring(0, 7);
+      const bucket = months.find(m => m.month === ym);
+      if (bucket) bucket.count++;
+    });
+
+    res.json(months);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Error al obtener proyecciones' });
+  }
+});
+
+// GET /api/analytics/compliance — document compliance rate per club
+router.get('/analytics/compliance', canViewData, async (req, res) => {
+  const { club_id: queryClubId } = req.query;
+  const user = (req as any).user;
+  const { club_id, allowedClubIds, applyFilter, applyDocFilter } =
+    await resolveClubScope(user, queryClubId as string | undefined);
+
+  try {
+    const today = new Date().toISOString().split('T')[0];
+
+    let clubsQuery = supabase.from('clubs').select('id, name').neq('id', 'global').neq('id', 'hr');
+    if (club_id) {
+      clubsQuery = clubsQuery.eq('id', club_id);
+    } else if (allowedClubIds !== null) {
+      clubsQuery = allowedClubIds.length > 0
+        ? clubsQuery.in('id', allowedClubIds)
+        : clubsQuery.in('id', ['__none__']);
+    }
+    const { data: clubs } = await clubsQuery;
+
+    let empQuery = supabase.from('employees').select('id, club_id').eq('status', 'activo');
+    empQuery = applyFilter(empQuery);
+    const { data: activeEmps } = await empQuery;
+
+    let expiredQuery = supabase
+      .from('employee_documents')
+      .select('employees!inner(id, club_id, status), document_types!inner(has_expiry)')
+      .eq('is_current', 1)
+      .eq('document_types.has_expiry', 1)
+      .not('expiry_date', 'is', null)
+      .lt('expiry_date', today)
+      .eq('employees.status', 'activo');
+    expiredQuery = applyDocFilter(expiredQuery);
+    const { data: expiredDocs } = await expiredQuery;
+
+    const empIdsWithExpired = new Set(
+      (expiredDocs || []).map(d => (d.employees as any).id)
+    );
+
+    const result = (clubs || [])
+      .map(club => {
+        const total = (activeEmps || []).filter(e => e.club_id === club.id).length;
+        const withExpired = (activeEmps || []).filter(
+          e => e.club_id === club.id && empIdsWithExpired.has(e.id)
+        ).length;
+        const compliance = total > 0 ? Math.round(((total - withExpired) / total) * 100) : 100;
+        return { name: club.name, total, withExpired, compliance };
+      })
+      .filter(c => c.total > 0)
+      .sort((a, b) => a.compliance - b.compliance);
+
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Error al obtener cumplimiento' });
   }
 });
 
