@@ -11,7 +11,6 @@ import {
   Shield,
   Building2,
   CalendarCheck,
-  TrendingUp,
   CalendarClock,
   ClipboardList,
   Info,
