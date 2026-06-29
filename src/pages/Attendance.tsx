@@ -37,6 +37,9 @@ interface Employee {
   status?: string;
   termination_date?: string;
   termination_reason?: string;
+  contract_start?: string;
+  banco?: string;
+  cuenta_bancaria?: string;
 }
 
 interface AttendanceRecord {
@@ -76,6 +79,12 @@ export default function Attendance() {
   const [clubs, setClubs] = useState<{id: string, name: string}[]>([]);
   const [selectedClubId, setSelectedClubId] = useState(user?.club_id || '');
   const [viewHalf, setViewHalf] = useState<'1' | '2' | 'full'>('full');
+  const [showPsmtPreview, setShowPsmtPreview] = useState(false);
+  const [psmtPreviewRows, setPsmtPreviewRows] = useState<{
+    no: number; nombre: string; dias: number; doms: number; incap: number;
+    bruto: number; desc: number; neto: number;
+    dayCodes: string[]; emp: Employee;
+  }[]>([]);
 
   if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
     return (
@@ -87,8 +96,9 @@ export default function Attendance() {
     );
   }
 
-  const isReadOnly = user?.role !== 'Administrador' && user?.role !== 'Super Administrador' && user?.role !== 'Supervisor Interno';
-  const isRestricted = user?.role === 'Supervisor Interno';
+  const isReadOnly = user?.role !== 'Administrador' && user?.role !== 'Super Administrador'
+    && user?.role !== 'Supervisor Interno' && user?.role !== 'Supervisora';
+  const isRestricted = user?.role === 'Supervisor Interno' || user?.role === 'Supervisora';
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -370,6 +380,134 @@ export default function Attendance() {
     XLSX.writeFile(wb, `Nomina_${safeClub}_${safePeriodo}.xlsx`);
   };
 
+  const SALARIO_DIA = 25.28;
+  const SALARIO_DOM = 33.18;
+
+  const toPsmtCode = (status: string | null | undefined, day: Date): string => {
+    if (!status) return '';
+    const isSunday = day.getDay() === 0;
+    switch (status) {
+      case 'presente':
+      case 'capacitacion':
+      case 'apoyo':
+        return isSunday ? 'D' : '1';
+      case 'incapacidad': return 'I';
+      case 'permiso': return 'P';
+      case 'feriado': return 'F';
+      default: return '';
+    }
+  };
+
+  const openPsmtPreview = () => {
+    const periodDays = viewHalf === '1' ? firstHalf : secondHalf;
+    const rows = employees.map((emp, idx) => {
+      const dayCodes = periodDays.map(day => toPsmtCode(getStatus(emp.id, day), day));
+      const dias = dayCodes.filter(c => c === '1').length;
+      const doms = dayCodes.filter(c => c === 'D').length;
+      const incap = dayCodes.filter(c => c === 'I').length;
+      const fer50 = dayCodes.filter(c => c === 'F').length;
+      const bruto = parseFloat((dias * SALARIO_DIA + doms * SALARIO_DOM + incap * SALARIO_DIA + fer50 * SALARIO_DIA).toFixed(2));
+      const ss = parseFloat((bruto * 0.0975).toFixed(4));
+      const se = parseFloat((bruto * 0.0125).toFixed(4));
+      const desc = parseFloat((ss + se).toFixed(2));
+      const neto = parseFloat((bruto - desc).toFixed(2));
+      return { no: idx + 1, nombre: emp.full_name, dias, doms, incap, bruto, desc, neto, dayCodes, emp };
+    });
+    setPsmtPreviewRows(rows);
+    setShowPsmtPreview(true);
+  };
+
+  const downloadPsmt = () => {
+    const clubName = clubs.find(c => c.id === selectedClubId)?.name || selectedClubId;
+    const periodDays = viewHalf === '1' ? firstHalf : secondHalf;
+    const periodoLabel = viewHalf === '1' ? '1RA Q' : '2DA Q';
+    const monthName = format(currentMonth, 'MMMM yyyy', { locale: es }).toUpperCase();
+
+    const headerRow = [
+      'No.', 'País', 'Banco', 'No. De Cuenta', 'Cédula', 'Código Empleado Kronos',
+      'DEMOSTRADORA', 'Cliente/Proyecto', 'Sucursal(Punto de venta)', 'Nombre del Puesto',
+      'Fecha de Alta', 'Salario Mensual', 'Salario por día',
+      ...periodDays.map(d => d.getDate()),
+      'Días Laborados', 'Total de Días Laborados', 'Días vacaciones', 'Total Vacaciones',
+      'Salario Domingo', 'Domingos Laborados', 'Total Domingos',
+      'Incapacidad', 'Total Incapacidad',
+      'Día Trabajado al 150%', 'Total de Feriados al 150%',
+      'Día Trabajado al 50%', 'Total de Feriados al 50%',
+      'Horas Extras', 'Valor Total Horas Extras',
+      'PAGO PENDIENTE CANCELADO', 'PAGO POR RECARGO NO APLICADO',
+      'SALARIO BRUTO', 'S.S. 9.75%', 'S.E. 1.25%', 'I/R',
+      'Bonificacion', 'Prestamo', 'Otros descuentos', 'Total de descuentos',
+      'SALARIO NETO', 'OBSERVACIONES',
+      'S.S. PATRONO 12.25%', 'S.EDUCATIVO PATRONO 1.50%', 'RIESGO PROFESIONAL 0.021%'
+    ];
+
+    const dataRows = psmtPreviewRows.map(r => {
+      const { emp, dayCodes, dias, doms, incap } = r;
+      const fer50 = dayCodes.filter(c => c === 'F').length;
+      const kronos = emp.cedula ? 'PA' + emp.cedula.replace(/-/g, '') : '';
+      const totalDiasLab = parseFloat((dias * SALARIO_DIA).toFixed(4));
+      const totalDoms = parseFloat((doms * SALARIO_DOM).toFixed(4));
+      const totalIncap = parseFloat((incap * SALARIO_DIA).toFixed(4));
+      const totalFer50 = parseFloat((fer50 * SALARIO_DIA).toFixed(4));
+      const bruto = parseFloat((totalDiasLab + totalDoms + totalIncap + totalFer50).toFixed(4));
+      const ss = parseFloat((bruto * 0.0975).toFixed(6));
+      const se = parseFloat((bruto * 0.0125).toFixed(6));
+      const totalDesc = parseFloat((ss + se).toFixed(4));
+      const neto = parseFloat((bruto - totalDesc).toFixed(4));
+      const ssPatrono = parseFloat((bruto * 0.1225).toFixed(6));
+      const sePatrono = parseFloat((bruto * 0.015).toFixed(6));
+      const riesgoProf = parseFloat((bruto * 0.00021).toFixed(6));
+
+      return [
+        r.no, 'PANAMÁ', emp.banco || '', emp.cuenta_bancaria || '',
+        emp.cedula || '', kronos, emp.full_name,
+        'PSMT ' + clubName.toUpperCase(), 'Club ' + clubName,
+        emp.position || 'DEMOSTRADORA',
+        emp.contract_start || '',
+        657.28, SALARIO_DIA,
+        ...dayCodes,
+        dias, totalDiasLab, 0, 0,
+        SALARIO_DOM, doms, totalDoms,
+        incap, totalIncap,
+        0, 0,
+        fer50, totalFer50,
+        0, 0,
+        null, null,
+        bruto, ss, se, null,
+        null, null, null, totalDesc,
+        neto, '',
+        ssPatrono, sePatrono, riesgoProf
+      ];
+    });
+
+    const hoja2Rows = psmtPreviewRows.map(r => ([
+      null, r.emp.banco || 'BAC', r.emp.cuenta_bancaria || '', r.emp.full_name,
+      parseFloat(r.neto.toFixed(2))
+    ]));
+
+    const wb = XLSX.utils.book_new();
+
+    const ws1 = XLSX.utils.aoa_to_sheet([
+      ['', '', '', '', '', '', 'PAIS', 'PANAMÁ'],
+      ['', '', '', '', '', '', 'MES//PRESUPUESTO:', monthName.split(' ')[0]],
+      ['', '', '', '', '', '', `PERIODO: ${periodoLabel} ${monthName}`, periodoLabel],
+      headerRow,
+      ...dataRows
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws1, 'PRICESMART');
+
+    const ws2 = XLSX.utils.aoa_to_sheet([
+      [], [], [], [],
+      [null, 'Banco', 'No. Cuenta', 'Nombre', 'SALARIO NETO'],
+      ...hoja2Rows
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws2, 'Hoja2');
+
+    const safeClub = clubName.replace(/[^a-zA-Z0-9]/g, '_');
+    XLSX.writeFile(wb, `PlanillaPSMT_${safeClub}_${periodoLabel.replace(/ /g, '')}_${format(currentMonth, 'MMyyyy')}.xlsx`);
+    setShowPsmtPreview(false);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -451,6 +589,17 @@ export default function Attendance() {
             >
               <FileSpreadsheet className="h-4 w-4 mr-2" />
               Generar Nómina
+            </button>
+          )}
+
+          {(!isReadOnly || user?.role === 'Recursos Humanos') && viewHalf !== 'full' && (
+            <button
+              onClick={openPsmtPreview}
+              disabled={!selectedClubId || loading}
+              className="inline-flex items-center px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 shadow-sm transition-colors"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Planilla PSMT
             </button>
           )}
 
@@ -803,6 +952,104 @@ export default function Attendance() {
           </div>
         ))}
       </div>
+
+      {/* Modal Preview Planilla PSMT */}
+      {showPsmtPreview && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div className="fixed inset-0 bg-slate-900/60" onClick={() => setShowPsmtPreview(false)} />
+            <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Vista Previa — Planilla PSMT</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Revisá los números antes de descargar. {psmtPreviewRows.length} empleadas · {getPeriodoLabel()}
+                  </p>
+                </div>
+                <button onClick={() => setShowPsmtPreview(false)} className="text-slate-400 hover:text-slate-600">
+                  <CloseIcon className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="overflow-auto flex-1 px-6 py-4">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-xs font-bold text-slate-600 uppercase">
+                      <th className="px-3 py-2 text-left border border-slate-200">#</th>
+                      <th className="px-3 py-2 text-left border border-slate-200">Nombre</th>
+                      <th className="px-3 py-2 text-center border border-slate-200">Días</th>
+                      <th className="px-3 py-2 text-center border border-slate-200">Doms</th>
+                      <th className="px-3 py-2 text-center border border-slate-200">Inc</th>
+                      <th className="px-3 py-2 text-right border border-slate-200">Bruto</th>
+                      <th className="px-3 py-2 text-right border border-slate-200">Desc.</th>
+                      <th className="px-3 py-2 text-right border border-slate-200 font-black text-slate-800">Neto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {psmtPreviewRows.map(r => (
+                      <tr key={r.emp.id} className="hover:bg-slate-50 border-b border-slate-100">
+                        <td className="px-3 py-2 text-slate-400 text-xs border border-slate-100">{r.no}</td>
+                        <td className="px-3 py-2 font-medium text-slate-800 border border-slate-100">{r.nombre}</td>
+                        <td className="px-3 py-2 text-center border border-slate-100">
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-bold">{r.dias}</span>
+                        </td>
+                        <td className="px-3 py-2 text-center border border-slate-100">
+                          {r.doms > 0
+                            ? <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-bold">{r.doms}</span>
+                            : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-center border border-slate-100">
+                          {r.incap > 0
+                            ? <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-bold">{r.incap}</span>
+                            : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600 border border-slate-100">${r.bruto.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right text-red-500 text-xs border border-slate-100">-${r.desc.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-900 border border-slate-100">${r.neto.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-violet-50 font-bold">
+                      <td colSpan={5} className="px-3 py-2 text-right text-slate-700 text-xs border border-slate-200">TOTALES</td>
+                      <td className="px-3 py-2 text-right text-slate-800 border border-slate-200">
+                        ${psmtPreviewRows.reduce((s, r) => s + r.bruto, 0).toFixed(2)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-red-500 text-xs border border-slate-200">
+                        -${psmtPreviewRows.reduce((s, r) => s + r.desc, 0).toFixed(2)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-violet-700 border border-slate-200">
+                        ${psmtPreviewRows.reduce((s, r) => s + r.neto, 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+
+                <p className="mt-3 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  ⚠ Revisá que los números cuadren con tu control manual antes de enviar a PriceSmart.
+                  Bonificación, préstamo y otros descuentos quedan vacíos para completar si aplica.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200">
+                <button
+                  onClick={() => setShowPsmtPreview(false)}
+                  className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={downloadPsmt}
+                  className="inline-flex items-center px-5 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 transition-colors"
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Confirmar y Descargar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

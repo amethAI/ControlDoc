@@ -20,7 +20,9 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
     contract_start: new Date().toISOString().split('T')[0],
     contract_end: '',
     birth_date: '',
-    club_id: clubId || ''
+    club_id: clubId || '',
+    banco: '',
+    cuenta_bancaria: ''
   });
   const [clubs, setClubs] = useState<{id: string, name: string}[]>([]);
   const [error, setError] = useState('');
@@ -78,7 +80,9 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
           contract_start: new Date().toISOString().split('T')[0],
           contract_end: '',
           birth_date: '',
-          club_id: clubId || ''
+          club_id: clubId || '',
+          banco: '',
+          cuenta_bancaria: ''
         });
       } else {
         const data = await res.json();
@@ -241,6 +245,32 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
                     />
                   </div>
                 )}
+              </div>
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Datos Bancarios (para planilla PSMT)</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Banco</label>
+                    <input
+                      type="text"
+                      value={formData.banco}
+                      onChange={e => setFormData({...formData, banco: e.target.value})}
+                      placeholder="Ej: BAC"
+                      className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">No. de Cuenta</label>
+                    <input
+                      type="text"
+                      value={formData.cuenta_bancaria}
+                      onChange={e => setFormData({...formData, cuenta_bancaria: e.target.value})}
+                      placeholder="Número de cuenta"
+                      className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">

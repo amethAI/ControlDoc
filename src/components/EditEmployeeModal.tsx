@@ -12,6 +12,8 @@ interface Employee {
   contract_start: string;
   contract_end: string | null;
   birth_date: string | null;
+  banco?: string | null;
+  cuenta_bancaria?: string | null;
 }
 
 interface Props {
@@ -38,6 +40,8 @@ export default function EditEmployeeModal({ isOpen, onClose, onSuccess, employee
     contract_start: '',
     contract_end: '',
     birth_date: '',
+    banco: '',
+    cuenta_bancaria: '',
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -52,6 +56,8 @@ export default function EditEmployeeModal({ isOpen, onClose, onSuccess, employee
         contract_start: employee.contract_start || '',
         contract_end: employee.contract_end || '',
         birth_date: employee.birth_date || '',
+        banco: employee.banco || '',
+        cuenta_bancaria: employee.cuenta_bancaria || '',
       });
       setErrors({});
     }
@@ -65,11 +71,13 @@ export default function EditEmployeeModal({ isOpen, onClose, onSuccess, employee
     setErrors({});
 
     try {
-      const body: Record<string, string> = {
+      const body: Record<string, string | null> = {
         full_name: form.full_name.trim(),
         cedula: form.cedula.trim(),
         position: form.position.trim(),
         contract_type: form.contract_type,
+        banco: form.banco.trim() || null,
+        cuenta_bancaria: form.cuenta_bancaria.trim() || null,
       };
       if (form.contract_start) body.contract_start = form.contract_start;
       if (form.contract_end) body.contract_end = form.contract_end;
@@ -202,6 +210,32 @@ export default function EditEmployeeModal({ isOpen, onClose, onSuccess, employee
                   onChange={e => setForm(f => ({ ...f, birth_date: e.target.value }))}
                   className="block w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
                 />
+              </div>
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Datos Bancarios (Planilla PSMT)</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Banco</label>
+                    <input
+                      type="text"
+                      value={form.banco}
+                      onChange={e => setForm(f => ({ ...f, banco: e.target.value }))}
+                      placeholder="Ej: BAC"
+                      className="block w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">No. de Cuenta</label>
+                    <input
+                      type="text"
+                      value={form.cuenta_bancaria}
+                      onChange={e => setForm(f => ({ ...f, cuenta_bancaria: e.target.value }))}
+                      placeholder="Número de cuenta"
+                      className="block w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-2">

@@ -14,14 +14,16 @@ import { z } from 'zod';
 const dateOrEmpty = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').or(z.literal('').transform(() => undefined)).optional();
 
 const createEmployeeSchema = z.object({
-  full_name:      z.string().min(2, 'Nombre requerido').max(120),
-  cedula:         z.string().min(3, 'Cédula requerida').max(20),
-  position:       z.string().max(100).optional(),
-  contract_type:  z.string().max(50).optional(),
-  contract_start: dateOrEmpty,
-  contract_end:   dateOrEmpty,
-  birth_date:     dateOrEmpty,
-  club_id:        z.string().min(1, 'Club requerido'),
+  full_name:        z.string().min(2, 'Nombre requerido').max(120),
+  cedula:           z.string().min(3, 'Cédula requerida').max(20),
+  position:         z.string().max(100).optional(),
+  contract_type:    z.string().max(50).optional(),
+  contract_start:   dateOrEmpty,
+  contract_end:     dateOrEmpty,
+  birth_date:       dateOrEmpty,
+  club_id:          z.string().min(1, 'Club requerido'),
+  banco:            z.string().max(50).optional().nullable(),
+  cuenta_bancaria:  z.string().max(50).optional().nullable(),
 });
 
 const createUserSchema = z.object({
@@ -588,7 +590,7 @@ router.post('/employees', canModifyData, async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
   }
-  const { full_name, cedula, position, contract_type, contract_start, contract_end, birth_date, club_id } = parsed.data;
+  const { full_name, cedula, position, contract_type, contract_start, contract_end, birth_date, club_id, banco, cuenta_bancaria } = parsed.data;
 
   // Restriction: Supervisor Interno can only create for their club
   if (user.role === 'Supervisor Interno' && club_id !== user.club_id) {
@@ -601,9 +603,11 @@ router.post('/employees', canModifyData, async (req, res) => {
       .from('employees')
       .insert([{
         id, full_name, cedula, position, contract_type,
-        contract_start: contract_start || null,
-        contract_end:   contract_end   || null,
-        birth_date:     birth_date     || null,
+        contract_start:   contract_start   || null,
+        contract_end:     contract_end     || null,
+        birth_date:       birth_date       || null,
+        banco:            banco            || null,
+        cuenta_bancaria:  cuenta_bancaria  || null,
         club_id, status: 'activo'
       }])
       .select()
@@ -701,14 +705,16 @@ router.patch('/employees/:id', canModifyData, async (req, res) => {
   const { id } = req.params;
 
   const updateSchema = z.object({
-    full_name:      z.string().min(2, 'Nombre requerido').max(120).optional(),
-    cedula:         z.string().min(3, 'Cédula requerida').max(20).optional(),
-    position:       z.string().max(100).optional(),
-    contract_type:  z.string().max(50).optional(),
-    contract_start: dateOrEmpty,
-    contract_end:   dateOrEmpty,
-    birth_date:     dateOrEmpty,
-    club_id:        z.string().min(1).optional(),
+    full_name:        z.string().min(2, 'Nombre requerido').max(120).optional(),
+    cedula:           z.string().min(3, 'Cédula requerida').max(20).optional(),
+    position:         z.string().max(100).optional(),
+    contract_type:    z.string().max(50).optional(),
+    contract_start:   dateOrEmpty,
+    contract_end:     dateOrEmpty,
+    birth_date:       dateOrEmpty,
+    club_id:          z.string().min(1).optional(),
+    banco:            z.string().max(50).optional().nullable(),
+    cuenta_bancaria:  z.string().max(50).optional().nullable(),
   });
 
   const parsed = updateSchema.safeParse(req.body);

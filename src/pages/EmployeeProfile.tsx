@@ -26,6 +26,8 @@ interface Employee {
   club_id: string;
   termination_reason?: string;
   termination_date?: string;
+  banco?: string | null;
+  cuenta_bancaria?: string | null;
 }
 
 interface DocumentType {
