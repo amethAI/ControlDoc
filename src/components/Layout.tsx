@@ -46,9 +46,6 @@ export default function Layout() {
       { name: 'Cumpleaños', href: '/cumpleanos', icon: Cake }
     ] : []),
     ...(user?.role !== 'Supervisor Cliente' && user?.role !== 'Coordinadora' ? [{ name: 'Asistencia', href: '/asistencia', icon: CalendarCheck }] : []),
-    ...((isAdmin || user?.role === 'Supervisor Interno') ? [
-      { name: 'Rendimiento', href: '/rendimiento', icon: TrendingUp }
-    ] : []),
     ...((isAdmin || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente' || isRRHH) ? [
       { name: 'Clubes', href: '/clubes', icon: Building2 }
     ] : []),
