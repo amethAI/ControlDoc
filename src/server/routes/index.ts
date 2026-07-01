@@ -1649,6 +1649,16 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
     const ws = wb.getWorksheet('PRICESMART ');
     if (!ws) throw new Error('Sheet "PRICESMART " no encontrada en plantilla');
 
+    const MONTHS_ES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    const monthNameEs = MONTHS_ES[m];
+    const periodoShort = half === '1' ? '1RA Q' : '2DA Q';
+    ws.getRow(3).getCell(8).value = monthNameEs;
+    ws.getRow(3).commit();
+    ws.getRow(4).getCell(7).value = `PERIODO: ${periodoShort} ${monthNameEs} ${y}`;
+    ws.getRow(4).getCell(8).value = periodoShort;
+    ws.getRow(4).commit();
+    (ws as any)._conditionalFormattings = [];
+
     const DATA_START_ROW = 9;
     const COL_N = 14; // column N = 14 (1-indexed)
     const MAX_DAY_COLS = 15;
