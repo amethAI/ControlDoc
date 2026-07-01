@@ -1696,6 +1696,11 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
         const code = toCode(attMap.get(`${emp.id}:${dateStr}`), day);
         row.getCell(COL_N + d).value = code || null;
       }
+
+      // Clear template's hardcoded deduction inputs (AX=50, AY=51, AZ=52)
+      row.getCell(50).value = null;
+      row.getCell(51).value = null;
+      row.getCell(52).value = null;
       row.commit();
     }
 
@@ -1703,7 +1708,7 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
     const maxTemplateRow = half === '1' ? 84 : 92;
     for (let rowIdx = DATA_START_ROW + empList.length; rowIdx <= maxTemplateRow; rowIdx++) {
       const row = ws.getRow(rowIdx);
-      for (let c = 1; c <= COL_N + MAX_DAY_COLS - 1; c++) {
+      for (let c = 1; c <= 52; c++) { // up to AZ (col 52) to catch deduction input cols
         const cell = row.getCell(c);
         if (!(cell as any).formula) {
           cell.value = null;
