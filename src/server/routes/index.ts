@@ -1663,6 +1663,14 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
     const COL_N = 14; // column N = 14 (1-indexed)
     const MAX_DAY_COLS = 15;
 
+    // Extract formulas from row 9 to extend to all employee rows
+    const rowFormulas = new Map<number, string>();
+    ws.getRow(DATA_START_ROW).eachCell({ includeEmpty: false }, (cell, col) => {
+      if ((cell as any).formula) rowFormulas.set(col, (cell as any).formula as string);
+    });
+    const adjustFormula = (f: string, toRow: number): string =>
+      f.replace(/([A-Z]+)(\d+)/g, (_, c, n) => parseInt(n) === DATA_START_ROW ? c + toRow : c + n);
+
     // Fill employee rows
     for (let i = 0; i < empList.length; i++) {
       const emp = empList[i] as any;
@@ -1703,6 +1711,11 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
       row.getCell(50).value = null;
       row.getCell(51).value = null;
       row.getCell(52).value = null;
+
+      // Write row-adjusted formulas to every employee row (fixes rows beyond template sample range)
+      for (const [col, formula] of rowFormulas.entries()) {
+        row.getCell(col).value = { formula: adjustFormula(formula, rowIdx) };
+      }
       row.commit();
     }
 
@@ -1839,6 +1852,14 @@ router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
     const COL_N = 14;
     const MAX_DAY_COLS = 15;
 
+    // Extract formulas from template row 9 to replicate across all employee rows
+    const rowFormulas = new Map<number, string>();
+    ws.getRow(DATA_START_ROW).eachCell({ includeEmpty: false }, (cell, col) => {
+      if ((cell as any).formula) rowFormulas.set(col, (cell as any).formula as string);
+    });
+    const adjustFormula = (f: string, toRow: number): string =>
+      f.replace(/([A-Z]+)(\d+)/g, (_, c, n) => parseInt(n) === DATA_START_ROW ? c + toRow : c + n);
+
     let rowOffset = 0;
     const hoja2Rows: Array<{ emp: any; neto: number }> = [];
 
@@ -1893,6 +1914,11 @@ router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
         row.getCell(50).value = null;
         row.getCell(51).value = null;
         row.getCell(52).value = null;
+
+        // Write row-adjusted formulas to every employee row (fixes rows beyond template sample range)
+        for (const [col, formula] of rowFormulas.entries()) {
+          row.getCell(col).value = { formula: adjustFormula(formula, rowIdx) };
+        }
         row.commit();
 
         let dias = 0, doms = 0, incap = 0, fer = 0;
