@@ -1,5 +1,5 @@
 import { apiFetch } from '../lib/api';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import {
@@ -85,6 +85,10 @@ export default function Attendance() {
     bruto: number; desc: number; neto: number;
     dayCodes: string[]; emp: Employee;
   }[]>([]);
+  const [popoverCell, setPopoverCell] = useState<{
+    employeeId: string; dateStr: string; x: number; y: number;
+  } | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
     return (
@@ -166,24 +170,40 @@ export default function Attendance() {
     fetchData();
   }, [fetchData]);
 
-  const handleStatusChange = (employeeId: string, date: Date) => {
+  useEffect(() => {
+    if (!popoverCell) return;
+    const handler = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setPopoverCell(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [popoverCell]);
+
+  const openStatusPopover = (employeeId: string, date: Date, e: React.MouseEvent) => {
     if (isReadOnly) return;
-    // Los empleados dados de baja no son editables
-    if (inactiveEmployees.some(e => e.id === employeeId)) return;
-
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const existing = attendance.find(a => a.employee_id === employeeId && a.date === dateStr);
-
-    let nextStatus = 'presente';
-    if (existing) {
-      const currentIndex = STATUS_ORDER.indexOf(existing.status);
-      nextStatus = STATUS_ORDER[(currentIndex + 1) % STATUS_ORDER.length];
-    }
-
-    setAttendance(prev => {
-      const filtered = prev.filter(a => !(a.employee_id === employeeId && a.date === dateStr));
-      return [...filtered, { employee_id: employeeId, date: dateStr, status: nextStatus }];
+    if (inactiveEmployees.some(emp => emp.id === employeeId)) return;
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setPopoverCell({
+      employeeId,
+      dateStr: format(date, 'yyyy-MM-dd'),
+      x: rect.left,
+      y: rect.bottom + 4,
     });
+  };
+
+  const setStatusDirect = (status: string | null) => {
+    if (!popoverCell) return;
+    setAttendance(prev => {
+      const filtered = prev.filter(
+        a => !(a.employee_id === popoverCell.employeeId && a.date === popoverCell.dateStr)
+      );
+      if (!status) return filtered;
+      return [...filtered, { employee_id: popoverCell.employeeId, date: popoverCell.dateStr, status }];
+    });
+    setPopoverCell(null);
   };
 
   const handleSave = async () => {
@@ -833,7 +853,7 @@ export default function Attendance() {
                           return (
                             <td
                               key={day.toString()}
-                              onClick={() => handleStatusChange(emp.id, day)}
+                              onClick={(e) => openStatusPopover(emp.id, day, e)}
                               className={clsx(
                                 "p-0 border-r border-slate-200 transition-all",
                                 isBaja ? "cursor-default" : "cursor-pointer hover:brightness-95",
@@ -952,6 +972,45 @@ export default function Attendance() {
           </div>
         ))}
       </div>
+
+      {/* Popover selección de estado */}
+      {popoverCell && (
+        <div
+          ref={popoverRef}
+          className="fixed z-[9999] bg-white rounded-xl shadow-2xl border border-slate-200 p-2 w-52"
+          style={{ left: popoverCell.x, top: popoverCell.y }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div className="grid grid-cols-2 gap-1">
+            {STATUS_ORDER.map(key => {
+              const cfg = STATUS_MAP[key];
+              const isActive = attendance.find(
+                a => a.employee_id === popoverCell.employeeId && a.date === popoverCell.dateStr
+              )?.status === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setStatusDirect(key)}
+                  className={clsx(
+                    "flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+                    cfg.color,
+                    isActive ? "ring-2 ring-offset-1 ring-blue-500" : "hover:brightness-95"
+                  )}
+                >
+                  <span className="font-bold text-[11px] w-5 text-center shrink-0">{cfg.short}</span>
+                  <span className="truncate">{cfg.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => setStatusDirect(null)}
+            className="mt-1 w-full text-xs text-slate-400 hover:text-slate-600 py-1.5 rounded-lg hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200"
+          >
+            Borrar estado
+          </button>
+        </div>
+      )}
 
       {/* Modal Preview Planilla PSMT */}
       {showPsmtPreview && (
