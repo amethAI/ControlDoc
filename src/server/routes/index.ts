@@ -3,7 +3,6 @@ import { supabase } from '../db.ts';
 import { sendExpirationAlerts } from '../services/alertService.ts';
 import path from 'path';
 import fs from 'fs';
-import ExcelJS from 'exceljs';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -1641,6 +1640,7 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
     const SALARIO_DIA     = 25.28;
     const SALARIO_DOM     = 33.18;
 
+    const { default: ExcelJS } = await import('exceljs');
     const templateFile = half === '1' ? 'psmt-1ra-q.xlsx' : 'psmt-2da-q.xlsx';
     const templatePath = path.join(process.cwd(), 'src', 'server', 'templates', templateFile);
     const wb = new ExcelJS.Workbook();
