@@ -1641,7 +1641,8 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
     const SALARIO_DIA     = 25.28;
     const SALARIO_DOM     = 33.18;
 
-    const templatePath = path.join(process.cwd(), 'src', 'server', 'templates', `psmt-${half}ra-q.xlsx`);
+    const templateFile = half === '1' ? 'psmt-1ra-q.xlsx' : 'psmt-2da-q.xlsx';
+    const templatePath = path.join(process.cwd(), 'src', 'server', 'templates', templateFile);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(templatePath);
 
