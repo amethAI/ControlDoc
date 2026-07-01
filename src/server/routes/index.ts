@@ -1657,7 +1657,7 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
     ws.getRow(4).getCell(7).value = `PERIODO: ${periodoShort} ${monthNameEs} ${y}`;
     ws.getRow(4).getCell(8).value = periodoShort;
     ws.getRow(4).commit();
-    (ws as any)._conditionalFormattings = [];
+    try { ws.conditionalFormattings.splice(0, ws.conditionalFormattings.length); } catch {}
 
     const DATA_START_ROW = 9;
     const COL_N = 14; // column N = 14 (1-indexed)
@@ -1669,6 +1669,12 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
       const rowIdx = DATA_START_ROW + i;
       const row = ws.getRow(rowIdx);
       const kronos = emp.cedula ? 'PA' + emp.cedula.replace(/-/g, '') : '';
+
+      // Clear static fills from template's sample data rows
+      for (let c = 1; c <= COL_N + MAX_DAY_COLS - 1; c++) {
+        const cell = row.getCell(c);
+        if (!(cell as any).formula) cell.fill = { type: 'pattern', pattern: 'none' };
+      }
 
       row.getCell(1).value  = i + 1;
       row.getCell(2).value  = 'PANAMÁ';
@@ -1699,7 +1705,10 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
       const row = ws.getRow(rowIdx);
       for (let c = 1; c <= COL_N + MAX_DAY_COLS - 1; c++) {
         const cell = row.getCell(c);
-        if (!(cell as any).formula) cell.value = null;
+        if (!(cell as any).formula) {
+          cell.value = null;
+          cell.fill = { type: 'pattern', pattern: 'none' };
+        }
       }
       row.commit();
     }
