@@ -1672,8 +1672,10 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
 
       // Clear static fills from template's sample data rows
       for (let c = 1; c <= COL_N + MAX_DAY_COLS - 1; c++) {
-        const cell = row.getCell(c);
-        if (!(cell as any).formula) cell.fill = { type: 'pattern', pattern: 'none' };
+        try {
+          const cell = row.getCell(c);
+          if (!(cell as any).formula) cell.fill = { type: 'pattern', pattern: 'none' };
+        } catch {}
       }
 
       row.getCell(1).value  = i + 1;
@@ -1709,11 +1711,13 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
     for (let rowIdx = DATA_START_ROW + empList.length; rowIdx <= maxTemplateRow; rowIdx++) {
       const row = ws.getRow(rowIdx);
       for (let c = 1; c <= 52; c++) { // up to AZ (col 52) to catch deduction input cols
-        const cell = row.getCell(c);
-        if (!(cell as any).formula) {
-          cell.value = null;
-          cell.fill = { type: 'pattern', pattern: 'none' };
-        }
+        try {
+          const cell = row.getCell(c);
+          if (!(cell as any).formula) {
+            cell.value = null;
+            cell.fill = { type: 'pattern', pattern: 'none' };
+          }
+        } catch {}
       }
       row.commit();
     }
