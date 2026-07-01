@@ -1770,6 +1770,185 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
   }
 });
 
+// Generate PSMT planilla for ALL clubs: David → Costa Verde → Metropark (admin only)
+router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
+  const { year, month, half } = req.query as Record<string, string>;
+  if (!year || !month || !['1', '2'].includes(half)) {
+    return res.status(400).json({ error: 'Parámetros requeridos: year, month, half (1 o 2)' });
+  }
+
+  try {
+    const y = parseInt(year);
+    const m = parseInt(month) - 1;
+
+    const startDate = half === '1' ? new Date(y, m, 1) : new Date(y, m, 16);
+    const endDate   = half === '1' ? new Date(y, m, 15) : new Date(y, m + 1, 0);
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+
+    const { data: allClubs, error: clubsErr } = await supabase
+      .from('clubs').select('id, name').neq('id', 'global').neq('id', 'hr');
+    if (clubsErr) throw clubsErr;
+
+    const CLUB_ORDER = ['david', 'costa verde', 'metropark'];
+    const clubs = (allClubs || []).sort((a: any, b: any) => {
+      const ai = CLUB_ORDER.findIndex(n => a.name.toLowerCase().includes(n));
+      const bi = CLUB_ORDER.findIndex(n => b.name.toLowerCase().includes(n));
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+
+    const periodDays: Date[] = [];
+    const cur = new Date(startDate);
+    while (cur <= endDate) { periodDays.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
+
+    const SALARIO_MENSUAL = 657.28;
+    const SALARIO_DIA     = 25.28;
+    const SALARIO_DOM     = 33.18;
+
+    const toCode = (status: string | undefined, day: Date): string => {
+      if (!status) return '';
+      const isSunday = day.getDay() === 0;
+      switch (status) {
+        case 'presente': case 'capacitacion': case 'apoyo': return isSunday ? 'D' : '1';
+        case 'incapacidad': return 'I';
+        case 'permiso':     return 'P';
+        case 'feriado':     return 'F';
+        default:            return '';
+      }
+    };
+
+    const { default: ExcelJS } = await import('exceljs');
+    const templateFile = half === '1' ? 'psmt-1ra-q.xlsx' : 'psmt-2da-q.xlsx';
+    const templatePath = path.join(process.cwd(), 'src', 'server', 'templates', templateFile);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(templatePath);
+
+    const ws = wb.getWorksheet('PRICESMART ');
+    if (!ws) throw new Error('Sheet "PRICESMART " no encontrada en plantilla');
+
+    const MONTHS_ES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    const monthNameEs = MONTHS_ES[m];
+    const periodoShort = half === '1' ? '1RA Q' : '2DA Q';
+    ws.getRow(3).getCell(8).value = monthNameEs;
+    ws.getRow(3).commit();
+    ws.getRow(4).getCell(7).value = `PERIODO: ${periodoShort} ${monthNameEs} ${y}`;
+    ws.getRow(4).getCell(8).value = periodoShort;
+    ws.getRow(4).commit();
+    try { ws.conditionalFormattings.splice(0, ws.conditionalFormattings.length); } catch {}
+
+    const DATA_START_ROW = 9;
+    const COL_N = 14;
+    const MAX_DAY_COLS = 15;
+
+    let rowOffset = 0;
+    const hoja2Rows: Array<{ emp: any; neto: number }> = [];
+
+    for (const club of clubs) {
+      const { data: employees, error: empErr } = await supabase
+        .from('employees')
+        .select('id, full_name, cedula, position, contract_start, banco, cuenta_bancaria')
+        .eq('club_id', (club as any).id).eq('status', 'activo').order('full_name');
+      if (empErr) throw empErr;
+
+      const empList = employees || [];
+      const empIds = empList.map((e: any) => e.id);
+
+      const { data: attendance, error: attErr } = empIds.length
+        ? await supabase.from('attendance').select('employee_id, date, status')
+            .gte('date', fmt(startDate)).lte('date', fmt(endDate)).in('employee_id', empIds)
+        : { data: [], error: null };
+      if (attErr) throw attErr;
+
+      const attMap = new Map<string, string>();
+      for (const a of attendance || []) attMap.set(`${a.employee_id}:${a.date}`, a.status);
+
+      for (let i = 0; i < empList.length; i++) {
+        const emp = empList[i] as any;
+        const rowIdx = DATA_START_ROW + rowOffset + i;
+        const row = ws.getRow(rowIdx);
+        const kronos = emp.cedula ? 'PA' + emp.cedula.replace(/-/g, '') : '';
+
+        for (let c = 1; c <= COL_N + MAX_DAY_COLS - 1; c++) {
+          try { const cell = row.getCell(c); if (!(cell as any).formula) cell.fill = { type: 'pattern', pattern: 'none' }; } catch {}
+        }
+
+        row.getCell(1).value  = rowOffset + i + 1;
+        row.getCell(2).value  = 'PANAMÁ';
+        row.getCell(3).value  = emp.banco || '';
+        row.getCell(4).value  = emp.cuenta_bancaria || '';
+        row.getCell(5).value  = emp.cedula || '';
+        row.getCell(6).value  = kronos;
+        row.getCell(7).value  = emp.full_name;
+        row.getCell(8).value  = 'PSMT ' + (club as any).name.toUpperCase();
+        row.getCell(9).value  = 'Club ' + (club as any).name;
+        row.getCell(10).value = emp.position || 'DEMOSTRADORA';
+        row.getCell(11).value = emp.contract_start || '';
+        row.getCell(12).value = SALARIO_MENSUAL;
+        row.getCell(13).value = SALARIO_DIA;
+
+        for (let d = 0; d < periodDays.length && d < MAX_DAY_COLS; d++) {
+          const day = periodDays[d];
+          const code = toCode(attMap.get(`${emp.id}:${fmt(day)}`), day);
+          row.getCell(COL_N + d).value = code || null;
+        }
+        row.getCell(50).value = null;
+        row.getCell(51).value = null;
+        row.getCell(52).value = null;
+        row.commit();
+
+        let dias = 0, doms = 0, incap = 0, fer = 0;
+        for (const day of periodDays) {
+          const code = toCode(attMap.get(`${emp.id}:${fmt(day)}`), day);
+          if (code === '1') dias++; else if (code === 'D') doms++;
+          else if (code === 'I') incap++; else if (code === 'F') fer++;
+        }
+        const bruto = parseFloat((dias * SALARIO_DIA + doms * SALARIO_DOM + incap * SALARIO_DIA + fer * SALARIO_DIA).toFixed(2));
+        const neto  = parseFloat((bruto - bruto * 0.11).toFixed(2));
+        hoja2Rows.push({ emp, neto });
+      }
+
+      rowOffset += empList.length;
+    }
+
+    const maxTemplateRow = half === '1' ? 84 : 92;
+    for (let rowIdx = DATA_START_ROW + rowOffset; rowIdx <= maxTemplateRow; rowIdx++) {
+      const row = ws.getRow(rowIdx);
+      for (let c = 1; c <= 52; c++) {
+        try { const cell = row.getCell(c); if (!(cell as any).formula) { cell.value = null; cell.fill = { type: 'pattern', pattern: 'none' }; } } catch {}
+      }
+      row.commit();
+    }
+
+    const ws2 = wb.getWorksheet('Hoja2');
+    if (ws2) {
+      const HOJA2_START = 5;
+      const HOJA2_MAX   = 79;
+      for (let i = 0; i < hoja2Rows.length && i < (HOJA2_MAX - HOJA2_START + 1); i++) {
+        const { emp, neto } = hoja2Rows[i];
+        const row2 = ws2.getRow(HOJA2_START + i);
+        row2.getCell(2).value = emp.banco || '';
+        row2.getCell(3).value = emp.cuenta_bancaria || '';
+        row2.getCell(4).value = emp.full_name;
+        row2.getCell(5).value = neto;
+        row2.commit();
+      }
+      for (let rowIdx = HOJA2_START + hoja2Rows.length; rowIdx <= HOJA2_MAX; rowIdx++) {
+        const row2 = ws2.getRow(rowIdx);
+        for (let c = 2; c <= 5; c++) row2.getCell(c).value = null;
+        row2.commit();
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="planilla-psmt-global.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+
+  } catch (error: any) {
+    console.error('Error generando planilla PSMT global:', error);
+    if (!res.headersSent) res.status(500).json({ error: 'Error al generar la planilla PSMT' });
+  }
+});
+
 // Get expiring documents
 router.get('/documents/expirations', canViewData, async (req, res) => {
   const { club_id: queryClubId, status } = req.query;

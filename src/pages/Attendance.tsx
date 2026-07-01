@@ -90,6 +90,7 @@ export default function Attendance() {
   } | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [downloadingPsmt, setDownloadingPsmt] = useState(false);
+  const [downloadingPsmtGlobal, setDownloadingPsmtGlobal] = useState(false);
 
   if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
     return (
@@ -473,6 +474,35 @@ export default function Attendance() {
     }
   };
 
+  const downloadPsmtGlobal = async () => {
+    if (downloadingPsmtGlobal) return;
+    setDownloadingPsmtGlobal(true);
+    try {
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth() + 1;
+      const periodoLabel = viewHalf === '1' ? '1RA_Q' : '2DA_Q';
+      const res = await apiFetch(
+        `/api/payroll/psmt-planilla-global?year=${year}&month=${month}&half=${viewHalf}`
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error((err as any).error || 'Error al generar la planilla global');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `PlanillaPSMT_GLOBAL_${periodoLabel}_${format(currentMonth, 'MMyyyy')}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Error de conexión al generar la planilla global');
+    } finally {
+      setDownloadingPsmtGlobal(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -565,6 +595,17 @@ export default function Attendance() {
             >
               <FileSpreadsheet className="h-4 w-4 mr-2" />
               Planilla PSMT
+            </button>
+          )}
+
+          {['Administrador', 'Super Administrador'].includes(user?.role || '') && viewHalf !== 'full' && (
+            <button
+              onClick={downloadPsmtGlobal}
+              disabled={downloadingPsmtGlobal || loading}
+              className="inline-flex items-center px-4 py-2 bg-indigo-700 text-white rounded-lg text-sm font-medium hover:bg-indigo-800 disabled:opacity-50 shadow-sm transition-colors"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              {downloadingPsmtGlobal ? 'Generando...' : 'PSMT Global'}
             </button>
           )}
 
