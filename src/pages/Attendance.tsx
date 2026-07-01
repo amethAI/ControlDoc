@@ -89,6 +89,7 @@ export default function Attendance() {
     employeeId: string; dateStr: string; x: number; y: number;
   } | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const [downloadingPsmt, setDownloadingPsmt] = useState(false);
 
   if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
     return (
@@ -437,95 +438,39 @@ export default function Attendance() {
     setShowPsmtPreview(true);
   };
 
-  const downloadPsmt = () => {
-    const clubName = clubs.find(c => c.id === selectedClubId)?.name || selectedClubId;
-    const periodDays = viewHalf === '1' ? firstHalf : secondHalf;
-    const periodoLabel = viewHalf === '1' ? '1RA Q' : '2DA Q';
-    const monthName = format(currentMonth, 'MMMM yyyy', { locale: es }).toUpperCase();
+  const downloadPsmt = async () => {
+    if (downloadingPsmt) return;
+    setDownloadingPsmt(true);
+    try {
+      const clubName = clubs.find(c => c.id === selectedClubId)?.name || selectedClubId;
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth() + 1;
+      const periodoLabel = viewHalf === '1' ? '1RA_Q' : '2DA_Q';
 
-    const headerRow = [
-      'No.', 'País', 'Banco', 'No. De Cuenta', 'Cédula', 'Código Empleado Kronos',
-      'DEMOSTRADORA', 'Cliente/Proyecto', 'Sucursal(Punto de venta)', 'Nombre del Puesto',
-      'Fecha de Alta', 'Salario Mensual', 'Salario por día',
-      ...periodDays.map(d => d.getDate()),
-      'Días Laborados', 'Total de Días Laborados', 'Días vacaciones', 'Total Vacaciones',
-      'Salario Domingo', 'Domingos Laborados', 'Total Domingos',
-      'Incapacidad', 'Total Incapacidad',
-      'Día Trabajado al 150%', 'Total de Feriados al 150%',
-      'Día Trabajado al 50%', 'Total de Feriados al 50%',
-      'Horas Extras', 'Valor Total Horas Extras',
-      'PAGO PENDIENTE CANCELADO', 'PAGO POR RECARGO NO APLICADO',
-      'SALARIO BRUTO', 'S.S. 9.75%', 'S.E. 1.25%', 'I/R',
-      'Bonificacion', 'Prestamo', 'Otros descuentos', 'Total de descuentos',
-      'SALARIO NETO', 'OBSERVACIONES',
-      'S.S. PATRONO 12.25%', 'S.EDUCATIVO PATRONO 1.50%', 'RIESGO PROFESIONAL 0.021%'
-    ];
+      const res = await apiFetch(
+        `/api/payroll/psmt-planilla?clubId=${selectedClubId}&year=${year}&month=${month}&half=${viewHalf}`
+      );
 
-    const dataRows = psmtPreviewRows.map(r => {
-      const { emp, dayCodes, dias, doms, incap } = r;
-      const fer50 = dayCodes.filter(c => c === 'F').length;
-      const kronos = emp.cedula ? 'PA' + emp.cedula.replace(/-/g, '') : '';
-      const totalDiasLab = parseFloat((dias * SALARIO_DIA).toFixed(4));
-      const totalDoms = parseFloat((doms * SALARIO_DOM).toFixed(4));
-      const totalIncap = parseFloat((incap * SALARIO_DIA).toFixed(4));
-      const totalFer50 = parseFloat((fer50 * SALARIO_DIA).toFixed(4));
-      const bruto = parseFloat((totalDiasLab + totalDoms + totalIncap + totalFer50).toFixed(4));
-      const ss = parseFloat((bruto * 0.0975).toFixed(6));
-      const se = parseFloat((bruto * 0.0125).toFixed(6));
-      const totalDesc = parseFloat((ss + se).toFixed(4));
-      const neto = parseFloat((bruto - totalDesc).toFixed(4));
-      const ssPatrono = parseFloat((bruto * 0.1225).toFixed(6));
-      const sePatrono = parseFloat((bruto * 0.015).toFixed(6));
-      const riesgoProf = parseFloat((bruto * 0.00021).toFixed(6));
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error((err as any).error || 'Error al generar la planilla');
+        return;
+      }
 
-      return [
-        r.no, 'PANAMÁ', emp.banco || '', emp.cuenta_bancaria || '',
-        emp.cedula || '', kronos, emp.full_name,
-        'PSMT ' + clubName.toUpperCase(), 'Club ' + clubName,
-        emp.position || 'DEMOSTRADORA',
-        emp.contract_start || '',
-        657.28, SALARIO_DIA,
-        ...dayCodes,
-        dias, totalDiasLab, 0, 0,
-        SALARIO_DOM, doms, totalDoms,
-        incap, totalIncap,
-        0, 0,
-        fer50, totalFer50,
-        0, 0,
-        null, null,
-        bruto, ss, se, null,
-        null, null, null, totalDesc,
-        neto, '',
-        ssPatrono, sePatrono, riesgoProf
-      ];
-    });
-
-    const hoja2Rows = psmtPreviewRows.map(r => ([
-      null, r.emp.banco || 'BAC', r.emp.cuenta_bancaria || '', r.emp.full_name,
-      parseFloat(r.neto.toFixed(2))
-    ]));
-
-    const wb = XLSX.utils.book_new();
-
-    const ws1 = XLSX.utils.aoa_to_sheet([
-      ['', '', '', '', '', '', 'PAIS', 'PANAMÁ'],
-      ['', '', '', '', '', '', 'MES//PRESUPUESTO:', monthName.split(' ')[0]],
-      ['', '', '', '', '', '', `PERIODO: ${periodoLabel} ${monthName}`, periodoLabel],
-      headerRow,
-      ...dataRows
-    ]);
-    XLSX.utils.book_append_sheet(wb, ws1, 'PRICESMART');
-
-    const ws2 = XLSX.utils.aoa_to_sheet([
-      [], [], [], [],
-      [null, 'Banco', 'No. Cuenta', 'Nombre', 'SALARIO NETO'],
-      ...hoja2Rows
-    ]);
-    XLSX.utils.book_append_sheet(wb, ws2, 'Hoja2');
-
-    const safeClub = clubName.replace(/[^a-zA-Z0-9]/g, '_');
-    XLSX.writeFile(wb, `PlanillaPSMT_${safeClub}_${periodoLabel.replace(/ /g, '')}_${format(currentMonth, 'MMyyyy')}.xlsx`);
-    setShowPsmtPreview(false);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safeClub = clubName.replace(/[^a-zA-Z0-9]/g, '_');
+      a.download = `PlanillaPSMT_${safeClub}_${periodoLabel}_${format(currentMonth, 'MMyyyy')}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setShowPsmtPreview(false);
+    } catch {
+      toast.error('Error de conexión al generar la planilla');
+    } finally {
+      setDownloadingPsmt(false);
+    }
   };
 
   return (
@@ -1099,10 +1044,11 @@ export default function Attendance() {
                 </button>
                 <button
                   onClick={downloadPsmt}
-                  className="inline-flex items-center px-5 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 transition-colors"
+                  disabled={downloadingPsmt}
+                  className="inline-flex items-center px-5 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 disabled:opacity-60 transition-colors"
                 >
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Confirmar y Descargar
+                  {downloadingPsmt ? 'Generando...' : 'Confirmar y Descargar'}
                 </button>
               </div>
             </div>
