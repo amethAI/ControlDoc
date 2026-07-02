@@ -18,3 +18,21 @@
     color: #334155 !important;
   }
 }
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Ensure attendance grid table scrolls are visible */
+  .attendance-print-wrapper {
+    overflow: visible !important;
+  }
+}

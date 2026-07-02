@@ -12,7 +12,8 @@ import {
   Clock,
   AlertCircle,
   Coffee,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Printer
 } from 'lucide-react';
 import {
   format,
@@ -505,7 +506,15 @@ export default function Attendance() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      {/* Print-only header */}
+      <div className="hidden print:block mb-4">
+        <h2 className="text-xl font-bold text-slate-900">Control de Asistencia — {getPeriodTitle()}</h2>
+        {clubs.find(c => c.id === selectedClubId) && (
+          <p className="text-sm text-slate-600">{clubs.find(c => c.id === selectedClubId)?.name}</p>
+        )}
+      </div>
+
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 print:hidden">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Control de Asistencia</h2>
           <p className="text-slate-500 text-sm">Programación y cumplimiento mensual por club.</p>
@@ -609,6 +618,14 @@ export default function Attendance() {
             </button>
           )}
 
+          <button
+            onClick={() => window.print()}
+            className="inline-flex items-center px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 shadow-sm transition-colors print:hidden"
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Imprimir
+          </button>
+
           {!isReadOnly && (
             <button
               onClick={handleSave}
@@ -684,8 +701,8 @@ export default function Attendance() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden print:border-0 print:shadow-none">
+        <div className="overflow-x-auto attendance-print-wrapper">
           <table className="w-full border-collapse text-[10px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">

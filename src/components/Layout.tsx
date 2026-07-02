@@ -72,7 +72,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Sidebar */}
-      <div className="w-64 bg-indigo-950 text-white flex flex-col">
+      <div className="w-64 bg-indigo-950 text-white flex flex-col print:hidden">
         <div className="h-16 flex items-center px-6 border-b border-slate-800">
           <Shield className="h-8 w-8 text-blue-500 mr-3" />
           <span className="text-xl font-bold tracking-tight">ControlDoc</span>
@@ -153,8 +153,8 @@ export default function Layout() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
+      <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 print:hidden">
           <h1 className="text-xl font-semibold text-slate-800">
             {navigation.find(n => location.pathname === n.href || (n.href !== '/' && location.pathname.startsWith(n.href)))?.name || 'ControlDoc'}
           </h1>
@@ -196,7 +196,7 @@ export default function Layout() {
           </div>
         </header>
         
-        <main className="flex-1 overflow-auto p-8">
+        <main className="flex-1 overflow-auto p-8 print:p-2 print:overflow-visible">
           <Outlet />
         </main>
       </div>
