@@ -8,6 +8,7 @@ interface Props {
 
 interface State {
   hasError: boolean;
+  errorMessage?: string;
 }
 
 /**
@@ -18,8 +19,8 @@ interface State {
 class PageErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
 
-  static getDerivedStateFromError(): State {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, errorMessage: error?.message || String(error) };
   }
 
   componentDidCatch(error: Error) {
@@ -35,9 +36,14 @@ class PageErrorBoundary extends Component<Props, State> {
             <h2 className="text-lg font-semibold text-slate-800 mb-2">
               Error al cargar {this.props.pageName || 'esta página'}
             </h2>
-            <p className="text-sm text-slate-500 mb-6">
+            <p className="text-sm text-slate-500 mb-3">
               Ocurrió un error inesperado. Podés intentar recargar solo esta sección.
             </p>
+            {this.state.errorMessage && (
+              <p className="text-xs font-mono bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 mb-4 text-left break-all">
+                {this.state.errorMessage}
+              </p>
+            )}
             <button
               onClick={() => this.setState({ hasError: false })}
               className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"

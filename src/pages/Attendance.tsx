@@ -508,7 +508,7 @@ export default function Attendance() {
     <div className="space-y-6">
       {/* Print-only header */}
       <div className="hidden print:block mb-4">
-        <h2 className="text-xl font-bold text-slate-900">Control de Asistencia — {getPeriodTitle()}</h2>
+        <h2 className="text-xl font-bold text-slate-900">Control de Asistencia — {getPeriodoLabel()}</h2>
         {clubs.find(c => c.id === selectedClubId) && (
           <p className="text-sm text-slate-600">{clubs.find(c => c.id === selectedClubId)?.name}</p>
         )}

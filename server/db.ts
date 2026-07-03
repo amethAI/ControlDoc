@@ -65,9 +65,9 @@ const createMockClient = (): SupabaseClient => {
 
 export const getSupabase = (): SupabaseClient => {
   if (!supabaseInstance) {
-    const supabaseUrl = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
-    // Prioritize service_role key to bypass RLS, fallback to anon_key
-    const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+    const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+    // SUPABASE_SERVICE_ROLE_KEY is server-only — never use VITE_ prefix for this key
+    const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
 
     console.log('--- Supabase Config Check ---');
     console.log('URL present:', !!supabaseUrl);
@@ -75,7 +75,7 @@ export const getSupabase = (): SupabaseClient => {
     if (supabaseUrl) console.log('URL starts with:', supabaseUrl.substring(0, 15));
     
     if (!supabaseUrl || !supabaseKey) {
-      console.warn('⚠️ Supabase URL or Key is missing. Using mock client.');
+      console.warn('⚠️ Supabase URL o Key faltante. Verificá las variables SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en el servidor.');
       supabaseInstance = createMockClient();
     } else {
       console.log('✅ Initializing real Supabase client');

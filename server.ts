@@ -1,8 +1,8 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import apiRouter from './src/server/routes/index.ts';
+import apiRouter from './server/routes/index.ts';
 import cron from 'node-cron';
-import { sendExpirationAlerts, sendMonthlyReport } from './src/server/services/alertService.ts';
+import { sendExpirationAlerts, sendMonthlyReport } from './server/services/alertService.ts';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -10,6 +10,8 @@ import pptxgen from 'pptxgenjs';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
+import jwt from 'jsonwebtoken';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +22,7 @@ async function startServer() {
 
   console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode...`);
 
+  app.use(cookieParser());
   app.use(express.json({ limit: '10mb' }));
 
   const allowedOrigins = process.env.ALLOWED_ORIGINS
@@ -41,10 +44,10 @@ async function startServer() {
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         imgSrc: ["'self'", 'data:', 'https:', 'https://images.unsplash.com', 'https://picsum.photos'],
         connectSrc: ["'self'", 'https://*.supabase.co', 'https://generativelanguage.googleapis.com'],
-        fontSrc: ["'self'"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
         objectSrc: ["'none'"],
         frameSrc: ["'none'"],
       },
@@ -84,7 +87,6 @@ async function startServer() {
 
   // Security + cache headers
   app.use((req, res, next) => {
-    res.set('X-App-Version', '1.2.4');
     // Default: no-cache for all API responses
     if (req.path.startsWith('/api')) {
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -101,6 +103,10 @@ async function startServer() {
 
   // Generate and download PowerPoint presentation
   app.get('/api/download-presentation', async (req, res) => {
+    const token = (req as any).cookies?.token || (req.headers['authorization'] as string)?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'No autenticado' });
+    try { jwt.verify(token, process.env.JWT_SECRET || ''); } catch { return res.status(403).json({ error: 'Token inválido' }); }
+
     try {
       // @ts-ignore
       let pres = new pptxgen();

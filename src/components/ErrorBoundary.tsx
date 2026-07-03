@@ -52,13 +52,6 @@ class ErrorBoundary extends Component<Props, State> {
 
             <button
               onClick={() => {
-                try {
-                  // Only clear auth tokens, not all stored state
-                  sessionStorage.removeItem('token');
-                  sessionStorage.removeItem('user');
-                } catch (e) {
-                  console.warn('sessionStorage not available', e);
-                }
                 window.location.href = window.location.origin + '?force=' + Date.now();
               }}
               className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors w-full"

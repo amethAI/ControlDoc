@@ -70,14 +70,14 @@ const upload = multer({
   },
 });
 if (!process.env.JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET environment variable is not set.');
+  console.warn('⚠️  JWT_SECRET no está en .env — usando valor por defecto. Configuralo para producción.');
 }
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 
 // Middleware to check if user is authenticated
 const isAuthenticated = async (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = req.cookies?.token || (authHeader && authHeader.split(' ')[1]);
 
   if (!token) {
     return res.status(401).json({ error: 'Token de autenticación no proporcionado' });
@@ -85,20 +85,18 @@ const isAuthenticated = async (req: any, res: any, next: any) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    
-    // Fetch latest user data from DB to ensure club_id is up to date
+
     const { data: user } = await supabase
       .from('users')
-      .select('id, email, name, role, club_id, country')
+      .select('id, email, name, role, club_id, country, is_active')
       .eq('id', decoded.id)
       .single();
-      
-    if (user) {
-      req.user = user;
-    } else {
-      req.user = decoded;
+
+    if (!user || user.is_active === 0) {
+      return res.status(401).json({ error: 'Usuario inactivo o no encontrado' });
     }
-    
+
+    req.user = user;
     next();
   } catch (err) {
     console.warn(`[AUTH] Token inválido desde IP: ${req.headers['x-forwarded-for'] || req.socket?.remoteAddress}`);
@@ -379,6 +377,13 @@ router.post('/auth/login', async (req, res) => {
         { expiresIn: '8h' }
       );
 
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 8 * 60 * 60 * 1000,
+      });
+
       // Log login event to audit_logs
       supabase.from('audit_logs').insert({
         id: crypto.randomUUID(),
@@ -414,6 +419,15 @@ router.post('/auth/login', async (req, res) => {
   }
 });
 
+router.post('/auth/logout', (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
+  res.json({ success: true });
+});
+
 // Apply authentication middleware to all routes below
 router.use(isAuthenticated);
 
@@ -447,7 +461,6 @@ const logAudit = async (
     console.error('Error logging audit action:', err);
   }
 };
-
 
 // Get access logs (login history)
 router.get('/access-logs', isAdmin, async (req, res) => {
@@ -627,7 +640,7 @@ router.post('/employees', canModifyData, async (req, res) => {
       `Empleado creado: ${full_name} (${cedula})`,
       'Empleado', id, full_name, club_id
     );
-    
+
     res.status(201).json(newEmployee);
   } catch (error: any) {
     res.status(500).json({ error: 'Error al crear empleado' });
@@ -774,14 +787,7 @@ router.patch('/employees/:id', canModifyData, async (req, res) => {
     // Invalidate dashboard cache so changes are visible immediately
     dashboardCache.clear();
 
-    await supabase.from('audit_logs').insert([{
-      action_type: 'UPDATE',
-      entity_type: 'Employee',
-      entity_id: id,
-      entity_name: updated.full_name,
-      performed_by: user.id,
-      performed_by_name: user.name,
-    }]);
+    await logAudit(req, 'Actualización de empleado', `Empleado actualizado: ${updated.full_name}`, 'Empleado', id, updated.full_name, updated.club_id);
 
     res.json(updated);
   } catch (error: any) {
@@ -1143,8 +1149,6 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
     for (const record of records) {
       if (!record.name) continue;
       
-      console.log('Processing record:', record);
-      
       // Find employee by name (case-insensitive, trim spaces)
       const employee = employees.find(e => 
         e.full_name.toLowerCase().trim() === record.name.toLowerCase().trim()
@@ -1371,8 +1375,16 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
 // Terminate employee
 router.patch('/employees/:id/terminate', canModifyData, async (req, res) => {
   const { termination_reason, termination_date } = req.body;
-  
+  const user = (req as any).user;
+
   try {
+    if (user.club_id) {
+      const { data: emp } = await supabase.from('employees').select('club_id').eq('id', req.params.id).single();
+      if (!emp || emp.club_id !== user.club_id) {
+        return res.status(403).json({ error: 'No tiene acceso a empleados de este club' });
+      }
+    }
+
     const { data: updatedEmployee, error } = await supabase
       .from('employees')
       .update({ 
@@ -1405,8 +1417,16 @@ router.patch('/employees/:id/terminate', canModifyData, async (req, res) => {
 // Reactivate employee
 router.patch('/employees/:id/reactivate', canModifyData, async (req, res) => {
   const { contract_start } = req.body;
-  
+  const user = (req as any).user;
+
   try {
+    if (user.club_id) {
+      const { data: emp } = await supabase.from('employees').select('club_id').eq('id', req.params.id).single();
+      if (!emp || emp.club_id !== user.club_id) {
+        return res.status(403).json({ error: 'No tiene acceso a empleados de este club' });
+      }
+    }
+
     const { data: updatedEmployee, error } = await supabase
       .from('employees')
       .update({ 

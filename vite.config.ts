@@ -59,14 +59,6 @@ export default defineConfig(({mode}) => {
                 expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 },
               },
             },
-            {
-              urlPattern: /\/api\/.*/i,
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'api-cache',
-                expiration: { maxEntries: 100, maxAgeSeconds: 60 * 2 },
-              },
-            },
           ],
         },
       }),
