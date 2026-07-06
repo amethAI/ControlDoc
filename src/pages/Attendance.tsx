@@ -585,27 +585,6 @@ export default function Attendance() {
             </button>
           )}
 
-          {(!isReadOnly || user?.role === 'Recursos Humanos') && (
-            <button
-              onClick={exportNomina}
-              disabled={!selectedClubId || loading}
-              className="inline-flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors"
-            >
-              <FileSpreadsheet className="h-4 w-4 mr-2" />
-              Generar Nómina
-            </button>
-          )}
-
-          {(!isReadOnly || user?.role === 'Recursos Humanos') && viewHalf !== 'full' && (
-            <button
-              onClick={openPsmtPreview}
-              disabled={!selectedClubId || loading}
-              className="inline-flex items-center px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 shadow-sm transition-colors"
-            >
-              <FileSpreadsheet className="h-4 w-4 mr-2" />
-              Planilla PSMT
-            </button>
-          )}
 
           {['Administrador', 'Super Administrador'].includes(user?.role || '') && viewHalf !== 'full' && (
             <button
