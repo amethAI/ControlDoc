@@ -4,7 +4,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'Super Administrador' | 'Administrador' | 'Supervisora' | 'Coordinadora' | 'Supervisor Interno' | 'Supervisor Cliente' | 'Recursos Humanos';
+  role: 'Super Administrador' | 'Administrador' | 'Supervisora' | 'Supervisora Redvolution' | 'Coordinadora' | 'Supervisor Interno' | 'Supervisor Cliente' | 'Recursos Humanos';
   club_id?: string;
   country?: string;
 }
