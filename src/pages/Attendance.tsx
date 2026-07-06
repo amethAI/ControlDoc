@@ -223,7 +223,12 @@ export default function Attendance() {
           'x-user-id': user?.id || '',
           'x-user-name': user?.name || ''
         },
-        body: JSON.stringify({ records: attendance })
+        body: JSON.stringify({
+          records: attendance,
+          club_id: selectedClubId,
+          start_date: format(monthStart, 'yyyy-MM-dd'),
+          end_date: format(monthEnd, 'yyyy-MM-dd'),
+        })
       });
 
       const reqRes = await apiFetch('/api/attendance-requests', {

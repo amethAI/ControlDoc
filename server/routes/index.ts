@@ -1496,7 +1496,7 @@ router.get('/attendance', canViewData, async (req, res) => {
 });
 
 router.post('/attendance', canModifyData, async (req, res) => {
-  const { records } = req.body; // Array of { employee_id, date, status }
+  const { records, club_id, start_date, end_date } = req.body;
   const user = (req as any).user;
 
   // Supervisor Interno can only update attendance for their own club's employees
@@ -1513,19 +1513,45 @@ router.post('/attendance', canModifyData, async (req, res) => {
   }
 
   try {
-    const upsertData = records.map((record: any) => ({
-      id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      employee_id: record.employee_id,
-      date: record.date,
-      status: record.status,
-      updated_at: new Date().toISOString()
-    }));
+    // Get all employee IDs for this club to know the scope to delete
+    const effectiveClubId = (user.role === 'Supervisor Interno') ? user.club_id : club_id;
 
-    const { error } = await supabase
-      .from('attendance')
-      .upsert(upsertData, { onConflict: 'employee_id, date' });
-      
-    if (error) throw error;
+    if (effectiveClubId && start_date && end_date) {
+      const { data: clubEmps } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('club_id', effectiveClubId);
+
+      const empIds = (clubEmps || []).map((e: any) => e.id);
+
+      if (empIds.length > 0) {
+        // Delete all existing records for these employees in the period
+        await supabase
+          .from('attendance')
+          .delete()
+          .in('employee_id', empIds)
+          .gte('date', start_date)
+          .lte('date', end_date);
+      }
+    }
+
+    // Insert the current records (if any)
+    if (Array.isArray(records) && records.length > 0) {
+      const insertData = records.map((record: any) => ({
+        id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        employee_id: record.employee_id,
+        date: record.date,
+        status: record.status,
+        updated_at: new Date().toISOString()
+      }));
+
+      const { error } = await supabase
+        .from('attendance')
+        .upsert(insertData, { onConflict: 'employee_id, date' });
+
+      if (error) throw error;
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('Attendance error:', error);
