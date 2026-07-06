@@ -138,8 +138,9 @@ const canModifyData = (req: any, res: any, next: any) => {
     return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para realizar modificaciones.' });
   }
 
-  // Restriction: Supervisor Interno and Supervisora must have a club assigned
-  if ((user.role === 'Supervisor Interno' || user.role === 'Supervisora') && !user.club_id) {
+  // Restriction: Supervisor Interno must have a club assigned
+  // Supervisora without club_id = multi-club access (intentional)
+  if (user.role === 'Supervisor Interno' && !user.club_id) {
     return res.status(403).json({ error: 'Acceso denegado. No tiene un club asignado.' });
   }
 

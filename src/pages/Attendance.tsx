@@ -108,7 +108,9 @@ export default function Attendance() {
 
   const isReadOnly = user?.role !== 'Administrador' && user?.role !== 'Super Administrador'
     && user?.role !== 'Supervisor Interno' && user?.role !== 'Supervisora';
-  const isRestricted = user?.role === 'Supervisor Interno' || user?.role === 'Supervisora';
+  // Restricted = locked to their own club. A Supervisora with no club_id can see all clubs.
+  const isRestricted = user?.role === 'Supervisor Interno'
+    || (user?.role === 'Supervisora' && !!user?.club_id);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
