@@ -1,6 +1,6 @@
 import { apiFetch } from '../lib/api';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import {
@@ -514,45 +514,27 @@ export default function Attendance() {
       const el = gridRef.current;
       const parent = el.parentElement;
 
-      // Temporarily expand overflow so html2canvas captures full scrollable content
-      const prevElOverflow = el.style.overflow;
-      const prevElMaxH = el.style.maxHeight;
-      el.style.overflow = 'visible';
-      el.style.maxHeight = 'none';
-      if (parent) {
-        parent.classList.remove('overflow-hidden');
-        parent.style.overflow = 'visible';
-      }
+      // Temporarily remove overflow clipping so full scrollable content is captured
+      if (parent) parent.classList.remove('overflow-hidden');
 
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
+      const dataUrl = await toPng(el, {
+        quality: 1,
         backgroundColor: '#ffffff',
-        logging: false,
-        scrollX: 0,
-        scrollY: -window.scrollY,
+        pixelRatio: 2,
         width: el.scrollWidth,
         height: el.scrollHeight,
-        windowWidth: el.scrollWidth,
-        windowHeight: el.scrollHeight,
+        style: { overflow: 'visible' },
       });
 
-      // Restore styles
-      el.style.overflow = prevElOverflow;
-      el.style.maxHeight = prevElMaxH;
-      if (parent) {
-        parent.classList.add('overflow-hidden');
-        parent.style.overflow = '';
-      }
+      if (parent) parent.classList.add('overflow-hidden');
 
       const link = document.createElement('a');
       const clubName = clubs.find(c => c.id === selectedClubId)?.name || 'Club';
       link.download = `Asistencia_${clubName}_${getPeriodoLabel().replace(/ /g, '_')}.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.href = dataUrl;
       link.click();
     } catch (e) {
-      console.error('html2canvas error:', e);
+      console.error('html-to-image error:', e);
       toast.error('Error al generar la imagen');
     } finally {
       setCapturingScreen(false);
