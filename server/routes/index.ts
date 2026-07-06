@@ -1662,7 +1662,7 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
 
     const { default: ExcelJS } = await import('exceljs');
     const templateFile = half === '1' ? 'psmt-1ra-q.xlsx' : 'psmt-2da-q.xlsx';
-    const templatePath = path.join(process.cwd(), 'src', 'server', 'templates', templateFile);
+    const templatePath = path.join(process.cwd(), 'server', 'templates', templateFile);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(templatePath);
 
@@ -1851,7 +1851,7 @@ router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
 
     const { default: ExcelJS } = await import('exceljs');
     const templateFile = half === '1' ? 'psmt-1ra-q.xlsx' : 'psmt-2da-q.xlsx';
-    const templatePath = path.join(process.cwd(), 'src', 'server', 'templates', templateFile);
+    const templatePath = path.join(process.cwd(), 'server', 'templates', templateFile);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(templatePath);
 
