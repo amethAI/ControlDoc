@@ -178,7 +178,11 @@ function canAccessResource(user: any, targetClubId: string | null, targetCountry
   if (role === 'Supervisor Interno' || role === 'Coordinadora') {
     return targetClubId === user.club_id;
   }
-  // Recursos Humanos, Supervisor Cliente, Supervisora: read access allowed
+  if (role === 'Supervisora Redvolution' || role === 'Recursos Humanos' || role === 'Supervisor Cliente') {
+    if (!user.country || !targetCountry) return false;
+    return targetCountry === user.country;
+  }
+  // Supervisora: read access allowed (club-scoped at query level)
   return true;
 }
 // ──────────────────────────────────────────────────────────────────────────────
@@ -194,7 +198,7 @@ async function resolveClubScope(user: any, queryClubId?: string) {
   let allowedEmployeeIds: string[] | null = null;
 
   const CLUB_SCOPED_ROLES  = ['Supervisor Interno', 'Coordinadora', 'Supervisora'];
-  const COUNTRY_SCOPED_ROLES = ['Administrador', 'Recursos Humanos', 'Supervisor Cliente'];
+  const COUNTRY_SCOPED_ROLES = ['Administrador', 'Recursos Humanos', 'Supervisor Cliente', 'Supervisora Redvolution'];
 
   if (CLUB_SCOPED_ROLES.includes(user.role)) {
     // Scoped to their assigned club only
@@ -506,7 +510,7 @@ router.get('/clubs', isAuthenticated, async (req, res) => {
     if (['Supervisor Interno', 'Coordinadora', 'Supervisora'].includes(user.role)) {
       // Club-scoped: only their assigned club
       query = query.eq('id', user.club_id);
-    } else if (['Administrador', 'Recursos Humanos', 'Supervisor Cliente'].includes(user.role) && user.country) {
+    } else if (['Administrador', 'Recursos Humanos', 'Supervisor Cliente', 'Supervisora Redvolution'].includes(user.role) && user.country) {
       // Country-scoped: only clubs in their country
       query = query.eq('country', user.country);
     }
