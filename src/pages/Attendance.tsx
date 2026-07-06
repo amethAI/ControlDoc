@@ -107,8 +107,9 @@ export default function Attendance() {
   }
 
   const isReadOnly = user?.role !== 'Administrador' && user?.role !== 'Super Administrador'
-    && user?.role !== 'Supervisor Interno' && user?.role !== 'Supervisora';
-  // Restricted = locked to their own club. A Supervisora with no club_id can see all clubs.
+    && user?.role !== 'Supervisor Interno' && user?.role !== 'Supervisora'
+    && user?.role !== 'Supervisora Redvolution';
+  // Restricted = locked to their own club. Supervisora Redvolution always sees all clubs.
   const isRestricted = user?.role === 'Supervisor Interno'
     || (user?.role === 'Supervisora' && !!user?.club_id);
 
