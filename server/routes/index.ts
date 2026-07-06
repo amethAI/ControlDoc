@@ -131,15 +131,15 @@ const canViewData = (req: any, res: any, next: any) => {
 
 // Middleware to check if user can modify data
 const canModifyData = (req: any, res: any, next: any) => {
-  const allowedRoles = ['Super Administrador', 'Administrador', 'Supervisor Interno'];
+  const allowedRoles = ['Super Administrador', 'Administrador', 'Supervisor Interno', 'Supervisora'];
   const user = (req as any).user;
-  
+
   if (!user || !allowedRoles.includes(user.role)) {
     return res.status(403).json({ error: 'Acceso denegado. No tiene permisos para realizar modificaciones.' });
   }
 
-  // Restriction: Supervisor Interno must have a club assigned
-  if (user.role === 'Supervisor Interno' && !user.club_id) {
+  // Restriction: Supervisor Interno and Supervisora must have a club assigned
+  if ((user.role === 'Supervisor Interno' || user.role === 'Supervisora') && !user.club_id) {
     return res.status(403).json({ error: 'Acceso denegado. No tiene un club asignado.' });
   }
 
