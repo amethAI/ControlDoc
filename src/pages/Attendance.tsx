@@ -511,22 +511,48 @@ export default function Attendance() {
     if (!gridRef.current || capturingScreen) return;
     setCapturingScreen(true);
     try {
-      const canvas = await html2canvas(gridRef.current, {
+      const el = gridRef.current;
+      const parent = el.parentElement;
+
+      // Temporarily expand overflow so html2canvas captures full scrollable content
+      const prevElOverflow = el.style.overflow;
+      const prevElMaxH = el.style.maxHeight;
+      el.style.overflow = 'visible';
+      el.style.maxHeight = 'none';
+      if (parent) {
+        parent.classList.remove('overflow-hidden');
+        parent.style.overflow = 'visible';
+      }
+
+      const canvas = await html2canvas(el, {
         scale: 2,
         useCORS: true,
+        allowTaint: true,
         backgroundColor: '#ffffff',
+        logging: false,
         scrollX: 0,
-        scrollY: 0,
-        width: gridRef.current.scrollWidth,
-        height: gridRef.current.scrollHeight,
-        windowWidth: gridRef.current.scrollWidth,
+        scrollY: -window.scrollY,
+        width: el.scrollWidth,
+        height: el.scrollHeight,
+        windowWidth: el.scrollWidth,
+        windowHeight: el.scrollHeight,
       });
+
+      // Restore styles
+      el.style.overflow = prevElOverflow;
+      el.style.maxHeight = prevElMaxH;
+      if (parent) {
+        parent.classList.add('overflow-hidden');
+        parent.style.overflow = '';
+      }
+
       const link = document.createElement('a');
       const clubName = clubs.find(c => c.id === selectedClubId)?.name || 'Club';
       link.download = `Asistencia_${clubName}_${getPeriodoLabel().replace(/ /g, '_')}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
-    } catch {
+    } catch (e) {
+      console.error('html2canvas error:', e);
       toast.error('Error al generar la imagen');
     } finally {
       setCapturingScreen(false);
