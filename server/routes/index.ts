@@ -1734,7 +1734,7 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
 
       // Write row-adjusted formulas to every employee row (fixes rows beyond template sample range)
       for (const [col, formula] of rowFormulas.entries()) {
-        row.getCell(col).value = { formula: adjustFormula(formula, rowIdx) };
+        try { row.getCell(col).value = { formula: adjustFormula(formula, rowIdx) }; } catch {}
       }
       row.commit();
     }
@@ -1937,7 +1937,7 @@ router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
 
         // Write row-adjusted formulas to every employee row (fixes rows beyond template sample range)
         for (const [col, formula] of rowFormulas.entries()) {
-          row.getCell(col).value = { formula: adjustFormula(formula, rowIdx) };
+          try { row.getCell(col).value = { formula: adjustFormula(formula, rowIdx) }; } catch {}
         }
         row.commit();
 
