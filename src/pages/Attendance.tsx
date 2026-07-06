@@ -1,5 +1,6 @@
 import { apiFetch } from '../lib/api';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import html2canvas from 'html2canvas';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import {
@@ -92,6 +93,8 @@ export default function Attendance() {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [downloadingPsmt, setDownloadingPsmt] = useState(false);
   const [downloadingPsmtGlobal, setDownloadingPsmtGlobal] = useState(false);
+  const [capturingScreen, setCapturingScreen] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
     return (
@@ -504,6 +507,32 @@ export default function Attendance() {
     }
   };
 
+  const captureGrid = async () => {
+    if (!gridRef.current || capturingScreen) return;
+    setCapturingScreen(true);
+    try {
+      const canvas = await html2canvas(gridRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        scrollX: 0,
+        scrollY: 0,
+        width: gridRef.current.scrollWidth,
+        height: gridRef.current.scrollHeight,
+        windowWidth: gridRef.current.scrollWidth,
+      });
+      const link = document.createElement('a');
+      const clubName = clubs.find(c => c.id === selectedClubId)?.name || 'Club';
+      link.download = `Asistencia_${clubName}_${getPeriodoLabel().replace(/ /g, '_')}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch {
+      toast.error('Error al generar la imagen');
+    } finally {
+      setCapturingScreen(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Print-only header */}
@@ -598,11 +627,12 @@ export default function Attendance() {
           )}
 
           <button
-            onClick={() => window.print()}
-            className="inline-flex items-center px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 shadow-sm transition-colors print:hidden"
+            onClick={captureGrid}
+            disabled={capturingScreen || loading}
+            className="inline-flex items-center px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 disabled:opacity-50 shadow-sm transition-colors"
           >
             <Printer className="h-4 w-4 mr-2" />
-            Imprimir
+            {capturingScreen ? 'Capturando...' : 'Capturar'}
           </button>
 
           {!isReadOnly && (
@@ -680,7 +710,7 @@ export default function Attendance() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden print:border-0 print:shadow-none">
+      <div ref={gridRef} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden print:border-0 print:shadow-none">
         <div className="overflow-x-auto attendance-print-wrapper">
           <table className="w-full border-collapse text-[10px]">
             <thead>
