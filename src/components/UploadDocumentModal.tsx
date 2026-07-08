@@ -159,7 +159,8 @@ export default function UploadDocumentModal({
           successCount++;
         } else {
           errorCount++;
-          console.error(`Error uploading ${item.file.name}`);
+          const errData = await res.json().catch(() => ({}));
+          console.error(`Error uploading ${item.file.name}:`, errData?.details || errData?.error || res.status);
         }
       }
 

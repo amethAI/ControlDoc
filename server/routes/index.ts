@@ -549,7 +549,7 @@ router.post('/clubs', isAdmin, async (req, res) => {
   const { name, description, address, country } = req.body;
   
   try {
-    const id = `club-${Date.now()}`;
+    const id = crypto.randomUUID();
     const { data: newClub, error } = await supabase
       .from('clubs')
       .insert([{ id, name, description, address, country: country || null }])
@@ -616,7 +616,7 @@ router.post('/employees', canModifyData, async (req, res) => {
   }
 
   try {
-    const id = `emp-${Date.now()}`;
+    const id = crypto.randomUUID();
     const { data: newEmployee, error } = await supabase
       .from('employees')
       .insert([{
@@ -891,7 +891,7 @@ router.post('/documents', canModifyData, (req, res, next) => {
   const file_size_kb = Math.round(file.size / 1024);
   
   try {
-    const id = `doc-${Date.now()}`;
+    const id = crypto.randomUUID();
     
     // Upload to Supabase Storage
     const fileExt = file_name.split('.').pop();
@@ -922,12 +922,10 @@ router.post('/documents', canModifyData, (req, res, next) => {
         .in('document_type_id', ['doc-3', 'doc-4', 'doc-5']); // Carnet blanco, Carnet verde, Cédula
       if (updateCombinedError) throw updateCombinedError;
 
-      // Insert document records for each type — use same base ts with suffix to guarantee unique IDs
-      const ts = Date.now();
       const docsToInsert = [
-        { id: `doc-${ts}-1`, employee_id, document_type_id: 'doc-3', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1 }, // Carnet blanco
-        { id: `doc-${ts}-2`, employee_id, document_type_id: 'doc-4', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1 }, // Carnet verde
-        { id: `doc-${ts}-3`, employee_id, document_type_id: 'doc-5', file_url, file_name, file_size_kb, expiry_date: null, status: 'sin_fecha', is_current: 1 }  // Cédula (no expiry)
+        { id: crypto.randomUUID(), employee_id, document_type_id: 'doc-3', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1 },
+        { id: crypto.randomUUID(), employee_id, document_type_id: 'doc-4', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1 },
+        { id: crypto.randomUUID(), employee_id, document_type_id: 'doc-5', file_url, file_name, file_size_kb, expiry_date: null, status: 'sin_fecha', is_current: 1 }
       ];
 
       const { data: newDocs, error } = await supabase
@@ -976,9 +974,9 @@ router.post('/documents', canModifyData, (req, res, next) => {
     );
     
     res.status(201).json(newDoc);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating document:', error);
-    res.status(500).json({ error: 'Error al subir documento' });
+    res.status(500).json({ error: 'Error al subir documento', details: error?.message || String(error) });
   }
 });
 
@@ -1351,7 +1349,7 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
           } else if (docUpdate.value && docUpdate.value !== 'NO') {
             // Create new document record
             const { error: insertError } = await supabase.from('employee_documents').insert([{
-              id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              id: crypto.randomUUID(),
               employee_id: id,
               document_type_id: finalDocType.id,
               expiry_date: docUpdate.isBoolean ? null : (docUpdate.value || null),
@@ -1543,7 +1541,7 @@ router.post('/attendance', canModifyData, async (req, res) => {
     // Insert the current records (if any)
     if (Array.isArray(records) && records.length > 0) {
       const insertData = records.map((record: any) => ({
-        id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: crypto.randomUUID(),
         employee_id: record.employee_id,
         date: record.date,
         status: record.status,
@@ -1601,7 +1599,7 @@ router.post('/attendance-requests', canModifyData, async (req, res) => {
   
   try {
     const upsertData = records.map((record: any) => ({
-      id: `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: crypto.randomUUID(),
       club_id: record.club_id,
       date: record.date,
       requested_count: record.requested_count,
@@ -2591,7 +2589,7 @@ router.post('/users', isAdmin, async (req, res) => {
   }
   const { email, password, name, role, club_id, country } = parsed.data;
   try {
-    const id = `user-${Date.now()}`;
+    const id = crypto.randomUUID();
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const { data: newUser, error } = await supabase
@@ -2739,7 +2737,7 @@ router.post('/alert-recipients', isAuthenticated, isAdmin, async (req, res) => {
     
     if (emails && emails.length > 0) {
       const insertData = emails.map((email: string) => ({
-        id: `ar-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: crypto.randomUUID(),
         club_id: club_id,
         email
       }));
