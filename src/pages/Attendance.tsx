@@ -392,8 +392,13 @@ export default function Attendance() {
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         if (cell.dayIdx > 0) setSelectedCell({ ...cell, dayIdx: cell.dayIdx - 1 });
-      } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      } else if (e.key === 'ArrowDown') {
         e.preventDefault();
+        const idx = allEmps.findIndex(emp => emp.id === cell.empId);
+        if (idx < allEmps.length - 1) setSelectedCell({ empId: allEmps[idx + 1].id, dayIdx: cell.dayIdx });
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
         const idx = allEmps.findIndex(emp => emp.id === cell.empId);
         if (idx < allEmps.length - 1) setSelectedCell({ empId: allEmps[idx + 1].id, dayIdx: cell.dayIdx });
       } else if (e.key === 'ArrowUp') {
@@ -879,26 +884,6 @@ export default function Attendance() {
                   >
                     <div className="uppercase text-[8px]">{format(day, 'eee', { locale: es })}</div>
                     <div className="text-xs">{format(day, 'd')}</div>
-                    {!isReadOnly && (
-                      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-0.5">
-                        {!isWeekend(day) && (
-                          <button
-                            onClick={() => markAllPresent(day)}
-                            className="bg-emerald-500 text-white rounded-full p-0.5 shadow-sm hover:bg-emerald-600 transition-colors"
-                            title="Marcar todas como Asignada"
-                          >
-                            <Check className="h-2 w-2" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => copyFromPrevDay(day)}
-                          className="bg-blue-500 text-white rounded-full p-0.5 shadow-sm hover:bg-blue-600 transition-colors"
-                          title="Copiar del día anterior"
-                        >
-                          <Copy className="h-2 w-2" />
-                        </button>
-                      </div>
-                    )}
                   </th>
                 ))}
                 <th className="p-2 text-center font-semibold text-slate-700 bg-slate-100 border-l border-slate-200 min-w-[40px]">
