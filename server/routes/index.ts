@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../db.ts';
-import { sendExpirationAlerts } from '../services/alertService.ts';
+import { sendExpirationAlerts, sendLoginAlert } from '../services/alertService.ts';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -379,15 +379,17 @@ router.post('/auth/login', async (req, res) => {
       const token = jwt.sign(
         { id: user.id, email: user.email, name: user.name, role: user.role, club_id: user.club_id, country: user.country || null },
         JWT_SECRET,
-        { expiresIn: '8h' }
+        { expiresIn: '24h' }
       );
 
       res.cookie('token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 8 * 60 * 60 * 1000,
+        maxAge: 24 * 60 * 60 * 1000,
       });
+
+      const loginIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
 
       // Log login event to audit_logs
       supabase.from('audit_logs').insert({
@@ -400,8 +402,18 @@ router.post('/auth/login', async (req, res) => {
         entity_id: user.id,
         entity_name: user.email,
         club_id: user.club_id || null,
-        ip_address: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'
+        ip_address: loginIp
       }).then(({ error }) => { if (error) console.error('Error logging login:', error); });
+
+      // Send login alert (fire-and-forget)
+      sendLoginAlert('success', {
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        club_id: user.club_id || null,
+        ip: loginIp,
+        timestamp: new Date()
+      }).catch(err => console.error('[LOGIN ALERT] success:', err));
 
       res.json({
         token,
@@ -415,7 +427,33 @@ router.post('/auth/login', async (req, res) => {
         }
       });
     } else {
-      console.warn(`[AUTH] Login fallido para: ${email} desde IP: ${req.headers['x-forwarded-for'] || req.socket?.remoteAddress}`);
+      const failedIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+      console.warn(`[AUTH] Login fallido para: ${email} desde IP: ${failedIp}`);
+
+      // Log failed attempt to audit_logs
+      supabase.from('audit_logs').insert({
+        id: crypto.randomUUID(),
+        user_id: user?.id || null,
+        user_name: user?.name || email,
+        action_type: 'Inicio de sesión fallido',
+        action_description: `Intento de acceso fallido para: ${email}`,
+        entity_type: 'Usuario',
+        entity_id: user?.id || null,
+        entity_name: email,
+        club_id: user?.club_id || null,
+        ip_address: failedIp
+      }).then(({ error }) => { if (error) console.error('Error logging failed login:', error); });
+
+      // Send failed login alert (fire-and-forget)
+      sendLoginAlert('failed', {
+        name: user?.name || 'Desconocido',
+        email,
+        role: user?.role,
+        club_id: user?.club_id || null,
+        ip: failedIp,
+        timestamp: new Date()
+      }).catch(err => console.error('[LOGIN ALERT] failed:', err));
+
       res.status(401).json({ error: 'Credenciales inválidas' });
     }
   } catch (error) {
@@ -467,15 +505,15 @@ const logAudit = async (
   }
 };
 
-// Get access logs (login history)
+// Get access logs (login history — successful and failed)
 router.get('/access-logs', isAdmin, async (req, res) => {
   try {
     const { data: logs, error } = await supabase
       .from('audit_logs')
-      .select('id, created_at, user_name, entity_name, club_id, ip_address')
-      .eq('action_type', 'Inicio de sesión')
+      .select('id, created_at, user_name, entity_name, club_id, ip_address, action_type')
+      .in('action_type', ['Inicio de sesión', 'Inicio de sesión fallido'])
       .order('created_at', { ascending: false })
-      .limit(200);
+      .limit(500);
     if (error) throw error;
     res.json(logs);
   } catch (error) {

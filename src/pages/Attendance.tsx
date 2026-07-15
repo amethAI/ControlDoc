@@ -14,7 +14,8 @@ import {
   AlertCircle,
   Coffee,
   FileSpreadsheet,
-  Printer
+  Printer,
+  Copy
 } from 'lucide-react';
 import {
   format,
@@ -91,6 +92,10 @@ export default function Attendance() {
     employeeId: string; dateStr: string; x: number; y: number;
   } | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const [selectedCell, setSelectedCell] = useState<{ empId: string; dayIdx: number } | null>(null);
+  const selectedCellRef = useRef<{ empId: string; dayIdx: number } | null>(null);
+  const daysRef = useRef<Date[]>([]);
+  const allEmpsRef = useRef<Employee[]>([]);
   const [downloadingPsmt, setDownloadingPsmt] = useState(false);
   const [downloadingPsmtGlobal, setDownloadingPsmtGlobal] = useState(false);
   const [capturingScreen, setCapturingScreen] = useState(false);
@@ -288,12 +293,130 @@ export default function Attendance() {
       date: dateStr,
       status: 'presente'
     }));
-
     setAttendance(prev => {
       const filtered = prev.filter(a => a.date !== dateStr);
       return [...filtered, ...newRecords];
     });
   };
+
+  const markEmployeeAllPresent = (employeeId: string) => {
+    const newRecords = days.map(day => ({
+      employee_id: employeeId,
+      date: format(day, 'yyyy-MM-dd'),
+      status: 'presente'
+    }));
+    setAttendance(prev => {
+      const dateSet = new Set(days.map(d => format(d, 'yyyy-MM-dd')));
+      const filtered = prev.filter(a => !(a.employee_id === employeeId && dateSet.has(a.date)));
+      return [...filtered, ...newRecords];
+    });
+  };
+
+  const fillAllPresent = () => {
+    const dateStrs = days.map(d => format(d, 'yyyy-MM-dd'));
+    const newRecords = employees.flatMap(emp =>
+      dateStrs.map(dateStr => ({ employee_id: emp.id, date: dateStr, status: 'presente' }))
+    );
+    setAttendance(prev => {
+      const dateSet = new Set(dateStrs);
+      const filtered = prev.filter(a => !dateSet.has(a.date));
+      return [...filtered, ...newRecords];
+    });
+  };
+
+  const copyFromPrevDay = (day: Date) => {
+    const prevDay = new Date(day);
+    prevDay.setDate(prevDay.getDate() - 1);
+    const prevDateStr = format(prevDay, 'yyyy-MM-dd');
+    const currentDateStr = format(day, 'yyyy-MM-dd');
+
+    const prevRecords = attendance.filter(a => a.date === prevDateStr);
+    if (prevRecords.length === 0) {
+      toast.info('No hay registros del día anterior para copiar.');
+      return;
+    }
+
+    const newRecords = prevRecords.map(a => ({ ...a, date: currentDateStr }));
+    setAttendance(prev => {
+      const filtered = prev.filter(a => a.date !== currentDateStr);
+      return [...filtered, ...newRecords];
+    });
+    toast.success(`Copiado desde el ${format(prevDay, 'd MMM', { locale: es })}`);
+  };
+
+  // Keep refs in sync with latest render values so keyboard handler doesn't go stale
+  selectedCellRef.current = selectedCell;
+  daysRef.current = days;
+  allEmpsRef.current = [
+    ...employees,
+    ...inactiveEmployees
+  ].sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+  const KEY_STATUS: Record<string, string> = {
+    a: 'presente', l: 'libre', p: 'permiso',
+    f: 'ausente', i: 'incapacidad', c: 'capacitacion', h: 'feriado',
+  };
+
+  useEffect(() => {
+    if (isReadOnly) return;
+    const handler = (e: KeyboardEvent) => {
+      const cell = selectedCellRef.current;
+      if (!cell) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      const key = e.key.toLowerCase();
+      const daysList = daysRef.current;
+      const allEmps = allEmpsRef.current;
+
+      const applyStatus = (status: string | null) => {
+        const dateStr = format(daysList[cell.dayIdx], 'yyyy-MM-dd');
+        setAttendance(prev => {
+          const filtered = prev.filter(a => !(a.employee_id === cell.empId && a.date === dateStr));
+          return status ? [...filtered, { employee_id: cell.empId, date: dateStr, status }] : filtered;
+        });
+      };
+
+      if (KEY_STATUS[key]) {
+        e.preventDefault();
+        applyStatus(KEY_STATUS[key]);
+        const next = cell.dayIdx + 1;
+        setSelectedCell(next < daysList.length ? { empId: cell.empId, dayIdx: next } : cell);
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        applyStatus(null);
+        const next = cell.dayIdx + 1;
+        setSelectedCell(next < daysList.length ? { empId: cell.empId, dayIdx: next } : cell);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (cell.dayIdx < daysList.length - 1) setSelectedCell({ ...cell, dayIdx: cell.dayIdx + 1 });
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (cell.dayIdx > 0) setSelectedCell({ ...cell, dayIdx: cell.dayIdx - 1 });
+      } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        e.preventDefault();
+        const idx = allEmps.findIndex(emp => emp.id === cell.empId);
+        if (idx < allEmps.length - 1) setSelectedCell({ empId: allEmps[idx + 1].id, dayIdx: cell.dayIdx });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const idx = allEmps.findIndex(emp => emp.id === cell.empId);
+        if (idx > 0) setSelectedCell({ empId: allEmps[idx - 1].id, dayIdx: cell.dayIdx });
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        const next = cell.dayIdx + 1;
+        if (next < daysList.length) {
+          setSelectedCell({ ...cell, dayIdx: next });
+        } else {
+          const idx = allEmps.findIndex(emp => emp.id === cell.empId);
+          if (idx < allEmps.length - 1) setSelectedCell({ empId: allEmps[idx + 1].id, dayIdx: 0 });
+        }
+      } else if (e.key === 'Escape') {
+        setSelectedCell(null);
+        setPopoverCell(null);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isReadOnly]);
 
   const calculateBreakdown = (employeeId: string, daysList: Date[]) => {
     const stats = {
@@ -619,6 +742,18 @@ export default function Attendance() {
             </button>
           </div>
 
+          {!isReadOnly && selectedClubId && (
+            <button
+              onClick={fillAllPresent}
+              disabled={loading || employees.length === 0}
+              className="inline-flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors"
+              title="Marca a todas las empleadas como Asignada en todos los días del período visible"
+            >
+              <Check className="h-4 w-4 mr-2" />
+              Llenar Período
+            </button>
+          )}
+
           {!isReadOnly && (
             <button
               onClick={() => setIsReconcileModalOpen(true)}
@@ -744,14 +879,25 @@ export default function Attendance() {
                   >
                     <div className="uppercase text-[8px]">{format(day, 'eee', { locale: es })}</div>
                     <div className="text-xs">{format(day, 'd')}</div>
-                    {!isWeekend(day) && (
-                      <button
-                        onClick={() => markAllPresent(day)}
-                        className="absolute -bottom-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-500 text-white rounded-full p-0.5 shadow-sm hover:bg-blue-600"
-                        title="Marcar todos como presente"
-                      >
-                        <Check className="h-2 w-2" />
-                      </button>
+                    {!isReadOnly && (
+                      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-0.5">
+                        {!isWeekend(day) && (
+                          <button
+                            onClick={() => markAllPresent(day)}
+                            className="bg-emerald-500 text-white rounded-full p-0.5 shadow-sm hover:bg-emerald-600 transition-colors"
+                            title="Marcar todas como Asignada"
+                          >
+                            <Check className="h-2 w-2" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => copyFromPrevDay(day)}
+                          className="bg-blue-500 text-white rounded-full p-0.5 shadow-sm hover:bg-blue-600 transition-colors"
+                          title="Copiar del día anterior"
+                        >
+                          <Copy className="h-2 w-2" />
+                        </button>
+                      </div>
                     )}
                   </th>
                 ))}
@@ -862,30 +1008,49 @@ export default function Attendance() {
                     return (
                       <tr key={emp.id} className={clsx("hover:bg-slate-50 transition-colors", isBaja && "bg-red-50/20")}>
                         <td className={clsx(
-                          "sticky left-0 z-10 p-2 font-medium text-slate-900 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)] max-w-[150px]",
+                          "sticky left-0 z-10 p-2 font-medium text-slate-900 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.02)] max-w-[150px] group/row",
                           isBaja ? "bg-red-50" : "bg-white"
                         )}>
-                          <div className="flex flex-col gap-0.5">
-                            <span className="truncate text-[11px]">{emp.full_name}</span>
-                            {isBaja && (
-                              <span className="inline-block text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-200 w-fit leading-none">
-                                BAJA
-                              </span>
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="truncate text-[11px]">{emp.full_name}</span>
+                              {isBaja && (
+                                <span className="inline-block text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-200 w-fit leading-none">
+                                  BAJA
+                                </span>
+                              )}
+                            </div>
+                            {!isReadOnly && !isBaja && (
+                              <button
+                                onClick={() => markEmployeeAllPresent(emp.id)}
+                                className="opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0 bg-emerald-500 text-white rounded p-0.5 hover:bg-emerald-600"
+                                title="Marcar toda la quincena como Asignada"
+                              >
+                                <Check className="h-2.5 w-2.5" />
+                              </button>
                             )}
                           </div>
                         </td>
-                        {days.map(day => {
+                        {days.map((day, dayIdx) => {
                           const status = getStatus(emp.id, day);
                           const config = status ? STATUS_MAP[status] : null;
+                          const isSelected = selectedCell?.empId === emp.id && selectedCell?.dayIdx === dayIdx;
 
                           return (
                             <td
                               key={day.toString()}
-                              onClick={(e) => openStatusPopover(emp.id, day, e)}
+                              onClick={(e) => {
+                                if (isReadOnly || isBaja) return;
+                                e.stopPropagation();
+                                setSelectedCell({ empId: emp.id, dayIdx });
+                                setPopoverCell(null);
+                              }}
+                              onDoubleClick={(e) => openStatusPopover(emp.id, day, e)}
                               className={clsx(
                                 "p-0 border-r border-slate-200 transition-all",
-                                isBaja ? "cursor-default" : "cursor-pointer hover:brightness-95",
-                                isWeekend(day) && !status && "bg-slate-50/50"
+                                isBaja ? "cursor-default" : "cursor-pointer",
+                                isWeekend(day) && !status && "bg-slate-50/50",
+                                isSelected && "ring-2 ring-inset ring-blue-500 bg-blue-50"
                               )}
                             >
                               <div className={clsx(
@@ -986,6 +1151,27 @@ export default function Attendance() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {!isReadOnly && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-blue-50 rounded-xl border border-blue-200 text-xs">
+          <span className="font-semibold text-blue-700 mr-1">Teclas rápidas:</span>
+          {[
+            { key: 'A', label: 'Asignada' },
+            { key: 'L', label: 'Libre' },
+            { key: 'P', label: 'Permiso' },
+            { key: 'F', label: 'Falta' },
+            { key: 'I', label: 'Incapacidad' },
+            { key: 'C', label: 'Capacitación' },
+            { key: 'H', label: 'Feriado' },
+          ].map(({ key, label }) => (
+            <span key={key} className="flex items-center gap-1 text-slate-600">
+              <kbd className="px-1.5 py-0.5 bg-white border border-slate-300 rounded text-[11px] font-bold text-slate-800 shadow-sm">{key}</kbd>
+              <span className="text-slate-500">{label}</span>
+            </span>
+          ))}
+          <span className="ml-2 text-slate-400">· Flechas para navegar · Delete para borrar · Esc para salir</span>
         </div>
       )}
 

@@ -576,6 +576,103 @@ export async function sendExpirationAlerts(isTest = false) {
   }
 }
 
+export async function sendLoginAlert(
+  type: 'success' | 'failed',
+  data: {
+    name: string;
+    email: string;
+    role?: string;
+    club_id?: string | null;
+    ip: string;
+    timestamp: Date;
+  }
+) {
+  try {
+    const { data: recipients } = await supabase
+      .from('alert_recipients')
+      .select('email')
+      .in('club_id', ['global']);
+
+    if (!recipients?.length) return;
+
+    const toEmails = Array.from(new Set(recipients.map(r => r.email)));
+
+    let clubName: string | null = null;
+    if (data.club_id) {
+      const { data: club } = await supabase.from('clubs').select('name').eq('id', data.club_id).maybeSingle();
+      clubName = club?.name || data.club_id;
+    }
+
+    const timeStr = data.timestamp.toLocaleString('es-PA', {
+      timeZone: 'America/Panama',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    });
+
+    const isSuccess = type === 'success';
+    const statusColor = isSuccess ? '#10b981' : '#ef4444';
+    const statusIcon = isSuccess ? '✅' : '❌';
+    const statusText = isSuccess ? 'Inicio de sesión exitoso' : 'Intento de acceso fallido';
+    const subject = `${statusIcon} ControlDoc — ${statusText}: ${data.name || data.email}`;
+
+    const rows = [
+      ['Usuario', data.name || '—'],
+      ['Correo', data.email],
+      ...(data.role ? [['Rol', data.role]] : []),
+      ...(clubName ? [['Club', clubName]] : []),
+      ['Hora (Panamá)', timeStr],
+      ['IP', data.ip],
+    ];
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: ${statusColor}; color: white; padding: 16px 20px;">
+          <h2 style="margin: 0; font-size: 16px;">${statusIcon} ${statusText}</h2>
+        </div>
+        <div style="padding: 20px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            ${rows.map(([label, value]) => `
+            <tr>
+              <td style="padding: 8px 0; color: #64748b; width: 130px; vertical-align: top;">${label}</td>
+              <td style="padding: 8px 0; font-weight: ${label === 'Hora (Panamá)' ? 'bold' : 'normal'}; font-family: ${label === 'IP' ? 'monospace' : 'inherit'}; color: ${label === 'IP' ? '#475569' : 'inherit'};">${value}</td>
+            </tr>`).join('')}
+          </table>
+        </div>
+        <div style="background-color: #f8fafc; padding: 12px; text-align: center; color: #94a3b8; font-size: 11px; border-top: 1px solid #e2e8f0;">
+          Alerta automática — Sistema ControlDoc PSMT
+        </div>
+      </div>
+    `;
+
+    if (process.env.BREVO_API_KEY) {
+      await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'accept': 'application/json', 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sender: { name: 'ControlDoc PSMT', email: process.env.EMAIL_USER || 'alertaspsmt@gmail.com' },
+          to: toEmails.map(e => ({ email: e })),
+          subject,
+          htmlContent: html
+        })
+      });
+    } else if (process.env.RESEND_API_KEY) {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({ from: process.env.EMAIL_FROM || 'ControlDoc PSMT <onboarding@resend.dev>', to: toEmails, subject, html });
+    } else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      const host = process.env.EMAIL_HOST || 'smtp.office365.com';
+      const isGmail = host.includes('gmail.com');
+      const cfg: any = { auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }, connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 20000, family: 4 };
+      if (isGmail) { cfg.service = 'gmail'; cfg.host = 'smtp.gmail.com'; cfg.port = 465; cfg.secure = true; }
+      else { const port = parseInt(process.env.EMAIL_PORT || '587'); cfg.host = host; cfg.port = port; cfg.secure = port === 465; cfg.tls = { ciphers: 'SSLv3', rejectUnauthorized: false }; }
+      const transporter = nodemailer.createTransport(cfg);
+      await transporter.sendMail({ from: process.env.EMAIL_FROM || `"ControlDoc PSMT" <${process.env.EMAIL_USER}>`, to: toEmails.join(', '), subject, html });
+    }
+  } catch (err) {
+    console.error('[LOGIN ALERT] Error al enviar alerta de login:', err);
+  }
+}
+
 export async function sendMonthlyReport() {
   try {
     const today = new Date();
