@@ -1046,29 +1046,32 @@ export default function Attendance() {
                           const status = getStatus(emp.id, day);
                           const config = status ? STATUS_MAP[status] : null;
                           const isSelected = selectedCell?.empId === emp.id && selectedCell?.dayIdx === dayIdx;
+                          const isAfterTermination = isBaja && emp.termination_date
+                            ? format(day, 'yyyy-MM-dd') > emp.termination_date
+                            : false;
 
                           return (
                             <td
                               key={day.toString()}
                               onClick={(e) => {
-                                if (isReadOnly || isBaja) return;
+                                if (isReadOnly || isBaja || isAfterTermination) return;
                                 e.stopPropagation();
                                 setSelectedCell({ empId: emp.id, dayIdx });
                                 setPopoverCell(null);
                               }}
-                              onDoubleClick={(e) => openStatusPopover(emp.id, day, e)}
+                              onDoubleClick={(e) => { if (!isAfterTermination) openStatusPopover(emp.id, day, e); }}
                               className={clsx(
                                 "p-0 border-r border-slate-200 transition-all",
-                                isBaja ? "cursor-default" : "cursor-pointer",
-                                isWeekend(day) && !status && "bg-slate-50/50",
-                                isSelected && "ring-2 ring-inset ring-blue-500 bg-blue-50"
+                                isAfterTermination ? "cursor-not-allowed bg-red-400/70" : isBaja ? "cursor-default" : "cursor-pointer",
+                                !isAfterTermination && isWeekend(day) && !status && "bg-slate-50/50",
+                                !isAfterTermination && isSelected && "ring-2 ring-inset ring-blue-500 bg-blue-50"
                               )}
                             >
                               <div className={clsx(
                                 "h-8 flex items-center justify-center font-bold text-[10px]",
-                                config?.color || "text-slate-300"
+                                isAfterTermination ? "text-red-700" : config?.color || "text-slate-300"
                               )}>
-                                {config?.short || '-'}
+                                {isAfterTermination ? '' : (config?.short || '-')}
                               </div>
                             </td>
                           );
