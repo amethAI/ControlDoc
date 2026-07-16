@@ -98,6 +98,10 @@ export default function Attendance() {
   const allEmpsRef = useRef<Employee[]>([]);
   const [downloadingPsmt, setDownloadingPsmt] = useState(false);
   const [downloadingPsmtGlobal, setDownloadingPsmtGlobal] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'pending' | 'saving'>('saved');
+  const isInitialLoad = useRef(true);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSaveRef = useRef<() => void>(() => {});
   const [capturingScreen, setCapturingScreen] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -173,6 +177,7 @@ export default function Attendance() {
       console.error('Error fetching attendance data:', error);
     } finally {
       setLoading(false);
+      isInitialLoad.current = false;
     }
   }, [selectedClubId, currentMonth]);
 
@@ -221,7 +226,9 @@ export default function Attendance() {
   };
 
   const handleSave = async () => {
+    if (!selectedClubId) return;
     setSaving(true);
+    setSaveStatus('saving');
     try {
       const attRes = await apiFetch('/api/attendance', {
         method: 'POST',
@@ -253,14 +260,28 @@ export default function Attendance() {
       });
 
       if (attRes.ok && reqRes.ok) {
-        toast.success('Asistencia y solicitudes guardadas correctamente');
+        setSaveStatus('saved');
+      } else {
+        setSaveStatus('pending');
       }
     } catch (error) {
+      setSaveStatus('pending');
       toast.error('Error al guardar datos');
     } finally {
       setSaving(false);
     }
   };
+
+  // Keep ref in sync so auto-save timer always calls the latest version
+  handleSaveRef.current = handleSave;
+
+  // Auto-save: 2 seconds after last change
+  useEffect(() => {
+    if (isInitialLoad.current || loading || isReadOnly) return;
+    setSaveStatus('pending');
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => handleSaveRef.current(), 2000);
+  }, [attendance, requests]);
 
   const handleRequestChange = (date: Date, value: string) => {
     const dateStr = format(date, 'yyyy-MM-dd');
@@ -795,10 +816,15 @@ export default function Attendance() {
             <button
               onClick={handleSave}
               disabled={saving || !selectedClubId}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shadow-sm transition-colors"
+              className={clsx(
+                "inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors disabled:opacity-50",
+                saveStatus === 'saved' ? "bg-emerald-600 hover:bg-emerald-700 text-white" :
+                saveStatus === 'saving' ? "bg-blue-500 text-white" :
+                "bg-blue-600 hover:bg-blue-700 text-white"
+              )}
             >
               <Save className="h-4 w-4 mr-2" />
-              {saving ? 'Guardando...' : 'Guardar Cambios'}
+              {saveStatus === 'saving' ? 'Guardando...' : saveStatus === 'saved' ? '✓ Guardado' : 'Guardar'}
             </button>
           )}
         </div>
