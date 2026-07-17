@@ -182,7 +182,9 @@ export default function Attendance() {
   }, [selectedClubId, currentMonth]);
 
   useEffect(() => {
-    apiFetch('/api/clubs').then(res => res.json()).then(setClubs);
+    apiFetch('/api/clubs')
+      .then(res => (res.ok ? res.json() : []))
+      .then(data => setClubs(Array.isArray(data) ? data : []));
   }, []);
 
   useEffect(() => {
