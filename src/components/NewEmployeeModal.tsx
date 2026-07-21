@@ -32,8 +32,8 @@ export default function NewEmployeeModal({ isOpen, onClose, onSuccess, clubId }:
     if (isOpen) {
       if (!clubId) {
         apiFetch('/api/clubs')
-          .then(res => res.json())
-          .then(data => setClubs(data))
+          .then(res => res.ok ? res.json() : [])
+          .then(d => setClubs(Array.isArray(d) ? d : []))
           .catch(err => console.error('Error fetching clubs:', err));
       } else {
         setFormData(prev => ({ ...prev, club_id: clubId }));

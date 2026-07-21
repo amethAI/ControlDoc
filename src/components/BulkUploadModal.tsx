@@ -40,8 +40,8 @@ export default function BulkUploadModal({ isOpen, onClose, onSuccess }: BulkUplo
 
   useEffect(() => {
     if (isOpen) {
-      apiFetch('/api/employees?status=activo').then(res => res.json()).then(setEmployees);
-      apiFetch('/api/document-types').then(res => res.json()).then(setDocTypes);
+      apiFetch('/api/employees?status=activo').then(res => res.ok ? res.json() : []).then(d => setEmployees(Array.isArray(d) ? d : []));
+      apiFetch('/api/document-types').then(res => res.ok ? res.json() : []).then(d => setDocTypes(Array.isArray(d) ? d : []));
     }
   }, [isOpen]);
 

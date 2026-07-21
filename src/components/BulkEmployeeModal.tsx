@@ -33,7 +33,7 @@ export default function BulkEmployeeModal({ isOpen, onClose, onSuccess, clubId }
 
   useEffect(() => {
     if (isOpen) {
-      apiFetch('/api/clubs').then(res => res.json()).then(setClubs);
+      apiFetch('/api/clubs').then(res => res.ok ? res.json() : []).then(d => setClubs(Array.isArray(d) ? d : []));
       // Add initial 3 rows
       setRows([
         { id: '1', full_name: '', cedula: '', position: '', birth_date: '', club_id: clubId || '', status: 'pending' },

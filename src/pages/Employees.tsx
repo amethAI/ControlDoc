@@ -46,7 +46,7 @@ export default function Employees() {
       const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
-        setEmployees(data);
+        setEmployees(Array.isArray(data) ? data : []);
       }
     } catch (error) {
       console.error('Error fetching employees:', error);
