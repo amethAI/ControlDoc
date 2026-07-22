@@ -31,6 +31,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    const handle = () => {
+      setUser(null);
+      fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    };
+    window.addEventListener('auth:expired', handle);
+    return () => window.removeEventListener('auth:expired', handle);
+  }, []);
+
   const login = (_token: string, newUser: User) => {
     setUser(newUser);
   };
