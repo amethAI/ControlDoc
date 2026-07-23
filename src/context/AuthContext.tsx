@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { DEFAULTS, type LocaleConfig } from '../lib/locale';
 
 export interface User {
   id: string;
@@ -7,6 +8,8 @@ export interface User {
   role: 'Super Administrador' | 'Administrador' | 'Supervisora' | 'Supervisora Redvolution' | 'Coordinadora' | 'Supervisor Interno' | 'Supervisor Cliente' | 'Recursos Humanos';
   club_id?: string;
   country?: string;
+  club_locale?: string;
+  club_timezone?: string;
 }
 
 interface AuthContextType {
@@ -62,4 +65,17 @@ export const useAuth = () => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+};
+
+/**
+ * Returns the locale/timezone for the authenticated user's club.
+ * Falls back to system defaults from VITE_APP_LOCALE / VITE_APP_TIMEZONE env vars.
+ * Use this everywhere instead of hardcoding 'es-PA' or 'America/Panama'.
+ */
+export const useLocale = (): LocaleConfig => {
+  const { user } = useAuth();
+  return {
+    locale:   user?.club_locale   ?? DEFAULTS.locale,
+    timezone: user?.club_timezone ?? DEFAULTS.timezone,
+  };
 };

@@ -1,7 +1,7 @@
 import { apiFetch } from '../lib/api';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { toPng } from 'html-to-image';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, useLocale } from '../context/AuthContext';
 import { toast } from 'sonner';
 import {
   ChevronLeft,
@@ -71,6 +71,7 @@ const STATUS_ORDER = ['presente', 'libre', 'permiso', 'ausente', 'incapacidad', 
 
 export default function Attendance() {
   const { user } = useAuth();
+  const { locale } = useLocale();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [inactiveEmployees, setInactiveEmployees] = useState<Employee[]>([]);
@@ -498,7 +499,7 @@ export default function Attendance() {
   const exportNomina = () => {
     const clubName = clubs.find(c => c.id === selectedClubId)?.name || selectedClubId;
     const periodo = getPeriodoLabel();
-    const fechaGeneracion = new Date().toLocaleDateString('es-PA');
+    const fechaGeneracion = new Date().toLocaleDateString(locale);
 
     const nominaData = allEmployeesForGrid.map((emp, index) => {
       const bd = calculateBreakdown(emp.id, days);
@@ -515,7 +516,7 @@ export default function Attendance() {
         'APO': bd.apoyo,
         'TOTAL': bd.total,
         'ESTADO': esBaja
-          ? `BAJA${emp.termination_date ? ' ' + new Date(emp.termination_date + 'T12:00:00').toLocaleDateString('es-PA') : ''}`
+          ? `BAJA${emp.termination_date ? ' ' + new Date(emp.termination_date + 'T12:00:00').toLocaleDateString(locale) : ''}`
           : 'Activo'
       };
     });
@@ -539,7 +540,7 @@ export default function Attendance() {
           'CÉDULA': emp.cedula || '',
           'CARGO': emp.position || '',
           'FECHA DE BAJA': emp.termination_date
-            ? new Date(emp.termination_date + 'T12:00:00').toLocaleDateString('es-PA')
+            ? new Date(emp.termination_date + 'T12:00:00').toLocaleDateString(locale)
             : '',
           'MOTIVO': emp.termination_reason || '',
           'REG': bd.regulares,
@@ -1128,7 +1129,7 @@ export default function Attendance() {
                     <p className="text-sm font-semibold text-slate-800">{emp.full_name}</p>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Baja: {emp.termination_date
-                        ? new Date(emp.termination_date + 'T12:00:00').toLocaleDateString('es-PA')
+                        ? new Date(emp.termination_date + 'T12:00:00').toLocaleDateString(locale)
                         : 'Sin fecha'}
                       {emp.termination_reason && ` · ${emp.termination_reason}`}
                     </p>

@@ -1,4 +1,5 @@
 import { supabase } from '../db.ts';
+import { getClubConfig } from '../lib/clubConfig.ts';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import dns from 'dns';
@@ -507,7 +508,7 @@ export async function sendExpirationAlerts(isTest = false) {
               <tr>
                 <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;"><strong>${emp.full_name}</strong></td>
                 <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${emp.club_name}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${birth.toLocaleDateString('es-PA', { day: '2-digit', month: 'long' })}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${birth.toLocaleDateString(process.env.APP_DEFAULT_LOCALE || 'es-PA', { day: '2-digit', month: 'long' })}</td>
               </tr>
             `;
           }
@@ -598,13 +599,15 @@ export async function sendLoginAlert(
     const toEmails = Array.from(new Set(recipients.map(r => r.email)));
 
     let clubName: string | null = null;
+    let timezone = process.env.APP_DEFAULT_TIMEZONE || 'America/Panama';
+    let tzLabel  = process.env.APP_DEFAULT_COUNTRY  || 'Panamá';
     if (data.club_id) {
-      const { data: club } = await supabase.from('clubs').select('name').eq('id', data.club_id).maybeSingle();
-      clubName = club?.name || data.club_id;
+      const cfg = await getClubConfig(data.club_id).catch(() => null);
+      if (cfg) { clubName = cfg.name; timezone = cfg.timezone; tzLabel = cfg.country; }
     }
 
-    const timeStr = data.timestamp.toLocaleString('es-PA', {
-      timeZone: 'America/Panama',
+    const timeStr = data.timestamp.toLocaleString('en-CA', {
+      timeZone: timezone,
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
       hour12: false
@@ -621,7 +624,7 @@ export async function sendLoginAlert(
       ['Correo', data.email],
       ...(data.role ? [['Rol', data.role]] : []),
       ...(clubName ? [['Club', clubName]] : []),
-      ['Hora (Panamá)', timeStr],
+      [`Hora (${tzLabel})`, timeStr],
       ['IP', data.ip],
     ];
 
@@ -635,7 +638,7 @@ export async function sendLoginAlert(
             ${rows.map(([label, value]) => `
             <tr>
               <td style="padding: 8px 0; color: #64748b; width: 130px; vertical-align: top;">${label}</td>
-              <td style="padding: 8px 0; font-weight: ${label === 'Hora (Panamá)' ? 'bold' : 'normal'}; font-family: ${label === 'IP' ? 'monospace' : 'inherit'}; color: ${label === 'IP' ? '#475569' : 'inherit'};">${value}</td>
+              <td style="padding: 8px 0; font-weight: ${label.startsWith('Hora') ? 'bold' : 'normal'}; font-family: ${label === 'IP' ? 'monospace' : 'inherit'}; color: ${label === 'IP' ? '#475569' : 'inherit'};">${value}</td>
             </tr>`).join('')}
           </table>
         </div>
@@ -676,7 +679,7 @@ export async function sendLoginAlert(
 export async function sendMonthlyReport() {
   try {
     const today = new Date();
-    const monthLabel = today.toLocaleDateString('es-PA', { month: 'long', year: 'numeric' });
+    const monthLabel = today.toLocaleDateString(process.env.APP_DEFAULT_LOCALE || 'es-PA', { month: 'long', year: 'numeric' });
 
     const { data: clubs } = await supabase.from('clubs').select('id, name');
     const clubMap = new Map((clubs || []).map(c => [c.id, c.name]));
@@ -703,7 +706,7 @@ export async function sendMonthlyReport() {
       const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       monthBuckets[key] = {
-        label: d.toLocaleDateString('es-PA', { month: 'long', year: 'numeric' }),
+        label: d.toLocaleDateString(process.env.APP_DEFAULT_LOCALE || 'es-PA', { month: 'long', year: 'numeric' }),
         clubs: {},
       };
     }

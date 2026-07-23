@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { supabase } from '../db.ts';
 import { sendExpirationAlerts, sendLoginAlert } from '../services/alertService.ts';
+import { getClubConfig, invalidateClubConfig } from '../lib/clubConfig.ts';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -343,10 +344,16 @@ router.get('/performance/stats', isAuthenticated, isInternal, async (req, res) =
   }
 });
 
-// Simple auth endpoint
+// Simple auth endpoint — enriches user with club locale/timezone for the frontend
 router.get('/auth/me', isAuthenticated, async (req, res) => {
   const user = (req as any).user;
-  res.json({ user });
+  let club_locale = process.env.APP_DEFAULT_LOCALE || 'es-PA';
+  let club_timezone = process.env.APP_DEFAULT_TIMEZONE || 'America/Panama';
+  if (user.club_id) {
+    const cfg = await getClubConfig(user.club_id).catch(() => null);
+    if (cfg) { club_locale = cfg.locale; club_timezone = cfg.timezone; }
+  }
+  res.json({ user: { ...user, club_locale, club_timezone } });
 });
 
 router.post('/auth/login', async (req, res) => {
@@ -1672,9 +1679,9 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
     const endDate   = half === '1' ? new Date(y, m, 15) : new Date(y, m + 1, 0);
     const fmt = (d: Date) => d.toISOString().split('T')[0];
 
-    const { data: club, error: clubErr } = await supabase
-      .from('clubs').select('name').eq('id', clubId).single();
-    if (clubErr || !club) return res.status(404).json({ error: 'Club no encontrado' });
+    const clubCfg = await getClubConfig(clubId);
+    if (!clubCfg.name) return res.status(404).json({ error: 'Club no encontrado' });
+    const club = clubCfg;
 
     const { data: employees, error: empErr } = await supabase
       .from('employees')
@@ -1723,9 +1730,10 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
       }
     };
 
-    const SALARIO_MENSUAL = 657.28;
-    const SALARIO_DIA     = 25.28;
-    const SALARIO_DOM     = 33.18;
+    const SALARIO_MENSUAL = clubCfg.salary_mensual;
+    const SALARIO_DIA     = clubCfg.salary_dia;
+    const SALARIO_DOM     = clubCfg.salary_dom;
+    const CSS_RATE        = clubCfg.css_rate;
 
     const { default: ExcelJS } = await import('exceljs');
     const templateFile = half === '1' ? 'psmt-1ra-q.xlsx' : 'psmt-2da-q.xlsx';
@@ -1733,8 +1741,8 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(templatePath);
 
-    const ws = wb.getWorksheet('PRICESMART ');
-    if (!ws) throw new Error('Sheet "PRICESMART " no encontrada en plantilla');
+    const ws = wb.getWorksheet(clubCfg.sheet_name);
+    if (!ws) throw new Error(`Sheet "${clubCfg.sheet_name}" no encontrada en plantilla`);
 
     const MONTHS_ES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
     const monthNameEs = MONTHS_ES[m];
@@ -1763,7 +1771,7 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
       const emp = empList[i] as any;
       const rowIdx = DATA_START_ROW + i;
       const row = ws.getRow(rowIdx);
-      const kronos = emp.cedula ? 'PA' + emp.cedula.replace(/-/g, '') : '';
+      const kronos = emp.cedula ? clubCfg.kronos_prefix + emp.cedula.replace(/-/g, '') : '';
 
       // Clear static fills from template's sample data rows
       for (let c = 1; c <= COL_N + MAX_DAY_COLS - 1; c++) {
@@ -1774,7 +1782,7 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
       }
 
       row.getCell(1).value  = i + 1;
-      row.getCell(2).value  = 'PANAMÁ';
+      row.getCell(2).value  = clubCfg.country.toUpperCase();
       row.getCell(3).value  = emp.banco || '';
       row.getCell(4).value  = emp.cuenta_bancaria || '';
       row.getCell(5).value  = emp.cedula || '';
@@ -1782,7 +1790,7 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
       row.getCell(7).value  = emp.full_name;
       row.getCell(8).value  = 'PSMT ' + (club.name as string).toUpperCase();
       row.getCell(9).value  = 'Club ' + club.name;
-      row.getCell(10).value = emp.position || 'DEMOSTRADORA';
+      row.getCell(10).value = emp.position || clubCfg.default_position;
       row.getCell(11).value = emp.contract_start || '';
       row.getCell(12).value = SALARIO_MENSUAL;
       row.getCell(13).value = SALARIO_DIA;
@@ -1839,7 +1847,7 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
           else if (code === 'F') fer++;
         }
         const bruto = parseFloat((dias * SALARIO_DIA + doms * SALARIO_DOM + incap * SALARIO_DIA + fer * SALARIO_DIA).toFixed(2));
-        const desc  = parseFloat((bruto * (0.0975 + 0.0125)).toFixed(2));
+        const desc  = parseFloat((bruto * CSS_RATE).toFixed(2));
         const neto  = parseFloat((bruto - desc).toFixed(2));
 
         const row2 = ws2.getRow(rowIdx);
@@ -1886,23 +1894,18 @@ router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
     const fmt = (d: Date) => d.toISOString().split('T')[0];
 
     const { data: allClubs, error: clubsErr } = await supabase
-      .from('clubs').select('id, name').neq('id', 'global').neq('id', 'hr');
+      .from('clubs')
+      .select('id, name, sort_order')
+      .eq('is_active', 1)
+      .not('id', 'in', '("global","hr")')
+      .order('sort_order', { ascending: true });
     if (clubsErr) throw clubsErr;
 
-    const CLUB_ORDER = ['david', 'costa verde', 'metropark'];
-    const clubs = (allClubs || []).sort((a: any, b: any) => {
-      const ai = CLUB_ORDER.findIndex(n => a.name.toLowerCase().includes(n));
-      const bi = CLUB_ORDER.findIndex(n => b.name.toLowerCase().includes(n));
-      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-    });
+    const clubs = allClubs || [];
 
     const periodDays: Date[] = [];
     const cur = new Date(startDate);
     while (cur <= endDate) { periodDays.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
-
-    const SALARIO_MENSUAL = 657.28;
-    const SALARIO_DIA     = 25.28;
-    const SALARIO_DOM     = 33.18;
 
     const toCode = (status: string | undefined, day: Date): string => {
       if (!status) return '';
@@ -1916,14 +1919,19 @@ router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
       }
     };
 
+    // Pre-load config for all clubs to avoid N+1 inside the loop
+    const clubConfigs = await Promise.all(clubs.map((c: any) => getClubConfig(c.id)));
+    // Use the first club's sheet_name for the template (all clubs in one workbook)
+    const firstCfg = clubConfigs[0];
+
     const { default: ExcelJS } = await import('exceljs');
     const templateFile = half === '1' ? 'psmt-1ra-q.xlsx' : 'psmt-2da-q.xlsx';
     const templatePath = path.join(process.cwd(), 'server', 'templates', templateFile);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(templatePath);
 
-    const ws = wb.getWorksheet('PRICESMART ');
-    if (!ws) throw new Error('Sheet "PRICESMART " no encontrada en plantilla');
+    const ws = wb.getWorksheet(firstCfg?.sheet_name ?? 'PRICESMART ');
+    if (!ws) throw new Error(`Sheet "${firstCfg?.sheet_name ?? 'PRICESMART '}" no encontrada en plantilla`);
 
     const MONTHS_ES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
     const monthNameEs = MONTHS_ES[m];
@@ -1950,11 +1958,13 @@ router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
     let rowOffset = 0;
     const hoja2Rows: Array<{ emp: any; neto: number }> = [];
 
-    for (const club of clubs) {
+    for (let ci = 0; ci < clubs.length; ci++) {
+      const club = clubs[ci] as any;
+      const cfg  = clubConfigs[ci];
       const { data: employees, error: empErr } = await supabase
         .from('employees')
         .select('id, full_name, cedula, position, contract_start, banco, cuenta_bancaria')
-        .eq('club_id', (club as any).id).eq('status', 'activo').order('full_name');
+        .eq('club_id', club.id).eq('status', 'activo').order('full_name');
       if (empErr) throw empErr;
 
       const empList = employees || [];
@@ -1973,25 +1983,25 @@ router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
         const emp = empList[i] as any;
         const rowIdx = DATA_START_ROW + rowOffset + i;
         const row = ws.getRow(rowIdx);
-        const kronos = emp.cedula ? 'PA' + emp.cedula.replace(/-/g, '') : '';
+        const kronos = emp.cedula ? cfg.kronos_prefix + emp.cedula.replace(/-/g, '') : '';
 
         for (let c = 1; c <= COL_N + MAX_DAY_COLS - 1; c++) {
           try { const cell = row.getCell(c); if (!(cell as any).formula) cell.fill = { type: 'pattern', pattern: 'none' }; } catch {}
         }
 
         row.getCell(1).value  = rowOffset + i + 1;
-        row.getCell(2).value  = 'PANAMÁ';
+        row.getCell(2).value  = cfg.country.toUpperCase();
         row.getCell(3).value  = emp.banco || '';
         row.getCell(4).value  = emp.cuenta_bancaria || '';
         row.getCell(5).value  = emp.cedula || '';
         row.getCell(6).value  = kronos;
         row.getCell(7).value  = emp.full_name;
-        row.getCell(8).value  = 'PSMT ' + (club as any).name.toUpperCase();
-        row.getCell(9).value  = 'Club ' + (club as any).name;
-        row.getCell(10).value = emp.position || 'DEMOSTRADORA';
+        row.getCell(8).value  = 'PSMT ' + (club.name as string).toUpperCase();
+        row.getCell(9).value  = 'Club ' + (club.name as string);
+        row.getCell(10).value = emp.position || cfg.default_position;
         row.getCell(11).value = emp.contract_start || '';
-        row.getCell(12).value = SALARIO_MENSUAL;
-        row.getCell(13).value = SALARIO_DIA;
+        row.getCell(12).value = cfg.salary_mensual;
+        row.getCell(13).value = cfg.salary_dia;
 
         for (let d = 0; d < periodDays.length && d < MAX_DAY_COLS; d++) {
           const day = periodDays[d];
@@ -2002,7 +2012,6 @@ router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
         row.getCell(51).value = null;
         row.getCell(52).value = null;
 
-        // Write row-adjusted formulas to every employee row (fixes rows beyond template sample range)
         for (const [col, formula] of rowFormulas.entries()) {
           try { row.getCell(col).value = { formula: adjustFormula(formula, rowIdx) }; } catch {}
         }
@@ -2014,8 +2023,8 @@ router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
           if (code === '1') dias++; else if (code === 'D') doms++;
           else if (code === 'I') incap++; else if (code === 'F') fer++;
         }
-        const bruto = parseFloat((dias * SALARIO_DIA + doms * SALARIO_DOM + incap * SALARIO_DIA + fer * SALARIO_DIA).toFixed(2));
-        const neto  = parseFloat((bruto - bruto * 0.11).toFixed(2));
+        const bruto = parseFloat((dias * cfg.salary_dia + doms * cfg.salary_dom + incap * cfg.salary_dia + fer * cfg.salary_dia).toFixed(2));
+        const neto  = parseFloat((bruto - bruto * cfg.css_rate).toFixed(2));
         hoja2Rows.push({ emp, neto });
       }
 
@@ -2519,7 +2528,7 @@ router.get('/analytics/projections', canViewData, async (req, res) => {
       const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
       return {
         month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleDateString('es-PA', { month: 'short', year: '2-digit' }),
+        label: d.toLocaleDateString(process.env.APP_DEFAULT_LOCALE || 'es-PA', { month: 'short', year: '2-digit' }),
         count: 0,
         clubs: [] as { name: string; count: number }[],
       };

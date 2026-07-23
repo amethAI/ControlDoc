@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Cake, Upload, Building2, Calendar, Trash2, Download } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, useLocale } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -46,13 +46,14 @@ const isToday = (birthDate: string) => {
   return birth.getMonth() === today.getMonth() && birth.getDate() === today.getDate();
 };
 
-const formatDate = (dateStr: string) => {
+const formatDate = (dateStr: string, locale: string) => {
   const d = new Date(dateStr);
-  return d.toLocaleDateString('es-PA', { day: '2-digit', month: 'long' });
+  return d.toLocaleDateString(locale, { day: '2-digit', month: 'long' });
 };
 
 export default function Cumpleanos() {
   const { user } = useAuth();
+  const { locale } = useLocale();
   const [employees, setEmployees] = useState<BirthdayEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -115,7 +116,7 @@ export default function Cumpleanos() {
         ['NOMBRE', 'FECHA DE NACIMIENTO', 'CLUB'],
         ...emps.map(e => [
           e.full_name,
-          e.birth_date ? new Date(e.birth_date + 'T12:00:00').toLocaleDateString('es-PA', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
+          e.birth_date ? new Date(e.birth_date + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
           e.clubs?.name ?? '',
         ]),
       ];
@@ -400,7 +401,7 @@ export default function Cumpleanos() {
                         {(emp.clubs as any)?.name || '—'}
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 capitalize">
-                        {formatDate(emp.birth_date)}
+                        {formatDate(emp.birth_date, locale)}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span className="text-sm font-bold text-slate-700">{age} años</span>

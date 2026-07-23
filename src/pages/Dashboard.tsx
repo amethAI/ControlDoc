@@ -1,6 +1,6 @@
 import { apiFetch } from '../lib/api';
 import React, { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, useLocale } from '../context/AuthContext';
 import { Users, AlertTriangle, FileWarning, UploadCloud, Building2, TrendingUp, RefreshCw, X } from 'lucide-react';
 import {
   BarChart,
@@ -21,7 +21,8 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 
 export default function Dashboard() {
   const { user } = useAuth();
-  
+  const { locale } = useLocale();
+
   if (user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora') {
     return <Navigate to="/clubes" replace />;
   }
@@ -119,7 +120,7 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm">
           <TrendingUp className="h-4 w-4 text-emerald-500" />
-          <span className="text-sm font-medium text-slate-700">Actualizado: {new Date().toLocaleDateString('es-PA')}</span>
+          <span className="text-sm font-medium text-slate-700">Actualizado: {new Date().toLocaleDateString(locale)}</span>
         </div>
       </div>
 
@@ -207,7 +208,7 @@ export default function Dashboard() {
                     <div className="flex justify-between items-start gap-1">
                       <p className="text-xs font-bold text-slate-900 truncate">{doc.employee_name}</p>
                       <span className={`text-[10px] font-bold whitespace-nowrap ${doc.status === 'expired' ? 'text-red-600' : 'text-amber-600'}`}>
-                        {new Date(doc.date).toLocaleDateString('es-PA', { timeZone: 'UTC' })}
+                        {new Date(doc.date).toLocaleDateString(locale, { timeZone: 'UTC' })}
                       </span>
                     </div>
                     <div className="flex items-center justify-between mt-0.5">

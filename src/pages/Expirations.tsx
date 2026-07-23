@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Filter, Search, FileSpreadsheet, Plus, Trash2, FileDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, useLocale } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
@@ -27,6 +27,7 @@ interface ChecklistEmployee {
 
 export default function Expirations() {
   const { user } = useAuth();
+  const { locale } = useLocale();
   const navigate = useNavigate();
   const canEdit = user?.role === 'Administrador' || user?.role === 'Super Administrador' || user?.role === 'Supervisor Interno';
   const [employees, setEmployees] = useState<ChecklistEmployee[]>([]);
@@ -115,7 +116,7 @@ export default function Expirations() {
     
     // Format as DD-MMM-YY (e.g., 30-Jul-28)
     const options: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: '2-digit' };
-    return date.toLocaleDateString('es-ES', options).replace(/ /g, '-').replace('.', '');
+    return date.toLocaleDateString(locale, options).replace(/ /g, '-').replace('.', '');
   };
 
   const getCellColorClass = (expiryDate: string | null, isIndefinite: boolean = false) => {
@@ -297,7 +298,7 @@ export default function Expirations() {
     const groups = Object.entries(groupedEmployees);
     if (groups.length === 0) { toast.error('No hay datos para exportar'); return; }
 
-    const today = new Date().toLocaleDateString('es-PA', { day: '2-digit', month: 'long', year: 'numeric' });
+    const today = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
 
     const tableRows = (emps: ChecklistEmployee[]) =>
       emps.map((emp, i) => {

@@ -2,7 +2,7 @@ import { apiFetch } from '../lib/api';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, LogIn, LogOut, Search, CheckCircle, XCircle } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useLocale } from '../context/AuthContext';
 
 interface AccessLog {
   id: string;
@@ -21,7 +21,7 @@ export default function AccessLogs() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
-  const { user } = useAuth();
+  const { locale, timezone } = useLocale();
 
   useEffect(() => {
     const fetchLogs = async () => {
@@ -59,10 +59,10 @@ export default function AccessLogs() {
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
-    return d.toLocaleString('es-PA', {
+    return d.toLocaleString(locale, {
       day: '2-digit', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit', hour12: true,
-      timeZone: 'America/Panama'
+      timeZone: timezone
     });
   };
 
@@ -140,7 +140,7 @@ export default function AccessLogs() {
             <thead className="bg-white">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Fecha y Hora (Panamá)</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Fecha y Hora</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Usuario</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Correo</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Club</th>

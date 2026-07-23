@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { apiFetch } from '../lib/api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, useLocale } from '../context/AuthContext';
 import { Download, Search, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -29,6 +29,7 @@ interface Club {
 
 export default function ChecklistContratos() {
   const { user } = useAuth();
+  const { locale } = useLocale();
   const canEdit = user?.role === 'Administrador' || user?.role === 'Super Administrador' || user?.role === 'Supervisor Interno';
   const [employees, setEmployees] = useState<EmployeeChecklist[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
@@ -84,7 +85,7 @@ export default function ChecklistContratos() {
   const getDocDate = (docs: any[], typeName: string) => {
     const doc = docs.find(d => d.document_types?.name?.toLowerCase()?.includes(typeName.toLowerCase()) && d.is_current === 1);
     if (!doc || !doc.expiry_date) return '';
-    return new Date(doc.expiry_date).toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
+    return new Date(doc.expiry_date).toLocaleDateString(locale, { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
   };
 
   const hasDoc = (docs: any[], typeName: string) => {
@@ -139,7 +140,7 @@ export default function ChecklistContratos() {
   const formatDateDisplay = (dateStr: string) => {
     if (!dateStr) return '';
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      return new Date(`${dateStr}T12:00:00`).toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
+      return new Date(`${dateStr}T12:00:00`).toLocaleDateString(locale, { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
     }
     return dateStr;
   };
@@ -148,7 +149,7 @@ export default function ChecklistContratos() {
     if (!contractStartStr || !contractStartStr.match(/^\d{4}-\d{2}-\d{2}$/)) return '';
     const date = new Date(`${contractStartStr}T12:00:00`);
     date.setMonth(date.getMonth() + 3);
-    return date.toLocaleDateString('es-PA', { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
+    return date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
   };
 
   const getProbatoryColor = (contractStartStr: string) => {
