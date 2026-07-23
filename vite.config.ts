@@ -13,7 +13,7 @@ export default defineConfig(({mode}) => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['icon.svg', 'apple-touch-icon.png'],
-        manifest: {
+        manifest: ({
           name: 'ControlDoc PSMT',
           short_name: 'ControlDoc',
           description: 'Gestión de documentos y contratos PSMT',
@@ -44,7 +44,7 @@ export default defineConfig(({mode}) => {
               purpose: 'any',
             },
           ],
-        },
+        } as any),
         workbox: {
           skipWaiting: true,
           clientsClaim: true,

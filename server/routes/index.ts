@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { supabase } from '../db.ts';
 import { sendExpirationAlerts, sendLoginAlert } from '../services/alertService.ts';
 import { getClubConfig, invalidateClubConfig } from '../lib/clubConfig.ts';
+import { getPersonalCombinedIds, getDocTypeIdBySlug } from '../lib/docTypes.ts';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -852,12 +853,8 @@ router.get('/document-types', isAuthenticated, async (req, res) => {
     const { data: types, error } = await supabase.from('document_types').select('*').eq('is_active', 1).order('sort_order');
     if (error) return res.status(500).json({ error: error.message });
     
-    // Filter out specific documents and rename others for the new requirement
     const processedTypes = types?.map(type => {
-      // We want to hide these specific types as requested
-      if (['Carnet verde', 'Carnet blanco', 'Cédula', 'Carta de ingreso'].includes(type.name)) {
-        return null;
-      }
+      if (type.is_combined_personal === 1 || type.is_hidden === 1) return null;
       return type;
     }).filter(Boolean) || [];
     
@@ -899,7 +896,7 @@ router.get('/employees/:id/documents', isAuthenticated, async (req, res) => {
 
     const { data: documents, error } = await supabase
       .from('employee_documents')
-      .select('*, document_types(id, name)')
+      .select('*, document_types(id, name, is_combined_personal)')
       .eq('employee_id', req.params.id)
       .eq('is_current', 1);
 
@@ -959,18 +956,29 @@ router.post('/documents', canModifyData, (req, res, next) => {
     
     // Handle the special 'doc-personal-combined' type
     if (document_type_id === 'doc-personal-combined') {
-      // Mark previous versions as not current for all related types
+      const personalIds = await getPersonalCombinedIds();
+      if (personalIds.length === 0) {
+        return res.status(500).json({ error: 'No hay tipos de documento personales configurados' });
+      }
+
+      // Mark previous versions as not current for all combined personal types
       const { error: updateCombinedError } = await supabase
         .from('employee_documents')
         .update({ is_current: 0 })
         .eq('employee_id', employee_id)
-        .in('document_type_id', ['doc-3', 'doc-4', 'doc-5']); // Carnet blanco, Carnet verde, Cédula
+        .in('document_type_id', personalIds);
       if (updateCombinedError) throw updateCombinedError;
 
+      const [carnetBlancoId, carnetVerdeId, cedulaId] = await Promise.all([
+        getDocTypeIdBySlug('carnet-blanco'),
+        getDocTypeIdBySlug('carnet-verde'),
+        getDocTypeIdBySlug('cedula'),
+      ]);
+
       const docsToInsert = [
-        { id: crypto.randomUUID(), employee_id, document_type_id: 'doc-3', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1 },
-        { id: crypto.randomUUID(), employee_id, document_type_id: 'doc-4', file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1 },
-        { id: crypto.randomUUID(), employee_id, document_type_id: 'doc-5', file_url, file_name, file_size_kb, expiry_date: null, status: 'sin_fecha', is_current: 1 }
+        ...(carnetBlancoId ? [{ id: crypto.randomUUID(), employee_id, document_type_id: carnetBlancoId, file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1 }] : []),
+        ...(carnetVerdeId  ? [{ id: crypto.randomUUID(), employee_id, document_type_id: carnetVerdeId,  file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1 }] : []),
+        ...(cedulaId       ? [{ id: crypto.randomUUID(), employee_id, document_type_id: cedulaId,       file_url, file_name, file_size_kb, expiry_date: null, status: 'sin_fecha', is_current: 1 }] : []),
       ];
 
       const { data: newDocs, error } = await supabase
@@ -1130,7 +1138,7 @@ router.delete('/employees/:employeeId/documents/:typeId', canModifyData, async (
   try {
     let typeIdsToDelete = [typeId];
     if (typeId === 'doc-personal-combined') {
-      typeIdsToDelete = ['doc-3', 'doc-4', 'doc-5'];
+      typeIdsToDelete = await getPersonalCombinedIds();
     }
 
     // Mark as not current instead of hard delete to keep history
@@ -1208,24 +1216,30 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
         continue;
       }
 
-      // Update Carnet Verde (doc-4)
+      // Update Carnet Verde
       if (record.carnetVerde) {
-        await supabase
-          .from('employee_documents')
-          .update({ expiry_date: record.carnetVerde })
-          .eq('employee_id', employee.id)
-          .eq('document_type_id', 'doc-4')
-          .eq('is_current', 1);
+        const cvId = await getDocTypeIdBySlug('carnet-verde');
+        if (cvId) {
+          await supabase
+            .from('employee_documents')
+            .update({ expiry_date: record.carnetVerde })
+            .eq('employee_id', employee.id)
+            .eq('document_type_id', cvId)
+            .eq('is_current', 1);
+        }
       }
 
-      // Update Carnet Blanco (doc-3)
+      // Update Carnet Blanco
       if (record.carnetBlanco) {
-        await supabase
-          .from('employee_documents')
-          .update({ expiry_date: record.carnetBlanco })
-          .eq('employee_id', employee.id)
-          .eq('document_type_id', 'doc-3')
-          .eq('is_current', 1);
+        const cbId = await getDocTypeIdBySlug('carnet-blanco');
+        if (cbId) {
+          await supabase
+            .from('employee_documents')
+            .update({ expiry_date: record.carnetBlanco })
+            .eq('employee_id', employee.id)
+            .eq('document_type_id', cbId)
+            .eq('is_current', 1);
+        }
       }
       
       // Update Contract Type and End Date
@@ -1752,7 +1766,7 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
     ws.getRow(4).getCell(7).value = `PERIODO: ${periodoShort} ${monthNameEs} ${y}`;
     ws.getRow(4).getCell(8).value = periodoShort;
     ws.getRow(4).commit();
-    try { ws.conditionalFormattings.splice(0, ws.conditionalFormattings.length); } catch {}
+    try { (ws as any).conditionalFormattings.splice(0, (ws as any).conditionalFormattings.length); } catch {}
 
     const DATA_START_ROW = 9;
     const COL_N = 14; // column N = 14 (1-indexed)
@@ -1941,7 +1955,7 @@ router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
     ws.getRow(4).getCell(7).value = `PERIODO: ${periodoShort} ${monthNameEs} ${y}`;
     ws.getRow(4).getCell(8).value = periodoShort;
     ws.getRow(4).commit();
-    try { ws.conditionalFormattings.splice(0, ws.conditionalFormattings.length); } catch {}
+    try { (ws as any).conditionalFormattings.splice(0, (ws as any).conditionalFormattings.length); } catch {}
 
     const DATA_START_ROW = 9;
     const COL_N = 14;

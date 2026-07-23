@@ -60,14 +60,12 @@ export default function Login() {
               de Clubes.
             </h1>
             <p className="text-slate-300 text-lg max-w-md font-light leading-relaxed">
-              La plataforma definitiva para el control documental y gestión de empleados en PSMT Panamá.
+              La plataforma definitiva para el control documental y gestión de empleados de PSMT.
             </p>
           </div>
 
           <div className="text-slate-500 text-sm font-medium flex items-center gap-4">
             <span>© 2024 ControlDoc System</span>
-            <div className="h-1 w-1 rounded-full bg-slate-700" />
-            <span>Panamá City</span>
           </div>
         </div>
       </div>

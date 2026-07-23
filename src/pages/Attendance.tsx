@@ -523,7 +523,7 @@ export default function Attendance() {
 
     const wb = XLSX.utils.book_new();
 
-    const ws1 = XLSX.utils.json_to_sheet(nominaData, { origin: 'A4' });
+    const ws1 = XLSX.utils.json_to_sheet(nominaData, { origin: 'A4' } as any);
     XLSX.utils.sheet_add_aoa(ws1, [
       [`Club: ${clubName}`],
       [`Período: ${periodo}`],
@@ -552,7 +552,7 @@ export default function Attendance() {
         };
       });
 
-      const ws2 = XLSX.utils.json_to_sheet(liquidacionData, { origin: 'A4' });
+      const ws2 = XLSX.utils.json_to_sheet(liquidacionData, { origin: 'A4' } as any);
       XLSX.utils.sheet_add_aoa(ws2, [
         [`Club: ${clubName}`],
         [`Período: ${periodo} — Pendientes de Liquidación`],

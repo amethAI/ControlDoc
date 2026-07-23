@@ -38,7 +38,7 @@ export default function AccessLogs() {
       }
     };
     fetchLogs();
-  }, [user]);
+  }, []);
 
   const isSuccess = (log: AccessLog) => log.action_type === 'Inicio de sesión';
 

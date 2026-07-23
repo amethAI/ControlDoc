@@ -81,3 +81,21 @@ CREATE UNIQUE INDEX uq_employees_cedula_country ON employees(country_code, cedul
 CREATE INDEX IF NOT EXISTS idx_clubs_country      ON clubs(country);
 CREATE INDEX IF NOT EXISTS idx_clubs_sort_order   ON clubs(sort_order);
 CREATE INDEX IF NOT EXISTS idx_employees_country  ON employees(country_code);
+
+-- ────────────────────────────────────────────────────────────
+-- 4. DOCUMENT_TYPES: slug, is_combined_personal, is_hidden
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE document_types ADD COLUMN IF NOT EXISTS slug                TEXT;
+ALTER TABLE document_types ADD COLUMN IF NOT EXISTS is_combined_personal INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE document_types ADD COLUMN IF NOT EXISTS is_hidden           INTEGER NOT NULL DEFAULT 0;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_document_types_slug
+  ON document_types(slug) WHERE slug IS NOT NULL;
+
+-- Marcar los tres tipos que conforman "Documentos Personales"
+UPDATE document_types SET slug = 'carnet-blanco', is_combined_personal = 1 WHERE name = 'Carnet blanco';
+UPDATE document_types SET slug = 'carnet-verde',  is_combined_personal = 1 WHERE name = 'Carnet verde';
+UPDATE document_types SET slug = 'cedula',        is_combined_personal = 1 WHERE name = 'Cédula';
+
+-- Ocultar tipos legacy que no deben aparecer en el selector de upload
+UPDATE document_types SET is_hidden = 1 WHERE name = 'Carta de ingreso';

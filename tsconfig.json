@@ -23,5 +23,6 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "types": ["vite/client"]
-  }
+  },
+  "exclude": ["src/test-api.ts", "src/test-api2.ts", "src/test-db.ts"]
 }

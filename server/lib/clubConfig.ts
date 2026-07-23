@@ -49,12 +49,13 @@ export async function getClubConfig(clubId: string): Promise<ClubConfig> {
   const hit = cache.get(clubId);
   if (hit && now - (cacheAt.get(clubId) ?? 0) < TTL_MS) return hit;
 
-  const { data } = await supabase
+  const { data: rawData } = await supabase
     .from('clubs')
     .select(CONFIG_COLUMNS)
     .eq('id', clubId)
     .maybeSingle();
 
+  const data = rawData as any;
   const cfg: ClubConfig = {
     id:               data?.id               ?? clubId,
     name:             data?.name             ?? clubId,

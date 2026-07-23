@@ -46,6 +46,7 @@ interface EmployeeDocument {
   expiry_date: string | null;
   status: 'vigente' | 'proximo_vencer' | 'vencido' | 'sin_fecha';
   uploaded_at: string;
+  document_types?: { id: string; name: string; is_combined_personal: number };
 }
 
 export default function EmployeeProfile() {
@@ -344,7 +345,7 @@ export default function EmployeeProfile() {
             const isContractTiedDoc = ['Afiliación CSS', 'Contrato firmado', 'Solicitud de entrada al club', 'Aviso de entrada'].some(name => type.name.includes(name));
 
             if (type.id === 'doc-personal-combined') {
-              const combinedDocs = documents.filter(d => ['doc-3', 'doc-4', 'doc-5'].includes(d.document_type_id));
+              const combinedDocs = documents.filter(d => d.document_types?.is_combined_personal === 1);
               doc = combinedDocs[0]; // Use the first one to get the file_url
               
               if (combinedDocs.length > 0) {
