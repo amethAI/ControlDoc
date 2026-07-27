@@ -27,7 +27,7 @@ async function sendPushToSubscribers(alertsByClub: Record<string, { club_name: s
   if (error || !subscriptions?.length) return;
 
   const alertedClubIds = new Set(Object.keys(alertsByClub));
-  const globalRoles = ['Super Administrador', 'Administrador'];
+  const globalRoles = ['Super Administrador', 'Administrador', 'KAM Redvolution'];
 
   for (const sub of subscriptions) {
     const user = (sub as any).users;
