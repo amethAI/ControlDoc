@@ -166,6 +166,15 @@ const isInternal = (req: any, res: any, next: any) => {
   next();
 };
 
+// Middleware for service-to-service auth (Power Automate, etc.)
+const isApiKey = (req: any, res: any, next: any) => {
+  const key = req.headers['x-api-key'];
+  if (!key || key !== process.env.PA_API_KEY) {
+    return res.status(401).json({ error: 'API key inválida o no proporcionada' });
+  }
+  next();
+};
+
 // ─── Access control helper ────────────────────────────────────────────────────
 // Checks if a user can access a resource belonging to a specific club/country.
 // Call AFTER fetching the resource so you have its club_id and country.
@@ -1555,6 +1564,57 @@ router.get('/attendance', canViewData, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener asistencia' });
   }
+});
+
+// Sync attendance from a programación schedule (called by Power Automate)
+// Auth: X-Api-Key header (env: PA_API_KEY)
+// Body: { clubId, records: [{ name, date, mark }] }
+// Marks: A=presente, L/P=permiso, I=incapacidad  — X/D/blank are skipped (no attendance record)
+router.post('/attendance/from-schedule', isApiKey, async (req, res) => {
+  const { clubId, records } = req.body;
+
+  if (!clubId || !Array.isArray(records)) {
+    return res.status(400).json({ error: 'Se requiere clubId y records[]' });
+  }
+
+  const MARK_TO_STATUS: Record<string, string> = {
+    A: 'presente',
+    L: 'permiso',
+    P: 'permiso',
+    I: 'incapacidad',
+  };
+
+  const normalize = (s: string) => s.trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+
+  const { data: employees, error: empErr } = await supabase
+    .from('employees')
+    .select('id, full_name')
+    .eq('club_id', clubId)
+    .eq('status', 'activo');
+
+  if (empErr) return res.status(500).json({ error: 'Error consultando empleados' });
+
+  const nameMap = new Map((employees || []).map((e: any) => [normalize(e.full_name), e.id]));
+
+  const toInsert: any[] = [];
+  const unmatched = new Set<string>();
+
+  for (const r of records) {
+    const status = MARK_TO_STATUS[r.mark?.toUpperCase()];
+    if (!status) continue; // X, D, blank, P pendiente → sin registro
+
+    const empId = nameMap.get(normalize(r.name));
+    if (!empId) { unmatched.add(r.name); continue; }
+
+    toInsert.push({ id: crypto.randomUUID(), employee_id: empId, date: r.date, status, updated_at: new Date().toISOString() });
+  }
+
+  if (toInsert.length > 0) {
+    const { error } = await supabase.from('attendance').upsert(toInsert, { onConflict: 'employee_id, date' });
+    if (error) return res.status(500).json({ error: 'Error guardando asistencia' });
+  }
+
+  res.json({ synced: toInsert.length, unmatched: [...unmatched] });
 });
 
 router.post('/attendance', canModifyData, async (req, res) => {
