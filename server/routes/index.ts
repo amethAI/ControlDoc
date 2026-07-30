@@ -2253,6 +2253,27 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
     ws.getRow(4).commit();
     try { (ws as any).conditionalFormattings.splice(0, (ws as any).conditionalFormattings.length); } catch {}
 
+    // Pre-clean: ExcelJS reads certain template cells as type=6 (Formula) but with
+    // no formula string — phantom shared-formula references that cause serialization
+    // errors ("Shared Formula master must exist for cell AC40").
+    // Clear them to null BEFORE any employee writes so serialization succeeds.
+    for (const row of ((ws as any)._rows || [])) {
+      if (!row) continue;
+      for (const cell of ((row as any)._cells || [])) {
+        if (!cell) continue;
+        const v = (cell as any)._value;
+        if (v && v.type === 6 && !v.formula) {
+          (cell as any)._value = {
+            get type() { return 0; },
+            get formula() { return ''; },
+            get value() { return null; },
+            get model() { return { type: 0 }; },
+            release() {}, acquire() {}
+          };
+        }
+      }
+    }
+
     const DATA_START_ROW = 9;
     const COL_N          = 14; // column N = 14 (1-indexed), where day codes start
     const numDays        = periodDays.length; // full period length, used for attendance counting
