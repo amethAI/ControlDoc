@@ -1617,6 +1617,89 @@ router.post('/attendance/from-schedule', isApiKey, async (req, res) => {
   res.json({ synced: toInsert.length, unmatched: [...unmatched] });
 });
 
+// POST /api/attendance/import-programacion
+// Auth: isAuthenticated — Admin, Super Admin, RRHH, Supervisora Redvolution
+// Body: multipart/form-data { file, clubId, year, month, half, sheetName, headerRow, nameCol, dataStartRow }
+router.post('/attendance/import-programacion', isAuthenticated, upload.single('file'), async (req: any, res: any) => {
+  const allowed = ['Administrador', 'Super Administrador', 'Recursos Humanos', 'Supervisora Redvolution'];
+  if (!allowed.includes(req.user?.role)) {
+    return res.status(403).json({ error: 'Sin permiso para importar programaciones' });
+  }
+
+  const { clubId, year, month, half, sheetName, headerRow, nameCol, dataStartRow } = req.body;
+  const file = req.file;
+
+  if (!clubId || !year || !month || !half || !sheetName || !file) {
+    return res.status(400).json({ error: 'Faltan parámetros: clubId, year, month, half, sheetName y archivo son obligatorios' });
+  }
+
+  const y = parseInt(year);
+  const m = parseInt(month);
+  const h = parseInt(half);
+  const hRow = parseInt(headerRow) || 4;
+  const nCol = parseInt(nameCol) || 2;
+  const dsRow = parseInt(dataStartRow) || 5;
+
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(file.buffer);
+
+  const ws = wb.getWorksheet(sheetName);
+  if (!ws) return res.status(400).json({ error: `Hoja "${sheetName}" no encontrada en el archivo` });
+
+  const startDay = h === 1 ? 1 : 16;
+  const endDay = h === 1 ? 15 : new Date(y, m, 0).getDate();
+
+  const dayColMap: Record<number, number> = {};
+  ws.getRow(hRow).eachCell({ includeEmpty: true }, (cell: any, colNum: number) => {
+    const val = Number(cell.value);
+    if (!isNaN(val) && val >= startDay && val <= endDay) dayColMap[val] = colNum;
+  });
+
+  const rawRecords: { name: string; date: string; mark: string }[] = [];
+  const totalRows = ws.rowCount || dsRow + 200;
+  for (let rIdx = dsRow; rIdx <= totalRows; rIdx++) {
+    const row = ws.getRow(rIdx);
+    const name = String(row.getCell(nCol).value ?? '').trim();
+    if (!name) continue;
+    for (let day = startDay; day <= endDay; day++) {
+      const col = dayColMap[day];
+      if (!col) continue;
+      const mark = String(row.getCell(col).value ?? '').trim().toUpperCase();
+      if (!mark || mark === 'X' || mark === 'D') continue;
+      const mm = String(m).padStart(2, '0');
+      const dd = String(day).padStart(2, '0');
+      rawRecords.push({ name, date: `${y}-${mm}-${dd}`, mark });
+    }
+  }
+
+  const MARK_TO_STATUS: Record<string, string> = { A: 'presente', L: 'permiso', P: 'permiso', I: 'incapacidad' };
+  const normalize = (s: string) => s.trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+
+  const { data: employees, error: empErr } = await supabase
+    .from('employees').select('id, full_name').eq('club_id', clubId).eq('status', 'activo');
+  if (empErr) return res.status(500).json({ error: 'Error consultando empleados' });
+
+  const nameMap = new Map((employees || []).map((e: any) => [normalize(e.full_name), e.id]));
+  const toInsert: any[] = [];
+  const unmatched = new Set<string>();
+
+  for (const r of rawRecords) {
+    const status = MARK_TO_STATUS[r.mark];
+    if (!status) continue;
+    const empId = nameMap.get(normalize(r.name));
+    if (!empId) { unmatched.add(r.name); continue; }
+    toInsert.push({ id: crypto.randomUUID(), employee_id: empId, date: r.date, status, updated_at: new Date().toISOString() });
+  }
+
+  if (toInsert.length > 0) {
+    const { error } = await supabase.from('attendance').upsert(toInsert, { onConflict: 'employee_id, date' });
+    if (error) return res.status(500).json({ error: 'Error guardando asistencia' });
+  }
+
+  res.json({ synced: toInsert.length, unmatched: [...unmatched] });
+});
+
 router.post('/attendance', canModifyData, async (req, res) => {
   const { records, club_id, start_date, end_date } = req.body;
   const user = (req as any).user;

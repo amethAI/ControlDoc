@@ -15,7 +15,8 @@ import {
   Coffee,
   FileSpreadsheet,
   Printer,
-  Copy
+  Copy,
+  Upload
 } from 'lucide-react';
 import {
   format,
@@ -105,6 +106,20 @@ export default function Attendance() {
   const handleSaveRef = useRef<() => void>(() => {});
   const [capturingScreen, setCapturingScreen] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importForm, setImportForm] = useState({
+    clubId: '',
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+    half: '1' as '1' | '2',
+    sheetName: '',
+    headerRow: 4,
+    nameCol: 2,
+    dataStartRow: 5,
+  });
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ synced: number; unmatched: string[] } | null>(null);
 
   if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
     return (
@@ -667,6 +682,58 @@ export default function Attendance() {
     }
   };
 
+  const MONTHS_ES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+
+  const openImportModal = () => {
+    const clubName = clubs.find(c => c.id === selectedClubId)?.name?.toUpperCase() ?? '';
+    const isCostaVerde = clubName.includes('COSTA') || clubName.includes('VERDE');
+    setImportForm({
+      clubId: selectedClubId || (clubs[0]?.id ?? ''),
+      year: currentMonth.getFullYear(),
+      month: currentMonth.getMonth() + 1,
+      half: viewHalf === '2' ? '2' : '1',
+      sheetName: `${MONTHS_ES[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`,
+      headerRow: isCostaVerde ? 5 : 4,
+      nameCol: 2,
+      dataStartRow: isCostaVerde ? 6 : 5,
+    });
+    setImportFile(null);
+    setImportResult(null);
+    setShowImportModal(true);
+  };
+
+  const handleImportProgramacion = async () => {
+    if (!importFile || !importForm.clubId) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      fd.append('clubId', importForm.clubId);
+      fd.append('year', String(importForm.year));
+      fd.append('month', String(importForm.month));
+      fd.append('half', importForm.half);
+      fd.append('sheetName', importForm.sheetName);
+      fd.append('headerRow', String(importForm.headerRow));
+      fd.append('nameCol', String(importForm.nameCol));
+      fd.append('dataStartRow', String(importForm.dataStartRow));
+      const res = await apiFetch('/api/attendance/import-programacion', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Error desconocido' }));
+        toast.error(err.error || 'Error al importar');
+        return;
+      }
+      const data = await res.json();
+      setImportResult(data);
+      toast.success(`${data.synced} marcaciones importadas`);
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message || 'Error al importar');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const captureGrid = async () => {
     if (!gridRef.current || capturingScreen) return;
     setCapturingScreen(true);
@@ -803,6 +870,16 @@ export default function Attendance() {
             >
               <FileSpreadsheet className="h-4 w-4 mr-2" />
               {downloadingPsmtGlobal ? 'Generando...' : 'PSMT Global'}
+            </button>
+          )}
+
+          {['Administrador', 'Super Administrador', 'Recursos Humanos', 'Supervisora Redvolution'].includes(user?.role || '') && (
+            <button
+              onClick={openImportModal}
+              className="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 shadow-sm transition-colors"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Importar Programación
             </button>
           )}
 
@@ -1337,6 +1414,175 @@ export default function Attendance() {
                   {downloadingPsmt ? 'Generando...' : 'Confirmar y Descargar'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Programación Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-teal-100 rounded-lg">
+                  <Upload className="h-5 w-5 text-teal-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">Importar Programación</h3>
+                  <p className="text-xs text-slate-500">Cargá el Excel de marcaciones para sincronizar asistencia</p>
+                </div>
+              </div>
+              <button onClick={() => setShowImportModal(false)} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
+                <CloseIcon className="h-4 w-4 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* Club */}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Club</label>
+                <select
+                  value={importForm.clubId}
+                  onChange={e => {
+                    const id = e.target.value;
+                    const name = clubs.find(c => c.id === id)?.name?.toUpperCase() ?? '';
+                    const isCV = name.includes('COSTA') || name.includes('VERDE');
+                    setImportForm(f => ({ ...f, clubId: id, headerRow: isCV ? 5 : 4, dataStartRow: isCV ? 6 : 5 }));
+                  }}
+                  className="w-full rounded-lg border-slate-300 text-sm focus:ring-teal-500 focus:border-teal-500"
+                >
+                  <option value="">Seleccionar club...</option>
+                  {clubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+
+              {/* Año / Mes / Quincena */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Año</label>
+                  <input
+                    type="number"
+                    value={importForm.year}
+                    onChange={e => setImportForm(f => ({ ...f, year: Number(e.target.value) }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Mes (1–12)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={importForm.month}
+                    onChange={e => setImportForm(f => ({ ...f, month: Number(e.target.value) }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Quincena</label>
+                  <select
+                    value={importForm.half}
+                    onChange={e => setImportForm(f => ({ ...f, half: e.target.value as '1' | '2' }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-teal-500 focus:border-teal-500"
+                  >
+                    <option value="1">1ra (días 1–15)</option>
+                    <option value="2">2da (días 16–fin)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Nombre hoja */}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Nombre de la hoja (pestaña Excel)</label>
+                <input
+                  type="text"
+                  value={importForm.sheetName}
+                  onChange={e => setImportForm(f => ({ ...f, sheetName: e.target.value }))}
+                  placeholder="Ej: JULIO 2026"
+                  className="w-full rounded-lg border-slate-300 text-sm focus:ring-teal-500 focus:border-teal-500"
+                />
+              </div>
+
+              {/* Parámetros técnicos */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Fila encabezado</label>
+                  <input
+                    type="number"
+                    value={importForm.headerRow}
+                    onChange={e => setImportForm(f => ({ ...f, headerRow: Number(e.target.value) }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Col. nombre</label>
+                  <input
+                    type="number"
+                    value={importForm.nameCol}
+                    onChange={e => setImportForm(f => ({ ...f, nameCol: Number(e.target.value) }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Fila inicio datos</label>
+                  <input
+                    type="number"
+                    value={importForm.dataStartRow}
+                    onChange={e => setImportForm(f => ({ ...f, dataStartRow: Number(e.target.value) }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+              </div>
+
+              {/* Archivo */}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Archivo Excel (.xlsx)</label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={e => setImportFile(e.target.files?.[0] ?? null)}
+                  className="block w-full text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
+                />
+              </div>
+
+              {/* Resultado */}
+              {importResult && (
+                <div className={clsx("rounded-lg p-3 text-sm", importResult.synced > 0 ? "bg-emerald-50 border border-emerald-200" : "bg-slate-50 border border-slate-200")}>
+                  <p className="font-medium text-slate-800">
+                    ✓ {importResult.synced} marcaciones sincronizadas
+                  </p>
+                  {importResult.unmatched.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs text-amber-700 font-medium">Sin match ({importResult.unmatched.length}):</p>
+                      <ul className="mt-1 space-y-0.5 max-h-28 overflow-y-auto">
+                        {importResult.unmatched.map(n => (
+                          <li key={n} className="text-xs text-slate-600">• {n}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200">
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                {importResult ? 'Cerrar' : 'Cancelar'}
+              </button>
+              {!importResult && (
+                <button
+                  onClick={handleImportProgramacion}
+                  disabled={importing || !importFile || !importForm.clubId}
+                  className="inline-flex items-center px-5 py-2 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 disabled:opacity-60 transition-colors"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {importing ? 'Importando...' : 'Importar'}
+                </button>
+              )}
             </div>
           </div>
         </div>
