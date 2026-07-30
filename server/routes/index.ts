@@ -2345,16 +2345,11 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       }
 
       // Computed summary values — written directly because ExcelJS can't reliably
-      // replicate shared formulas from the template. Wrapped in try/catch because
-      // ExcelJS throws on shared-formula clone cells when accessed directly.
+      // replicate shared formulas from the template. Plain try/catch — ExcelJS may
+      // throw on shared-formula cells outside the master's ref range.
       const safeWrite = (col: number | undefined, val: any) => {
         if (!col) return;
-        try {
-          const cell = row.getCell(col);
-          // Force-clear internal shared-formula ref before writing
-          (cell as any)._value = null;
-          cell.value = val;
-        } catch {}
+        try { row.getCell(col).value = val; } catch {}
       };
       safeWrite(calcColMap.dias,         dias    || null);
       safeWrite(calcColMap.doms,         doms    || null);
