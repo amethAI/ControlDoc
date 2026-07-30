@@ -719,8 +719,10 @@ export default function Attendance() {
       fd.append('dataStartRow', String(importForm.dataStartRow));
       const res = await apiFetch('/api/attendance/import-programacion', { method: 'POST', body: fd });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Error desconocido' }));
-        toast.error(err.error || 'Error al importar');
+        const text = await res.text().catch(() => '');
+        let msg = 'Error al importar';
+        try { msg = JSON.parse(text).error || msg; } catch { msg = text.slice(0, 120) || `HTTP ${res.status}`; }
+        toast.error(msg);
         return;
       }
       const data = await res.json();
