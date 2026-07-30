@@ -2255,7 +2255,7 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
 
     const DATA_START_ROW = 9;
     const COL_N          = 14; // column N = 14 (1-indexed), where day codes start
-    const numDays        = periodDays.length; // dynamic: 15 for 1ra Q, 15–16 for 2da Q
+    const numDays        = periodDays.length; // full period length, used for attendance counting
 
     // ── Scan template header row to find calculation column positions by label ──
     const HEADER_ROW = 8;
@@ -2283,6 +2283,13 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
         if (text.includes(label) && !calcColMap[key]) { calcColMap[key] = col; break; }
       }
     });
+
+    // Cap day-code column writes at the first calc column — prevents overflowing into
+    // shared-formula cells when the period has 16 days (2da Q of 31-day months)
+    const firstCalcCol = Math.min(
+      ...[calcColMap.dias, calcColMap.doms, calcColMap.totalDoms].filter(Boolean as any)
+    );
+    const maxDaySlots = (firstCalcCol && isFinite(firstCalcCol)) ? firstCalcCol - COL_N : 15;
 
     // Fill one row per employee
     for (let i = 0; i < empList.length; i++) {
@@ -2329,27 +2336,38 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       row.getCell(12).value = SALARIO_MENSUAL;
       row.getCell(13).value = SALARIO_DIA;
 
-      // Day codes (dynamic length — covers all period days)
-      for (let d = 0; d < numDays; d++) {
+      // Day codes — capped at maxDaySlots to avoid overflowing into calc columns
+      // (2da Q of 31-day months has 16 days but template only has 15 day slots)
+      for (let d = 0; d < Math.min(numDays, maxDaySlots); d++) {
         const day  = periodDays[d];
         const mark = empMarks?.get(fmt(day));
-        row.getCell(COL_N + d).value = progToCode(mark, day) || null;
+        try { row.getCell(COL_N + d).value = progToCode(mark, day) || null; } catch {}
       }
 
       // Computed summary values — written directly because ExcelJS can't reliably
-      // replicate shared formulas from the template
-      if (calcColMap.dias)         row.getCell(calcColMap.dias).value         = dias    || null;
-      if (calcColMap.doms)         row.getCell(calcColMap.doms).value         = doms    || null;
-      if (calcColMap.totalDoms)    row.getCell(calcColMap.totalDoms).value    = doms    ? parseFloat((doms * SALARIO_DOM).toFixed(2)) : null;
-      if (calcColMap.incap)        row.getCell(calcColMap.incap).value        = incap   || null;
-      if (calcColMap.totalIncap)   row.getCell(calcColMap.totalIncap).value   = incap   ? parseFloat((incap * SALARIO_DIA).toFixed(2)) : null;
-      if (calcColMap.permiso)      row.getCell(calcColMap.permiso).value      = permiso || null;
-      if (calcColMap.totalPermiso) row.getCell(calcColMap.totalPermiso).value = permiso ? parseFloat((permiso * SALARIO_DIA).toFixed(2)) : null;
-      if (calcColMap.feriado)      row.getCell(calcColMap.feriado).value      = fer     || null;
-      if (calcColMap.totalFeriado) row.getCell(calcColMap.totalFeriado).value = fer     ? parseFloat((fer * SALARIO_DIA).toFixed(2)) : null;
-      if (calcColMap.bruto)        row.getCell(calcColMap.bruto).value        = bruto   || null;
-      if (calcColMap.css)          row.getCell(calcColMap.css).value          = css     || null;
-      if (calcColMap.neto)         row.getCell(calcColMap.neto).value         = neto    || null;
+      // replicate shared formulas from the template. Wrapped in try/catch because
+      // ExcelJS throws on shared-formula clone cells when accessed directly.
+      const safeWrite = (col: number | undefined, val: any) => {
+        if (!col) return;
+        try {
+          const cell = row.getCell(col);
+          // Force-clear internal shared-formula ref before writing
+          (cell as any)._value = null;
+          cell.value = val;
+        } catch {}
+      };
+      safeWrite(calcColMap.dias,         dias    || null);
+      safeWrite(calcColMap.doms,         doms    || null);
+      safeWrite(calcColMap.totalDoms,    doms    ? parseFloat((doms * SALARIO_DOM).toFixed(2)) : null);
+      safeWrite(calcColMap.incap,        incap   || null);
+      safeWrite(calcColMap.totalIncap,   incap   ? parseFloat((incap * SALARIO_DIA).toFixed(2)) : null);
+      safeWrite(calcColMap.permiso,      permiso || null);
+      safeWrite(calcColMap.totalPermiso, permiso ? parseFloat((permiso * SALARIO_DIA).toFixed(2)) : null);
+      safeWrite(calcColMap.feriado,      fer     || null);
+      safeWrite(calcColMap.totalFeriado, fer     ? parseFloat((fer * SALARIO_DIA).toFixed(2)) : null);
+      safeWrite(calcColMap.bruto,        bruto   || null);
+      safeWrite(calcColMap.css,          css     || null);
+      safeWrite(calcColMap.neto,         neto    || null);
 
       // Clear template's hardcoded deduction input cols (AX=50, AY=51, AZ=52)
       row.getCell(50).value = null;
