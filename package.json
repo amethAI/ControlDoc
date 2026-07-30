@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "node dist/server.js",
-    "build": "vite build && npx esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express --external:vite --external:cors --external:dotenv --external:multer --external:cookie-parser --external:archiver --external:bcryptjs --external:jsonwebtoken --external:node-cron --external:nodemailer --external:resend --external:@supabase/supabase-js --external:papaparse --external:date-fns --external:pptxgenjs --external:@google/genai --external:web-push --external:exceljs",
+    "build": "vite build && npx esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express --external:vite --external:cors --external:dotenv --external:multer --external:cookie-parser --external:archiver --external:bcryptjs --external:jsonwebtoken --external:node-cron --external:nodemailer --external:resend --external:@supabase/supabase-js --external:papaparse --external:date-fns --external:pptxgenjs --external:@google/genai --external:web-push --external:exceljs --external:xlsx",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
