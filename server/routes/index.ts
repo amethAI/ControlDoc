@@ -2267,25 +2267,32 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
     ws.getRow(4).commit();
     try { (ws as any).conditionalFormattings.splice(0, (ws as any).conditionalFormattings.length); } catch {}
 
-    // Pre-clean: ExcelJS reads certain template cells as type=6 (Formula) but with
-    // no formula string — phantom shared-formula references that cause serialization
-    // errors ("Shared Formula master must exist for cell AC40").
-    // Clear them to null BEFORE any employee writes so serialization succeeds.
+    // Pre-fix shared formula clones: ExcelJS stores some cells as type=6 (Formula)
+    // with model.formula=undefined (the serializer path) even though the formula
+    // getter can still resolve it from the shared-formula cache.
+    // Fix: store the resolved formula back to _formula so model.formula is populated.
+    // Only clear to null if the formula genuinely can't be resolved.
+    const nullValObj = {
+      get type() { return 0; }, get formula() { return ''; },
+      get value() { return null; }, get model() { return { type: 0 }; },
+      release() {}, acquire() {}
+    };
     for (const row of ((ws as any)._rows || [])) {
       if (!row) continue;
       for (const cell of ((row as any)._cells || [])) {
         if (!cell) continue;
         const v = (cell as any)._value;
-        // Check model.formula, NOT the formula getter — the getter resolves from the
-        // shared-formula cache but the serializer reads model.formula directly
         if (v && v.model?.type === 6 && v.model?.formula == null) {
-          (cell as any)._value = {
-            get type() { return 0; },
-            get formula() { return ''; },
-            get value() { return null; },
-            get model() { return { type: 0 }; },
-            release() {}, acquire() {}
-          };
+          try {
+            const resolved = String(v.formula ?? '');
+            if (resolved) {
+              (v as any)._formula = resolved; // store back so model.formula is populated
+            } else {
+              (cell as any)._value = nullValObj;
+            }
+          } catch {
+            (cell as any)._value = nullValObj;
+          }
         }
       }
     }
