@@ -2254,27 +2254,61 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
     try { (ws as any).conditionalFormattings.splice(0, (ws as any).conditionalFormattings.length); } catch {}
 
     const DATA_START_ROW = 9;
-    const COL_N          = 14; // column N = 14 (1-indexed)
-    const MAX_DAY_COLS   = 15;
+    const COL_N          = 14; // column N = 14 (1-indexed), where day codes start
+    const numDays        = periodDays.length; // dynamic: 15 for 1ra Q, 15–16 for 2da Q
 
-    // Extract formulas from template row 9 to replicate across all employee rows
-    const rowFormulas = new Map<number, string>();
-    ws.getRow(DATA_START_ROW).eachCell({ includeEmpty: false }, (cell, col) => {
-      if ((cell as any).formula) rowFormulas.set(col, (cell as any).formula as string);
+    // ── Scan template header row to find calculation column positions by label ──
+    const HEADER_ROW = 8;
+    const calcColMap: Record<string, number> = {};
+    // Check TOTAL variants first to avoid "INCAPACIDAD" matching "TOTAL INCAPACIDAD"
+    const labelMap: Array<[string, string]> = [
+      ['TOTAL DOMINGOS',     'totalDoms'],
+      ['TOTAL INCAPACIDAD',  'totalIncap'],
+      ['TOTAL PERMISO',      'totalPermiso'],
+      ['TOTAL FERIADO',      'totalFeriado'],
+      ['DIAS LABORADOS',     'dias'],
+      ['DOMINGOS LABORADOS', 'doms'],
+      ['INCAPACIDAD',        'incap'],
+      ['PERMISO',            'permiso'],
+      ['FERIADO',            'feriado'],
+      ['BRUTO',              'bruto'],
+      ['CSS',                'css'],
+      ['NETO',               'neto'],
+    ];
+    const stripAccents = (s: string) =>
+      s.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    ws.getRow(HEADER_ROW).eachCell({ includeEmpty: false }, (cell, col) => {
+      const text = stripAccents(String(cell.value ?? ''));
+      for (const [label, key] of labelMap) {
+        if (text.includes(label) && !calcColMap[key]) { calcColMap[key] = col; break; }
+      }
     });
-    const adjustFormula = (f: string, toRow: number): string =>
-      f.replace(/([A-Z]+)(\d+)/g, (_, c, n) => parseInt(n) === DATA_START_ROW ? c + toRow : c + n);
 
     // Fill one row per employee
     for (let i = 0; i < empList.length; i++) {
-      const emp    = empList[i] as any;
-      const rowIdx = DATA_START_ROW + i;
-      const row    = ws.getRow(rowIdx);
-      const kronos = emp.cedula ? clubCfg.kronos_prefix + emp.cedula.replace(/-/g, '') : '';
+      const emp      = empList[i] as any;
+      const rowIdx   = DATA_START_ROW + i;
+      const row      = ws.getRow(rowIdx);
+      const kronos   = emp.cedula ? clubCfg.kronos_prefix + emp.cedula.replace(/-/g, '') : '';
       const empMarks = progAttMap.get(normalize(emp.full_name));
 
-      // Clear fill from template's sample data so there's no colour bleed
-      for (let c = 1; c <= COL_N + MAX_DAY_COLS - 1; c++) {
+      // Compute attendance totals for this employee
+      let dias = 0, doms = 0, incap = 0, permiso = 0, fer = 0;
+      for (const day of periodDays) {
+        const code = progToCode(empMarks?.get(fmt(day)), day);
+        if      (code === '1') dias++;
+        else if (code === 'D') doms++;
+        else if (code === 'I') incap++;
+        else if (code === 'P') permiso++;
+        else if (code === 'F') fer++;
+      }
+      const bruto = parseFloat((dias * SALARIO_DIA + doms * SALARIO_DOM + incap * SALARIO_DIA + fer * SALARIO_DIA + permiso * SALARIO_DIA).toFixed(2));
+      const css   = parseFloat((bruto * CSS_RATE).toFixed(2));
+      const neto  = parseFloat((bruto - css).toFixed(2));
+
+      // Clear fills (extend range to cover day cols + calc cols)
+      const clearUpTo = Math.max(COL_N + numDays - 1, 52);
+      for (let c = 1; c <= clearUpTo; c++) {
         try {
           const cell = row.getCell(c);
           if (!(cell as any).formula) cell.fill = { type: 'pattern', pattern: 'none' };
@@ -2295,20 +2329,33 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       row.getCell(12).value = SALARIO_MENSUAL;
       row.getCell(13).value = SALARIO_DIA;
 
-      for (let d = 0; d < periodDays.length && d < MAX_DAY_COLS; d++) {
+      // Day codes (dynamic length — covers all period days)
+      for (let d = 0; d < numDays; d++) {
         const day  = periodDays[d];
         const mark = empMarks?.get(fmt(day));
         row.getCell(COL_N + d).value = progToCode(mark, day) || null;
       }
+
+      // Computed summary values — written directly because ExcelJS can't reliably
+      // replicate shared formulas from the template
+      if (calcColMap.dias)         row.getCell(calcColMap.dias).value         = dias    || null;
+      if (calcColMap.doms)         row.getCell(calcColMap.doms).value         = doms    || null;
+      if (calcColMap.totalDoms)    row.getCell(calcColMap.totalDoms).value    = doms    ? parseFloat((doms * SALARIO_DOM).toFixed(2)) : null;
+      if (calcColMap.incap)        row.getCell(calcColMap.incap).value        = incap   || null;
+      if (calcColMap.totalIncap)   row.getCell(calcColMap.totalIncap).value   = incap   ? parseFloat((incap * SALARIO_DIA).toFixed(2)) : null;
+      if (calcColMap.permiso)      row.getCell(calcColMap.permiso).value      = permiso || null;
+      if (calcColMap.totalPermiso) row.getCell(calcColMap.totalPermiso).value = permiso ? parseFloat((permiso * SALARIO_DIA).toFixed(2)) : null;
+      if (calcColMap.feriado)      row.getCell(calcColMap.feriado).value      = fer     || null;
+      if (calcColMap.totalFeriado) row.getCell(calcColMap.totalFeriado).value = fer     ? parseFloat((fer * SALARIO_DIA).toFixed(2)) : null;
+      if (calcColMap.bruto)        row.getCell(calcColMap.bruto).value        = bruto   || null;
+      if (calcColMap.css)          row.getCell(calcColMap.css).value          = css     || null;
+      if (calcColMap.neto)         row.getCell(calcColMap.neto).value         = neto    || null;
 
       // Clear template's hardcoded deduction input cols (AX=50, AY=51, AZ=52)
       row.getCell(50).value = null;
       row.getCell(51).value = null;
       row.getCell(52).value = null;
 
-      for (const [col, formula] of rowFormulas.entries()) {
-        try { row.getCell(col).value = { formula: adjustFormula(formula, rowIdx) }; } catch {}
-      }
       row.commit();
     }
 
