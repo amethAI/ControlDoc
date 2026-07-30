@@ -2170,6 +2170,20 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
     const normalize = (s: string) =>
       s.trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
 
+    // Fuzzy lookup: exact match first, then prefix match to handle programación having
+    // apellido materno that the DB doesn't (e.g. "BRITANY CABALLERO FLORES" vs "BRITANY CABALLERO")
+    const findProgMarks = (empFullName: string): Map<string, string> | undefined => {
+      const normEmp = normalize(empFullName);
+      const exact = progAttMap.get(normEmp);
+      if (exact) return exact;
+      for (const [progName, marks] of progAttMap) {
+        if (progName.startsWith(normEmp + ' ') || normEmp.startsWith(progName + ' ')) {
+          return marks;
+        }
+      }
+      return undefined;
+    };
+
     // Build attendance map: normalizedName → dateStr ('YYYY-MM-DD') → raw mark
     const progAttMap = new Map<string, Map<string, string>>();
     for (let R = dsRow - 1; R <= range.e.r; R++) {
@@ -2320,7 +2334,7 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       const rowIdx   = DATA_START_ROW + i;
       const row      = ws.getRow(rowIdx);
       const kronos   = emp.cedula ? clubCfg.kronos_prefix + emp.cedula.replace(/-/g, '') : '';
-      const empMarks = progAttMap.get(normalize(emp.full_name));
+      const empMarks = findProgMarks(emp.full_name);
 
       // Compute attendance totals for this employee
       let dias = 0, doms = 0, incap = 0, permiso = 0, fer = 0;
@@ -2416,7 +2430,7 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       for (let i = 0; i < empList.length; i++) {
         const emp      = empList[i] as any;
         const rowIdx   = HOJA2_START + i;
-        const empMarks = progAttMap.get(normalize(emp.full_name));
+        const empMarks = findProgMarks(emp.full_name);
         let dias = 0, doms = 0, incap = 0, fer = 0;
         for (const day of periodDays) {
           const code = progToCode(empMarks?.get(fmt(day)), day);
