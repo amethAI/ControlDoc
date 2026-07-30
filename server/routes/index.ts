@@ -2286,7 +2286,8 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
           try {
             const resolved = String(v.formula ?? '');
             if (resolved) {
-              (v as any)._formula = resolved; // store back so model.formula is populated
+              (v.model as any).formula = resolved;
+              delete (v.model as any).sharedFormula;
             } else {
               (cell as any)._value = nullValObj;
             }
