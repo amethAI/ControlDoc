@@ -2134,9 +2134,23 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
     // ── 1. Parse programación file with SheetJS (lightweight buffer parse — no OOM) ──
     const { default: XLSX } = (await import('xlsx')) as any;
     const progWb = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const progWs = progWb.Sheets[sheetName];
+    const sheetNames: string[] = progWb.SheetNames || [];
+
+    // Exact match first, then trimmed case-insensitive fallback
+    let resolvedSheetName = sheetName;
+    let progWs = progWb.Sheets[sheetName];
     if (!progWs) {
-      return res.status(400).json({ error: `Hoja "${sheetName}" no encontrada en el archivo de programación` });
+      const normalizedTarget = sheetName.trim().toUpperCase();
+      const match = sheetNames.find((s: string) => s.trim().toUpperCase() === normalizedTarget);
+      if (match) {
+        resolvedSheetName = match;
+        progWs = progWb.Sheets[match];
+      }
+    }
+    if (!progWs) {
+      return res.status(400).json({
+        error: `Hoja "${sheetName}" no encontrada. Hojas disponibles: ${sheetNames.join(' | ')}`
+      });
     }
 
     const startDay = half === '1' ? 1 : 16;
