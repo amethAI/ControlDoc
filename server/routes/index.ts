@@ -2262,7 +2262,9 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       for (const cell of ((row as any)._cells || [])) {
         if (!cell) continue;
         const v = (cell as any)._value;
-        if (v && v.type === 6 && !v.formula) {
+        // Check model.formula, NOT the formula getter — the getter resolves from the
+        // shared-formula cache but the serializer reads model.formula directly
+        if (v && v.model?.type === 6 && v.model?.formula == null) {
           (cell as any)._value = {
             get type() { return 0; },
             get formula() { return ''; },
