@@ -667,6 +667,41 @@ router.get('/employees', canViewData, async (req, res) => {
   }
 });
 
+// GET /api/employees/export — read-only export for Power Query / Excel master
+// Auth: x-api-key header (PA_API_KEY). Returns JSON array with employee payroll fields.
+router.get('/employees/export', isApiKey, async (req: any, res: any) => {
+  try {
+    const { club_id } = req.query;
+
+    let empQuery = supabase
+      .from('employees')
+      .select('full_name, banco, cuenta_bancaria, contract_start, club_id')
+      .eq('status', 'activo')
+      .order('full_name');
+    if (club_id) empQuery = empQuery.eq('club_id', club_id as string);
+
+    const { data: employees, error: empErr } = await empQuery;
+    if (empErr) return res.status(500).json({ error: empErr.message });
+
+    const { data: clubs } = await supabase.from('clubs').select('id, name');
+    const clubMap = new Map((clubs || []).map((c: any) => [c.id, c.name]));
+
+    const result = (employees || []).map((e: any) => ({
+      nombre: e.full_name,
+      banco: e.banco || '',
+      cuenta: e.cuenta_bancaria || '',
+      fecha_ingreso: e.contract_start || '',
+      club: clubMap.get(e.club_id) || e.club_id || '',
+      club_id: e.club_id || '',
+    }));
+
+    res.json(result);
+  } catch (err: any) {
+    console.error('[employees/export]', err);
+    res.status(500).json({ error: err?.message || 'Error interno' });
+  }
+});
+
 // Create employee
 router.post('/employees', canModifyData, async (req, res) => {
   const user = (req as any).user;
