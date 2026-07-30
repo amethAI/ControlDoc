@@ -71,6 +71,18 @@ const upload = multer({
     cb(null, true);
   },
 });
+const uploadExcel = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = file.originalname.split('.').pop()?.toLowerCase() ?? '';
+    if (!['xlsx', 'xls'].includes(ext)) {
+      return cb(new Error('Solo se aceptan archivos Excel (.xlsx, .xls)'));
+    }
+    cb(null, true);
+  },
+});
+
 if (!process.env.JWT_SECRET) {
   console.warn('⚠️  JWT_SECRET no está en .env — usando valor por defecto. Configuralo para producción.');
 }
@@ -1620,7 +1632,16 @@ router.post('/attendance/from-schedule', isApiKey, async (req, res) => {
 // POST /api/attendance/import-programacion
 // Auth: isAuthenticated — Admin, Super Admin, RRHH, Supervisora Redvolution
 // Body: multipart/form-data { file, clubId, year, month, half, sheetName, headerRow, nameCol, dataStartRow }
-router.post('/attendance/import-programacion', isAuthenticated, upload.single('file'), async (req: any, res: any) => {
+router.post('/attendance/import-programacion', isAuthenticated, (req: any, res: any, next: any) => {
+  uploadExcel.single('file')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: `Error al subir archivo: ${err.message}` });
+    } else if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, async (req: any, res: any) => {
   try {
     const allowed = ['Administrador', 'Super Administrador', 'Recursos Humanos', 'Supervisora Redvolution'];
     if (!allowed.includes(req.user?.role)) {
