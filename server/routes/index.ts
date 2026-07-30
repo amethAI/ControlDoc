@@ -2096,6 +2096,271 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
   }
 });
 
+// Generate PSMT planilla directly from a programación Excel file — no attendance table
+// Auth: isAuthenticated + role check
+// Body: multipart/form-data { file, clubId, year, month, half, sheetName, headerRow, nameCol, dataStartRow }
+router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: any, next: any) => {
+  uploadExcel.single('file')(req, res, (err: any) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: `Error al subir: ${err.message}` });
+    } else if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, async (req: any, res: any) => {
+  try {
+    const allowed = ['Administrador', 'Super Administrador', 'Recursos Humanos', 'Supervisora Redvolution'];
+    if (!allowed.includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Sin permiso para generar planilla PSMT' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Se requiere el archivo de programación (.xlsx)' });
+    }
+
+    const { clubId, year, month, half, sheetName } = req.body;
+    const hRow  = parseInt(req.body.headerRow)    || 4;
+    const nCol  = parseInt(req.body.nameCol)      || 2;
+    const dsRow = parseInt(req.body.dataStartRow) || 5;
+
+    if (!clubId || !year || !month || !['1', '2'].includes(half) || !sheetName) {
+      return res.status(400).json({ error: 'Parámetros requeridos: clubId, year, month, half (1 o 2), sheetName' });
+    }
+
+    const y = parseInt(year);
+    const m = parseInt(month) - 1; // 0-indexed for Date constructor
+
+    // ── 1. Parse programación file with SheetJS (lightweight buffer parse — no OOM) ──
+    const { default: XLSX } = (await import('xlsx')) as any;
+    const progWb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const progWs = progWb.Sheets[sheetName];
+    if (!progWs) {
+      return res.status(400).json({ error: `Hoja "${sheetName}" no encontrada en el archivo de programación` });
+    }
+
+    const startDay = half === '1' ? 1 : 16;
+    const endDay   = half === '1' ? 15 : new Date(y, m + 1, 0).getDate();
+    const range    = XLSX.utils.decode_range(progWs['!ref'] || 'A1:A1');
+
+    // Map day number → SheetJS column index (0-based) from the header row
+    const dayColMap: Record<number, number> = {};
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cell = progWs[XLSX.utils.encode_cell({ r: hRow - 1, c: C })];
+      if (!cell) continue;
+      const val = Number(cell.v);
+      if (!isNaN(val) && val >= startDay && val <= endDay) dayColMap[val] = C;
+    }
+
+    // Normalize employee names for matching (strips accents, uppercases, collapses spaces)
+    const normalize = (s: string) =>
+      s.trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+
+    // Build attendance map: normalizedName → dateStr ('YYYY-MM-DD') → raw mark
+    const progAttMap = new Map<string, Map<string, string>>();
+    for (let R = dsRow - 1; R <= range.e.r; R++) {
+      const nameCell = progWs[XLSX.utils.encode_cell({ r: R, c: nCol - 1 })];
+      const rawName  = String(nameCell?.v ?? '').trim();
+      if (!rawName) continue;
+
+      const normName = normalize(rawName);
+      if (!progAttMap.has(normName)) progAttMap.set(normName, new Map());
+      const empMarks = progAttMap.get(normName)!;
+
+      for (let day = startDay; day <= endDay; day++) {
+        const col = dayColMap[day];
+        if (col === undefined) continue;
+        const markCell = progWs[XLSX.utils.encode_cell({ r: R, c: col })];
+        const mark = String(markCell?.v ?? '').trim().toUpperCase();
+        if (!mark) continue;
+        const mm = String(m + 1).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        empMarks.set(`${y}-${mm}-${dd}`, mark);
+      }
+    }
+
+    // ── 2. Fetch employees + club config from DB ──
+    const clubCfg = await getClubConfig(clubId);
+    if (!clubCfg.name) return res.status(404).json({ error: 'Club no encontrado' });
+
+    const { data: employees, error: empErr } = await supabase
+      .from('employees')
+      .select('id, full_name, cedula, position, contract_start, banco, cuenta_bancaria')
+      .eq('club_id', clubId)
+      .eq('status', 'activo')
+      .order('full_name');
+    if (empErr) throw empErr;
+
+    const empList = employees || [];
+
+    // ── 3. Build period days array ──
+    const startDate = half === '1' ? new Date(y, m, 1) : new Date(y, m, 16);
+    const endDate   = half === '1' ? new Date(y, m, 15) : new Date(y, m + 1, 0);
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    const periodDays: Date[] = [];
+    const cur = new Date(startDate);
+    while (cur <= endDate) { periodDays.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
+
+    // Convert programación mark → PSMT template code
+    const progToCode = (mark: string | undefined, day: Date): string => {
+      if (!mark) return '';
+      const isSunday = day.getDay() === 0;
+      switch (mark) {
+        case 'A': return isSunday ? 'D' : '1'; // presente: D=domingo, 1=día regular
+        case 'P': return 'P';  // permiso
+        case 'I': return 'I';  // incapacidad
+        case 'F': return 'F';  // feriado
+        default:  return '';   // L/X/D/blank = libre/descanso, no cuenta
+      }
+    };
+
+    const SALARIO_MENSUAL = clubCfg.salary_mensual;
+    const SALARIO_DIA     = clubCfg.salary_dia;
+    const SALARIO_DOM     = clubCfg.salary_dom;
+    const CSS_RATE        = clubCfg.css_rate;
+
+    // ── 4. Load PSMT template and fill with ExcelJS (reads from disk = fine, no OOM) ──
+    const { default: ExcelJS } = await import('exceljs');
+    const templateFile = half === '1' ? 'psmt-1ra-q.xlsx' : 'psmt-2da-q.xlsx';
+    const templatePath = path.join(process.cwd(), 'server', 'templates', templateFile);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(templatePath);
+
+    const ws = wb.getWorksheet(clubCfg.sheet_name);
+    if (!ws) throw new Error(`Sheet "${clubCfg.sheet_name}" no encontrada en plantilla PSMT`);
+
+    const MONTHS_ES    = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    const monthNameEs  = MONTHS_ES[m];
+    const periodoShort = half === '1' ? '1RA Q' : '2DA Q';
+    ws.getRow(3).getCell(8).value = monthNameEs;
+    ws.getRow(3).commit();
+    ws.getRow(4).getCell(7).value = `PERIODO: ${periodoShort} ${monthNameEs} ${y}`;
+    ws.getRow(4).getCell(8).value = periodoShort;
+    ws.getRow(4).commit();
+    try { (ws as any).conditionalFormattings.splice(0, (ws as any).conditionalFormattings.length); } catch {}
+
+    const DATA_START_ROW = 9;
+    const COL_N          = 14; // column N = 14 (1-indexed)
+    const MAX_DAY_COLS   = 15;
+
+    // Extract formulas from template row 9 to replicate across all employee rows
+    const rowFormulas = new Map<number, string>();
+    ws.getRow(DATA_START_ROW).eachCell({ includeEmpty: false }, (cell, col) => {
+      if ((cell as any).formula) rowFormulas.set(col, (cell as any).formula as string);
+    });
+    const adjustFormula = (f: string, toRow: number): string =>
+      f.replace(/([A-Z]+)(\d+)/g, (_, c, n) => parseInt(n) === DATA_START_ROW ? c + toRow : c + n);
+
+    // Fill one row per employee
+    for (let i = 0; i < empList.length; i++) {
+      const emp    = empList[i] as any;
+      const rowIdx = DATA_START_ROW + i;
+      const row    = ws.getRow(rowIdx);
+      const kronos = emp.cedula ? clubCfg.kronos_prefix + emp.cedula.replace(/-/g, '') : '';
+      const empMarks = progAttMap.get(normalize(emp.full_name));
+
+      // Clear fill from template's sample data so there's no colour bleed
+      for (let c = 1; c <= COL_N + MAX_DAY_COLS - 1; c++) {
+        try {
+          const cell = row.getCell(c);
+          if (!(cell as any).formula) cell.fill = { type: 'pattern', pattern: 'none' };
+        } catch {}
+      }
+
+      row.getCell(1).value  = i + 1;
+      row.getCell(2).value  = clubCfg.country.toUpperCase();
+      row.getCell(3).value  = emp.banco || '';
+      row.getCell(4).value  = emp.cuenta_bancaria || '';
+      row.getCell(5).value  = emp.cedula || '';
+      row.getCell(6).value  = kronos;
+      row.getCell(7).value  = emp.full_name;
+      row.getCell(8).value  = 'PSMT ' + (clubCfg.name as string).toUpperCase();
+      row.getCell(9).value  = 'Club ' + clubCfg.name;
+      row.getCell(10).value = emp.position || clubCfg.default_position;
+      row.getCell(11).value = emp.contract_start || '';
+      row.getCell(12).value = SALARIO_MENSUAL;
+      row.getCell(13).value = SALARIO_DIA;
+
+      for (let d = 0; d < periodDays.length && d < MAX_DAY_COLS; d++) {
+        const day  = periodDays[d];
+        const mark = empMarks?.get(fmt(day));
+        row.getCell(COL_N + d).value = progToCode(mark, day) || null;
+      }
+
+      // Clear template's hardcoded deduction input cols (AX=50, AY=51, AZ=52)
+      row.getCell(50).value = null;
+      row.getCell(51).value = null;
+      row.getCell(52).value = null;
+
+      for (const [col, formula] of rowFormulas.entries()) {
+        try { row.getCell(col).value = { formula: adjustFormula(formula, rowIdx) }; } catch {}
+      }
+      row.commit();
+    }
+
+    // Clear unused template rows so sample data doesn't bleed through
+    const maxTemplateRow = half === '1' ? 84 : 92;
+    for (let rowIdx = DATA_START_ROW + empList.length; rowIdx <= maxTemplateRow; rowIdx++) {
+      const row = ws.getRow(rowIdx);
+      for (let c = 1; c <= 52; c++) {
+        try {
+          const cell = row.getCell(c);
+          if (!(cell as any).formula) { cell.value = null; cell.fill = { type: 'pattern', pattern: 'none' }; }
+        } catch {}
+      }
+      row.commit();
+    }
+
+    // Fill Hoja2 (bank transfer summary)
+    const ws2 = wb.getWorksheet('Hoja2');
+    if (ws2) {
+      const HOJA2_START = 5;
+      const HOJA2_MAX   = 79;
+      for (let i = 0; i < empList.length; i++) {
+        const emp      = empList[i] as any;
+        const rowIdx   = HOJA2_START + i;
+        const empMarks = progAttMap.get(normalize(emp.full_name));
+        let dias = 0, doms = 0, incap = 0, fer = 0;
+        for (const day of periodDays) {
+          const code = progToCode(empMarks?.get(fmt(day)), day);
+          if (code === '1') dias++;
+          else if (code === 'D') doms++;
+          else if (code === 'I') incap++;
+          else if (code === 'F') fer++;
+        }
+        const bruto = parseFloat((dias * SALARIO_DIA + doms * SALARIO_DOM + incap * SALARIO_DIA + fer * SALARIO_DIA).toFixed(2));
+        const desc  = parseFloat((bruto * CSS_RATE).toFixed(2));
+        const neto  = parseFloat((bruto - desc).toFixed(2));
+
+        const row2 = ws2.getRow(rowIdx);
+        row2.getCell(2).value = emp.banco || '';
+        row2.getCell(3).value = emp.cuenta_bancaria || '';
+        row2.getCell(4).value = emp.full_name;
+        row2.getCell(5).value = neto;
+        row2.commit();
+      }
+      for (let rowIdx = HOJA2_START + empList.length; rowIdx <= HOJA2_MAX; rowIdx++) {
+        const row2 = ws2.getRow(rowIdx);
+        for (let c = 2; c <= 5; c++) row2.getCell(c).value = null;
+        row2.commit();
+      }
+    }
+
+    const clubNameSafe = (clubCfg.name as string).replace(/\s+/g, '_').toUpperCase();
+    const filename = `PSMT_${clubNameSafe}_${periodoShort.replace(/ /g, '_')}_${monthNameEs}_${y}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await wb.xlsx.write(res);
+    res.end();
+
+  } catch (error: any) {
+    console.error('Error generando PSMT desde programación:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error?.message || 'Error al generar la planilla PSMT' });
+    }
+  }
+});
+
 // Generate PSMT planilla for ALL clubs: David → Costa Verde → Metropark (admin only)
 router.get('/payroll/psmt-planilla-global', isAdmin, async (req, res) => {
   const { year, month, half } = req.query as Record<string, string>;

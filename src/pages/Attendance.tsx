@@ -120,6 +120,8 @@ export default function Attendance() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ synced: number; unmatched: string[] } | null>(null);
+  const [showPsmtFromProgModal, setShowPsmtFromProgModal] = useState(false);
+  const [generatingPsmtFromProg, setGeneratingPsmtFromProg] = useState(false);
 
   if (user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente') {
     return (
@@ -736,6 +738,65 @@ export default function Attendance() {
     }
   };
 
+  const openPsmtFromProgModal = () => {
+    const clubName = clubs.find(c => c.id === selectedClubId)?.name?.toUpperCase() ?? '';
+    const isCostaVerde = clubName.includes('COSTA') || clubName.includes('VERDE');
+    setImportForm({
+      clubId: selectedClubId || (clubs[0]?.id ?? ''),
+      year: currentMonth.getFullYear(),
+      month: currentMonth.getMonth() + 1,
+      half: viewHalf === '2' ? '2' : '1',
+      sheetName: `${MONTHS_ES[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`,
+      headerRow: isCostaVerde ? 5 : 4,
+      nameCol: 2,
+      dataStartRow: isCostaVerde ? 6 : 5,
+    });
+    setImportFile(null);
+    setShowPsmtFromProgModal(true);
+  };
+
+  const handleGeneratePsmtFromProg = async () => {
+    if (!importFile || !importForm.clubId) return;
+    setGeneratingPsmtFromProg(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      fd.append('clubId', importForm.clubId);
+      fd.append('year', String(importForm.year));
+      fd.append('month', String(importForm.month));
+      fd.append('half', importForm.half);
+      fd.append('sheetName', importForm.sheetName);
+      fd.append('headerRow', String(importForm.headerRow));
+      fd.append('nameCol', String(importForm.nameCol));
+      fd.append('dataStartRow', String(importForm.dataStartRow));
+      const res = await apiFetch('/api/payroll/psmt-from-programacion', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        let msg = 'Error al generar PSMT';
+        try { msg = JSON.parse(text).error || msg; } catch { msg = text.slice(0, 120) || `HTTP ${res.status}`; }
+        toast.error(msg);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const cd = res.headers.get('Content-Disposition');
+      const fnMatch = cd?.match(/filename="([^"]+)"/);
+      a.download = fnMatch?.[1] || 'planilla-psmt.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Planilla PSMT generada y descargada ✓');
+      setShowPsmtFromProgModal(false);
+    } catch (e: any) {
+      toast.error(e.message || 'Error al generar PSMT');
+    } finally {
+      setGeneratingPsmtFromProg(false);
+    }
+  };
+
   const captureGrid = async () => {
     if (!gridRef.current || capturingScreen) return;
     setCapturingScreen(true);
@@ -882,6 +943,16 @@ export default function Attendance() {
             >
               <Upload className="h-4 w-4 mr-2" />
               Importar Programación
+            </button>
+          )}
+
+          {['Administrador', 'Super Administrador', 'Recursos Humanos', 'Supervisora Redvolution'].includes(user?.role || '') && (
+            <button
+              onClick={openPsmtFromProgModal}
+              className="inline-flex items-center px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 shadow-sm transition-colors"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              PSMT desde Prog.
             </button>
           )}
 
@@ -1585,6 +1656,155 @@ export default function Attendance() {
                   {importing ? 'Importando...' : 'Importar'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {showPsmtFromProgModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-violet-100 rounded-lg">
+                  <FileSpreadsheet className="h-5 w-5 text-violet-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">Generar PSMT desde Programación</h3>
+                  <p className="text-xs text-slate-500">Subí el Excel de programación y descargá la planilla PSMT lista</p>
+                </div>
+              </div>
+              <button onClick={() => setShowPsmtFromProgModal(false)} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
+                <CloseIcon className="h-4 w-4 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* Club */}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Club</label>
+                <select
+                  value={importForm.clubId}
+                  onChange={e => {
+                    const id = e.target.value;
+                    const name = clubs.find(c => c.id === id)?.name?.toUpperCase() ?? '';
+                    const isCV = name.includes('COSTA') || name.includes('VERDE');
+                    setImportForm(f => ({ ...f, clubId: id, headerRow: isCV ? 5 : 4, dataStartRow: isCV ? 6 : 5 }));
+                  }}
+                  className="w-full rounded-lg border-slate-300 text-sm focus:ring-violet-500 focus:border-violet-500"
+                >
+                  <option value="">Seleccionar club...</option>
+                  {clubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+
+              {/* Año / Mes / Quincena */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Año</label>
+                  <input
+                    type="number"
+                    value={importForm.year}
+                    onChange={e => setImportForm(f => ({ ...f, year: Number(e.target.value) }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-violet-500 focus:border-violet-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Mes (1–12)</label>
+                  <input
+                    type="number" min={1} max={12}
+                    value={importForm.month}
+                    onChange={e => setImportForm(f => ({ ...f, month: Number(e.target.value) }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-violet-500 focus:border-violet-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Quincena</label>
+                  <select
+                    value={importForm.half}
+                    onChange={e => setImportForm(f => ({ ...f, half: e.target.value as '1' | '2' }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-violet-500 focus:border-violet-500"
+                  >
+                    <option value="1">1ra (días 1–15)</option>
+                    <option value="2">2da (días 16–fin)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Nombre hoja */}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Nombre de la hoja (pestaña Excel)</label>
+                <input
+                  type="text"
+                  value={importForm.sheetName}
+                  onChange={e => setImportForm(f => ({ ...f, sheetName: e.target.value }))}
+                  placeholder="Ej: JULIO 2026"
+                  className="w-full rounded-lg border-slate-300 text-sm focus:ring-violet-500 focus:border-violet-500"
+                />
+              </div>
+
+              {/* Parámetros técnicos */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Fila encabezado</label>
+                  <input
+                    type="number"
+                    value={importForm.headerRow}
+                    onChange={e => setImportForm(f => ({ ...f, headerRow: Number(e.target.value) }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-violet-500 focus:border-violet-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Col. nombre</label>
+                  <input
+                    type="number"
+                    value={importForm.nameCol}
+                    onChange={e => setImportForm(f => ({ ...f, nameCol: Number(e.target.value) }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-violet-500 focus:border-violet-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Fila inicio datos</label>
+                  <input
+                    type="number"
+                    value={importForm.dataStartRow}
+                    onChange={e => setImportForm(f => ({ ...f, dataStartRow: Number(e.target.value) }))}
+                    className="w-full rounded-lg border-slate-300 text-sm focus:ring-violet-500 focus:border-violet-500"
+                  />
+                </div>
+              </div>
+
+              {/* Archivo */}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Archivo Excel de programación (.xlsx)</label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={e => setImportFile(e.target.files?.[0] ?? null)}
+                  className="block w-full text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
+                />
+              </div>
+
+              <div className="rounded-lg bg-violet-50 border border-violet-200 px-4 py-3 text-xs text-violet-800">
+                <strong>Marcas reconocidas:</strong> A = presente · P = permiso · I = incapacidad · F = feriado<br />
+                L, X, D, vacío = libre/descanso (no genera código en planilla)
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200">
+              <button
+                onClick={() => setShowPsmtFromProgModal(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGeneratePsmtFromProg}
+                disabled={generatingPsmtFromProg || !importFile || !importForm.clubId}
+                className="inline-flex items-center px-5 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 disabled:opacity-60 transition-colors"
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                {generatingPsmtFromProg ? 'Generando...' : 'Generar y Descargar'}
+              </button>
             </div>
           </div>
         </div>
