@@ -201,7 +201,7 @@ function canAccessResource(user: any, targetClubId: string | null, targetCountry
   if (role === 'Supervisor Interno' || role === 'Coordinadora') {
     return targetClubId === user.club_id;
   }
-  if (role === 'Supervisora Redvolution' || role === 'Recursos Humanos' || role === 'Supervisor Cliente') {
+  if (role === 'Supervisora Redvolution' || role === 'Recursos Humanos' || role === 'Asistente RRHH' || role === 'Supervisor Cliente') {
     if (!user.country || !targetCountry) return false;
     return targetCountry === user.country;
   }
@@ -221,7 +221,7 @@ async function resolveClubScope(user: any, queryClubId?: string) {
   let allowedEmployeeIds: string[] | null = null;
 
   const CLUB_SCOPED_ROLES  = ['Supervisor Interno', 'Coordinadora', 'Supervisora'];
-  const COUNTRY_SCOPED_ROLES = ['Administrador', 'Recursos Humanos', 'Supervisor Cliente', 'Supervisora Redvolution'];
+  const COUNTRY_SCOPED_ROLES = ['Administrador', 'Recursos Humanos', 'Asistente RRHH', 'Supervisor Cliente', 'Supervisora Redvolution'];
 
   if (CLUB_SCOPED_ROLES.includes(user.role)) {
     // Scoped to their assigned club only
