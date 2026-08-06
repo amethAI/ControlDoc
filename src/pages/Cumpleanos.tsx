@@ -23,9 +23,11 @@ const MONTHS = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
+const parseBirthDate = (dateStr: string) => new Date(dateStr + 'T12:00:00');
+
 const getAge = (birthDate: string) => {
   const today = new Date();
-  const birth = new Date(birthDate);
+  const birth = parseBirthDate(birthDate);
   const age = today.getFullYear() - birth.getFullYear();
   const hasPassed = today >= new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
   return hasPassed ? age : age - 1;
@@ -34,7 +36,7 @@ const getAge = (birthDate: string) => {
 const getDaysUntil = (birthDate: string) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const birth = new Date(birthDate);
+  const birth = parseBirthDate(birthDate);
   const next = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
   if (next < today) next.setFullYear(today.getFullYear() + 1);
   return Math.ceil((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -42,12 +44,12 @@ const getDaysUntil = (birthDate: string) => {
 
 const isToday = (birthDate: string) => {
   const today = new Date();
-  const birth = new Date(birthDate);
+  const birth = parseBirthDate(birthDate);
   return birth.getMonth() === today.getMonth() && birth.getDate() === today.getDate();
 };
 
 const formatDate = (dateStr: string, locale: string) => {
-  const d = new Date(dateStr);
+  const d = parseBirthDate(dateStr);
   return d.toLocaleDateString(locale, { day: '2-digit', month: 'long' });
 };
 
