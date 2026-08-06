@@ -214,6 +214,7 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
                 <option value="Supervisor Cliente">Supervisor Cliente</option>
                 <option value="Coordinadora">Coordinadora</option>
                 <option value="Recursos Humanos">Recursos Humanos</option>
+                <option value="Asistente RRHH">Asistente RRHH</option>
                 <option value="Supervisora">Supervisora</option>
                 <option value="Supervisora Redvolution">Supervisora Redvolution</option>
               </select>
