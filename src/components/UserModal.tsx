@@ -221,7 +221,7 @@ export default function UserModal({ isOpen, onClose, onSuccess, user }: UserModa
             </div>
           </div>
 
-          {formData.role === 'Administrador' && (
+          {['Administrador', 'Recursos Humanos', 'Asistente RRHH', 'Supervisora Redvolution'].includes(formData.role) && (
             <div className="space-y-1">
               <label className="text-sm font-medium text-slate-700">País <span className="text-red-500">*</span></label>
               <div className="relative">

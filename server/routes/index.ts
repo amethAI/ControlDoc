@@ -577,7 +577,7 @@ router.get('/clubs', isAuthenticated, async (req, res) => {
     if (['Supervisor Interno', 'Coordinadora', 'Supervisora'].includes(user.role)) {
       // Club-scoped: only their assigned club
       query = query.eq('id', user.club_id);
-    } else if (['Administrador', 'Recursos Humanos', 'Supervisor Cliente', 'Supervisora Redvolution'].includes(user.role) && user.country) {
+    } else if (['Administrador', 'Recursos Humanos', 'Asistente RRHH', 'Supervisor Cliente', 'Supervisora Redvolution'].includes(user.role) && user.country) {
       // Country-scoped: only clubs in their country
       query = query.eq('country', user.country);
     }
