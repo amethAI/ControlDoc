@@ -44,6 +44,12 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const HomeRoute = () => {
+  const { user } = useAuth();
+  if (user?.role === 'Asistente RRHH') return <Navigate to="/empleados" replace />;
+  return <PageErrorBoundary pageName="Dashboard"><Dashboard /></PageErrorBoundary>;
+};
+
 function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -57,7 +63,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<PageErrorBoundary pageName="Dashboard"><Dashboard /></PageErrorBoundary>} />
+          <Route index element={<HomeRoute />} />
           <Route path="empleados" element={<PageErrorBoundary pageName="Empleados"><Employees /></PageErrorBoundary>} />
           <Route path="empleados/:id" element={<PageErrorBoundary pageName="Perfil de Empleado"><EmployeeProfile /></PageErrorBoundary>} />
           <Route path="checklist-contratos" element={<PageErrorBoundary pageName="Check List"><ChecklistContratos /></PageErrorBoundary>} />
