@@ -33,20 +33,21 @@ export default function Layout() {
   };
 
   const isRRHH = user?.role === 'Recursos Humanos';
+  const isAsistenteRRHH = user?.role === 'Asistente RRHH';
   const isSuperAdmin = user?.role === 'Super Administrador';
   const isAdmin = user?.role === 'Administrador' || isSuperAdmin;
   const isKAM = user?.role === 'KAM Redvolution';
 
   const navigation = [
-    ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' ? [{ name: 'Dashboard', href: '/', icon: LayoutDashboard }] : []),
+    ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' && !isAsistenteRRHH ? [{ name: 'Dashboard', href: '/', icon: LayoutDashboard }] : []),
     ...(user?.role !== 'Supervisor Interno' && user?.role !== 'Coordinadora' && user?.role !== 'Supervisor Cliente' ? [{ name: 'Empleados', href: '/empleados', icon: Users }] : []),
     { name: 'Check List', href: '/vencimientos', icon: CalendarClock },
     { name: 'Check List 1 Año', href: '/checklist-contratos', icon: ClipboardList },
     ...((isAdmin || isKAM || user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente' || isRRHH) ? [
       { name: 'Cumpleaños', href: '/cumpleanos', icon: Cake }
     ] : []),
-    ...(user?.role !== 'Supervisor Cliente' && user?.role !== 'Coordinadora' ? [{ name: 'Asistencia', href: '/asistencia', icon: CalendarCheck }] : []),
-    ...((isAdmin || isKAM || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente' || isRRHH) ? [
+    ...(!isAsistenteRRHH && user?.role !== 'Supervisor Cliente' && user?.role !== 'Coordinadora' ? [{ name: 'Asistencia', href: '/asistencia', icon: CalendarCheck }] : []),
+    ...((isAdmin || isKAM || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente' || isRRHH || isAsistenteRRHH) ? [
       { name: 'Clubes', href: '/clubes', icon: Building2 }
     ] : []),
     ...(isAdmin ? [{ name: 'Roles y Permisos', href: '/roles', icon: Info }] : []),

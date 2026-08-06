@@ -32,7 +32,7 @@ const createUserSchema = z.object({
   email:    z.string().email('Email inválido'),
   password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
   name:     z.string().min(2, 'Nombre requerido').max(100),
-  role:     z.enum(['Super Administrador', 'Administrador', 'Supervisor Interno', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos', 'Supervisora', 'Supervisora Redvolution', 'KAM Redvolution']),
+  role:     z.enum(['Super Administrador', 'Administrador', 'Supervisor Interno', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos', 'Asistente RRHH', 'Supervisora', 'Supervisora Redvolution', 'KAM Redvolution']),
   club_id:  z.string().optional().nullable(),
   country:  z.string().optional().nullable(),
 });
@@ -40,7 +40,7 @@ const createUserSchema = z.object({
 const updateUserSchema = z.object({
   email:     z.string().email('Email inválido'),
   name:      z.string().min(2, 'Nombre requerido').max(100),
-  role:      z.enum(['Super Administrador', 'Administrador', 'Supervisor Interno', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos', 'Supervisora', 'Supervisora Redvolution', 'KAM Redvolution']),
+  role:      z.enum(['Super Administrador', 'Administrador', 'Supervisor Interno', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos', 'Asistente RRHH', 'Supervisora', 'Supervisora Redvolution', 'KAM Redvolution']),
   password:  z.string().min(6).optional().or(z.literal('')).transform(v => v || undefined),
   club_id:   z.string().optional().nullable(),
   country:   z.string().optional().nullable(),
@@ -128,7 +128,7 @@ const isAdmin = (req: any, res: any, next: any) => {
 
 // Middleware to check if user can view data (Employees, Attendance, Dashboard)
 const canViewData = (req: any, res: any, next: any) => {
-  const allowedRoles = ['Super Administrador', 'Administrador', 'Supervisor Interno', 'Supervisora', 'Supervisora Redvolution', 'KAM Redvolution', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos'];
+  const allowedRoles = ['Super Administrador', 'Administrador', 'Supervisor Interno', 'Supervisora', 'Supervisora Redvolution', 'KAM Redvolution', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos', 'Asistente RRHH'];
   const user = (req as any).user;
   
   if (!user || !allowedRoles.includes(user.role)) {
