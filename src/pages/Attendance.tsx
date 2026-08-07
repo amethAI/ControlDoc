@@ -123,6 +123,8 @@ export default function Attendance() {
   const [importResult, setImportResult] = useState<{ synced: number; unmatched: string[] } | null>(null);
   const [showPsmtFromProgModal, setShowPsmtFromProgModal] = useState(false);
   const [generatingPsmtFromProg, setGeneratingPsmtFromProg] = useState(false);
+  const [showGSheetModal, setShowGSheetModal] = useState(false);
+  const [generatingGSheet, setGeneratingGSheet] = useState(false);
   const [psmtYear, setPsmtYear] = useState(new Date().getFullYear());
   const [psmtMonth, setPsmtMonth] = useState(new Date().getMonth() + 1);
   const [psmtHalf, setPsmtHalf] = useState<'1' | '2'>('1');
@@ -817,6 +819,35 @@ export default function Attendance() {
     }
   };
 
+  const handleGeneratePsmtFromGSheet = async () => {
+    setGeneratingGSheet(true);
+    try {
+      const params = new URLSearchParams({ year: String(psmtYear), month: String(psmtMonth), half: psmtHalf });
+      const res = await apiFetch(`/api/payroll/psmt-from-gsheet?${params}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Error al generar PSMT' }));
+        throw new Error(err.error || 'Error al generar PSMT');
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const cd   = res.headers.get('Content-Disposition') || '';
+      const fnMatch = cd.match(/filename="([^"]+)"/);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fnMatch?.[1] || 'planilla-psmt-gsheet.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Planilla PSMT desde Google Sheets generada ✓');
+      setShowGSheetModal(false);
+    } catch (e: any) {
+      toast.error(e.message || 'Error al generar PSMT');
+    } finally {
+      setGeneratingGSheet(false);
+    }
+  };
+
   const captureGrid = async () => {
     if (!gridRef.current || capturingScreen) return;
     setCapturingScreen(true);
@@ -967,13 +998,22 @@ export default function Attendance() {
           )}
 
           {['Administrador', 'Super Administrador', 'Recursos Humanos', 'Supervisora Redvolution'].includes(user?.role || '') && (
-            <button
-              onClick={openPsmtFromProgModal}
-              className="inline-flex items-center px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 shadow-sm transition-colors"
-            >
-              <FileSpreadsheet className="h-4 w-4 mr-2" />
-              PSMT desde Prog.
-            </button>
+            <>
+              <button
+                onClick={openPsmtFromProgModal}
+                className="inline-flex items-center px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 shadow-sm transition-colors"
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                PSMT desde Prog.
+              </button>
+              <button
+                onClick={() => setShowGSheetModal(true)}
+                className="inline-flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 shadow-sm transition-colors"
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                PSMT Google Sheets
+              </button>
+            </>
           )}
 
           <button
@@ -1856,6 +1896,63 @@ export default function Attendance() {
               >
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
                 {generatingPsmtFromProg ? 'Generando...' : 'Generar y Descargar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal PSMT desde Google Sheets */}
+      {showGSheetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h3 className="text-base font-semibold text-slate-900">Generar PSMT desde Google Sheets</h3>
+              <button onClick={() => setShowGSheetModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-slate-600">
+                Generá la planilla PSMT directamente desde las hojas de programación en Google Sheets de cada club.
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Año</label>
+                  <input
+                    type="number" min={2024} max={2030} value={psmtYear}
+                    onChange={e => setPsmtYear(Number(e.target.value))}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Mes</label>
+                  <select value={psmtMonth} onChange={e => setPsmtMonth(Number(e.target.value))}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+                      .map((mn, i) => <option key={i+1} value={i+1}>{mn}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Quincena</label>
+                  <select value={psmtHalf} onChange={e => setPsmtHalf(e.target.value as '1'|'2')}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="1">1ra Q</option>
+                    <option value="2">2da Q</option>
+                  </select>
+                </div>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 text-xs text-emerald-700">
+                El sistema buscará automáticamente la hoja del mes en cada Google Sheet configurado.
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200">
+              <button onClick={() => setShowGSheetModal(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
+                Cancelar
+              </button>
+              <button onClick={handleGeneratePsmtFromGSheet} disabled={generatingGSheet}
+                className="inline-flex items-center px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors">
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                {generatingGSheet ? 'Generando...' : 'Generar y Descargar'}
               </button>
             </div>
           </div>

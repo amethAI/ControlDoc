@@ -2204,16 +2204,46 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       'INCAPACIDAD', 'AUSENCIA', 'LIMPIEZA', 'REEMPLAZO', 'TRASLADO',
       'BACKUP', 'VACACIONES', 'DESCANSO', 'IN HOUSE', 'SOLICITUD'];
 
+    const levenshtein = (a: string, b: string): number => {
+      const m = a.length, n = b.length;
+      const dp: number[] = Array.from({ length: n + 1 }, (_, j) => j);
+      for (let i = 1; i <= m; i++) {
+        let prev = i;
+        for (let j = 1; j <= n; j++) {
+          const cur = a[i - 1] === b[j - 1] ? dp[j - 1] : 1 + Math.min(dp[j], prev, dp[j - 1]);
+          dp[j - 1] = prev;
+          prev = cur;
+        }
+        dp[n] = prev;
+      }
+      return dp[n];
+    };
+
     const findProgMarks = (empFullName: string): Map<string, string> | undefined => {
       const normEmp = normalize(empFullName);
+      // 1. Exact match
       const exact = progAttMap.get(normEmp);
       if (exact) { matchedProgKeys.add(normEmp); return exact; }
+      // 2. Prefix / suffix match (handles compound surnames)
       for (const [progName, marks] of progAttMap) {
         if (progName.startsWith(normEmp + ' ') || normEmp.startsWith(progName + ' ')) {
           matchedProgKeys.add(progName);
           return marks;
         }
       }
+      // 3. Fuzzy match: Levenshtein distance <= 2, must be the unique closest candidate
+      const FUZZY_MAX = 2;
+      let bestKey: string | null = null;
+      let bestDist = FUZZY_MAX + 1;
+      let ambiguous = false;
+      for (const progName of progAttMap.keys()) {
+        const dist = levenshtein(normEmp, progName);
+        if (dist <= FUZZY_MAX) {
+          if (dist < bestDist) { bestDist = dist; bestKey = progName; ambiguous = false; }
+          else if (dist === bestDist) { ambiguous = true; }
+        }
+      }
+      if (bestKey && !ambiguous) { matchedProgKeys.add(bestKey); return progAttMap.get(bestKey); }
       return undefined;
     };
 
@@ -3872,6 +3902,385 @@ router.delete('/push/subscribe', isAuthenticated, async (req, res) => {
   const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
+});
+// ─── GET /payroll/psmt-from-gsheet ───────────────────────────────────────────
+// Generates PSMT from Google Sheets programación files configured per-club.
+// Query: year, month, half, clubId (optional — omit for all configured clubs)
+router.get('/payroll/psmt-from-gsheet', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const allowed = ['Administrador', 'Super Administrador', 'Recursos Humanos', 'Supervisora Redvolution'];
+    if (!allowed.includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Sin permiso para generar planilla PSMT' });
+    }
+
+    const { year, month, half, clubId: singleClubId } = req.query as Record<string, string>;
+    if (!year || !month || !['1', '2'].includes(half)) {
+      return res.status(400).json({ error: 'Parámetros requeridos: year, month, half (1 o 2)' });
+    }
+
+    const credentialsJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+    if (!credentialsJson) {
+      return res.status(503).json({ error: 'Google Sheets no configurado. Contactá a un administrador.' });
+    }
+
+    const y = parseInt(year);
+    const m = parseInt(month) - 1;
+    const startDay = half === '1' ? 1 : 16;
+    const endDay   = half === '1' ? 15 : new Date(y, m + 1, 0).getDate();
+    const startDate = half === '1' ? new Date(y, m, 1) : new Date(y, m, 16);
+    const endDate   = half === '1' ? new Date(y, m, 15) : new Date(y, m + 1, 0);
+
+    const MONTHS_ES   = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    const monthNameEs  = MONTHS_ES[m];
+    const periodoShort = half === '1' ? '1RA Q' : '2DA Q';
+
+    const periodDays: Date[] = [];
+    const cur = new Date(startDate);
+    while (cur <= endDate) { periodDays.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
+
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+
+    const normalize = (s: string) =>
+      s.trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+
+    const progToCode = (mark: string | undefined, day: Date): string => {
+      if (!mark) return '';
+      const isSunday = day.getDay() === 0;
+      switch (mark) {
+        case 'A': return isSunday ? 'D' : '1';
+        case 'P': return 'P';
+        case 'I': return 'I';
+        case 'F': return 'F';
+        default:  return '';
+      }
+    };
+
+    // ── Load clubs with configured sheets ──
+    let clubList: any[];
+    if (singleClubId) {
+      const { data, error } = await supabase.from('clubs').select('id, name, sort_order').eq('id', singleClubId).limit(1);
+      if (error) throw error;
+      clubList = data || [];
+    } else {
+      const { data, error } = await supabase.from('clubs').select('id, name, sort_order').eq('is_active', 1).not('id', 'in', '("global","hr")').order('sort_order', { ascending: true });
+      if (error) throw error;
+      clubList = data || [];
+    }
+
+    const clubConfigs = await Promise.all(clubList.map((c: any) => getClubConfig(c.id)));
+    const configuredClubs = clubList.filter((_: any, i: number) => clubConfigs[i].programacion_sheet_id);
+    const configuredCfgs  = clubConfigs.filter(cfg => cfg.programacion_sheet_id);
+
+    if (configuredClubs.length === 0) {
+      return res.status(400).json({ error: 'Ningún club tiene Google Sheet configurado. Contactá a un administrador.' });
+    }
+
+    // ── Fetch all sheets in parallel ──
+    const { google } = (await import('googleapis')) as any;
+    const auth = new google.auth.GoogleAuth({
+      credentials: JSON.parse(credentialsJson),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    const progAttMap = new Map<string, Map<string, string>>();
+
+    for (let ci = 0; ci < configuredClubs.length; ci++) {
+      const cfg      = configuredCfgs[ci];
+      const sheetId  = cfg.programacion_sheet_id!;
+      const hRow     = cfg.prog_header_row;
+      const nCol     = cfg.prog_name_col;
+      const dsRow    = cfg.prog_data_start_row;
+
+      // Auto-detect tab name: try "AGOSTO 2026" → "Agosto 2026" → "agosto 2026"
+      const expectedTab = `${monthNameEs} ${y}`;
+      let tabName: string | null = null;
+      try {
+        const metaResp = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'sheets.properties.title' });
+        const sheetTitles: string[] = (metaResp.data.sheets || []).map((s: any) => s.properties?.title || '');
+        tabName = sheetTitles.find((t: string) => t.trim().toUpperCase() === expectedTab.toUpperCase())
+          || sheetTitles.find((t: string) => t.trim().toUpperCase().includes(monthNameEs) && t.includes(String(y)))
+          || null;
+      } catch {
+        return res.status(400).json({ error: `No se pudo acceder al Google Sheet del club "${cfg.name}". Verificá que el sheet esté compartido con la cuenta de servicio.` });
+      }
+
+      if (!tabName) {
+        return res.status(400).json({ error: `Hoja "${expectedTab}" no encontrada en el Google Sheet de "${cfg.name}".` });
+      }
+
+      const valResp = await sheets.spreadsheets.values.get({
+        spreadsheetId: sheetId,
+        range: `'${tabName}'!A1:AZ`,
+      });
+      const values: string[][] = valResp.data.values || [];
+
+      // Build dayColMap from header row (1-indexed → 0-indexed)
+      const dayColMap: Record<number, number> = {};
+      const headerRowData = values[hRow - 1] || [];
+      for (let C = 0; C < headerRowData.length; C++) {
+        const val = Number(headerRowData[C]);
+        if (!isNaN(val) && val >= startDay && val <= endDay) dayColMap[val] = C;
+      }
+
+      // Build progAttMap from data rows
+      for (let R = dsRow - 1; R < values.length; R++) {
+        const row = values[R] || [];
+        const rawName = (row[nCol - 1] || '').trim();
+        if (!rawName) continue;
+        const normName = normalize(rawName);
+        if (!progAttMap.has(normName)) progAttMap.set(normName, new Map());
+        const empMarks = progAttMap.get(normName)!;
+        for (let day = startDay; day <= endDay; day++) {
+          const col = dayColMap[day];
+          if (col === undefined) continue;
+          const mark = (row[col] || '').trim().toUpperCase();
+          if (!mark) continue;
+          const mm = String(m + 1).padStart(2, '0');
+          const dd = String(day).padStart(2, '0');
+          empMarks.set(`${y}-${mm}-${dd}`, mark);
+        }
+      }
+    }
+
+    // ── Matching helpers ──
+    const matchedProgKeys = new Set<string>();
+    const LEGEND_KEYS = ['ASIGNADA', 'POR ASIGNAR', 'PARA CAPACITACION', 'PERMISO SOLICITADO',
+      'INCAPACIDAD', 'AUSENCIA', 'LIMPIEZA', 'REEMPLAZO', 'TRASLADO',
+      'BACKUP', 'VACACIONES', 'DESCANSO', 'IN HOUSE', 'SOLICITUD'];
+
+    const levenshtein = (a: string, b: string): number => {
+      const mo = a.length, n = b.length;
+      const dp: number[] = Array.from({ length: n + 1 }, (_, j) => j);
+      for (let i = 1; i <= mo; i++) {
+        let prev = i;
+        for (let j = 1; j <= n; j++) {
+          const c = a[i - 1] === b[j - 1] ? dp[j - 1] : 1 + Math.min(dp[j], prev, dp[j - 1]);
+          dp[j - 1] = prev; prev = c;
+        }
+        dp[n] = prev;
+      }
+      return dp[n];
+    };
+
+    const findProgMarks = (empFullName: string): Map<string, string> | undefined => {
+      const normEmp = normalize(empFullName);
+      const exact = progAttMap.get(normEmp);
+      if (exact) { matchedProgKeys.add(normEmp); return exact; }
+      for (const [progName, marks] of progAttMap) {
+        if (progName.startsWith(normEmp + ' ') || normEmp.startsWith(progName + ' ')) {
+          matchedProgKeys.add(progName); return marks;
+        }
+      }
+      const FUZZY_MAX = 2;
+      let bestKey: string | null = null, bestDist = FUZZY_MAX + 1;
+      let ambiguous = false;
+      for (const progName of progAttMap.keys()) {
+        const dist = levenshtein(normEmp, progName);
+        if (dist <= FUZZY_MAX) {
+          if (dist < bestDist) { bestDist = dist; bestKey = progName; ambiguous = false; }
+          else if (dist === bestDist) { ambiguous = true; }
+        }
+      }
+      if (bestKey && !ambiguous) { matchedProgKeys.add(bestKey); return progAttMap.get(bestKey); }
+      return undefined;
+    };
+
+    const addSinMatchSheetGS = (workbook: any, unmatchedDB: Array<{ club: string; name: string }>) => {
+      const unmatchedExcel = [...progAttMap.keys()].filter(k =>
+        !matchedProgKeys.has(k) && !LEGEND_KEYS.some(lk => k.includes(normalize(lk)))
+      );
+      if (unmatchedDB.length === 0 && unmatchedExcel.length === 0) return;
+      const wsm = workbook.addWorksheet('SIN MATCH');
+      const hdr = wsm.addRow(['TIPO', 'CLUB', 'NOMBRE EN SISTEMA', 'DETALLE']);
+      hdr.font = { bold: true };
+      hdr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0B2' } };
+      unmatchedDB.forEach((u: any) => wsm.addRow([
+        'DB sin match en Sheet', u.club, u.name, 'No se encontro en la programacion — revisar nombre'
+      ]));
+      if (unmatchedDB.length > 0 && unmatchedExcel.length > 0) wsm.addRow([]);
+      unmatchedExcel.forEach((n: string) => wsm.addRow([
+        'Sheet sin registro en DB', '', n, 'Empleada no registrada en el sistema'
+      ]));
+      wsm.columns = [{ width: 28 }, { width: 18 }, { width: 32 }, { width: 56 }];
+    };
+
+    // ── Generate PSMT Excel (same template logic as multi-club mode) ──
+    const { default: ExcelJS } = await import('exceljs');
+    const templateFile = half === '1' ? 'psmt-1ra-q.xlsx' : 'psmt-2da-q.xlsx';
+    const templatePath = path.join(process.cwd(), 'server', 'templates', templateFile);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(templatePath);
+
+    const firstCfg = configuredCfgs[0];
+    const wsPsmt = wb.getWorksheet(firstCfg.sheet_name);
+    if (!wsPsmt) throw new Error(`Sheet "${firstCfg.sheet_name}" no encontrada en plantilla PSMT`);
+
+    wsPsmt.getRow(3).getCell(8).value = monthNameEs; wsPsmt.getRow(3).commit();
+    wsPsmt.getRow(4).getCell(7).value = `PERIODO: ${periodoShort} ${monthNameEs} ${y}`;
+    wsPsmt.getRow(4).getCell(8).value = periodoShort; wsPsmt.getRow(4).commit();
+    try { (wsPsmt as any).conditionalFormattings.splice(0, (wsPsmt as any).conditionalFormattings.length); } catch {}
+
+    const nullValObjGS = {
+      get type() { return 0; }, get formula() { return ''; },
+      get value() { return null; }, get model() { return { type: 0 }; },
+      release() {}, acquire() {}
+    };
+    for (const row of ((wsPsmt as any)._rows || [])) {
+      if (!row) continue;
+      for (const cell of ((row as any)._cells || [])) {
+        if (!cell) continue;
+        const v = (cell as any)._value;
+        if (v && v.model?.type === 6 && v.model?.formula == null) {
+          try {
+            const resolved = String(v.formula ?? '');
+            if (resolved) { (v.model as any).formula = resolved; delete (v.model as any).sharedFormula; }
+            else { (cell as any)._value = nullValObjGS; }
+          } catch { (cell as any)._value = nullValObjGS; }
+        }
+      }
+    }
+
+    const DATA_START = 9, COL_N = 14, HEADER_ROW = 8;
+    const numDays = periodDays.length;
+    const calcColMap: Record<string, number> = {};
+    const labelMap: Array<[string, string]> = [
+      ['TOTAL DOMINGOS', 'totalDoms'], ['TOTAL INCAPACIDAD', 'totalIncap'],
+      ['TOTAL PERMISO', 'totalPermiso'], ['TOTAL FERIADO', 'totalFeriado'],
+      ['DIAS LABORADOS', 'dias'], ['DOMINGOS LABORADOS', 'doms'],
+      ['INCAPACIDAD', 'incap'], ['PERMISO', 'permiso'], ['FERIADO', 'feriado'],
+      ['BRUTO', 'bruto'], ['CSS', 'css'], ['NETO', 'neto'],
+    ];
+    const stripAcc = (s: string) => s.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    wsPsmt.getRow(HEADER_ROW).eachCell({ includeEmpty: false }, (cell: any, col: number) => {
+      const text = stripAcc(String(cell.value ?? ''));
+      for (const [label, key] of labelMap) {
+        if (text.includes(label) && !calcColMap[key]) { calcColMap[key] = col; break; }
+      }
+    });
+    const firstCalcCol = Math.min(...[calcColMap.dias, calcColMap.doms, calcColMap.totalDoms].filter(Boolean as any));
+    const maxDaySlots  = (firstCalcCol && isFinite(firstCalcCol)) ? firstCalcCol - COL_N : 15;
+
+    let rowOffset = 0;
+    const hoja2Rows: Array<{ emp: any; neto: number }> = [];
+    const unmatchedDB: Array<{ club: string; name: string }> = [];
+
+    for (let ci = 0; ci < configuredClubs.length; ci++) {
+      const club = configuredClubs[ci];
+      const cfg  = configuredCfgs[ci];
+      const { data: empData, error: empErr } = await supabase
+        .from('employees')
+        .select('id, full_name, cedula, position, contract_start, banco, cuenta_bancaria')
+        .eq('club_id', club.id).eq('status', 'activo').order('full_name');
+      if (empErr) throw empErr;
+      const empList = empData || [];
+
+      for (let i = 0; i < empList.length; i++) {
+        const emp      = empList[i] as any;
+        const seqNo    = rowOffset + i + 1;
+        const row      = wsPsmt.getRow(DATA_START + rowOffset + i);
+        const kronos   = emp.cedula ? cfg.kronos_prefix + emp.cedula.replace(/-/g, '') : '';
+        const empMarks = findProgMarks(emp.full_name);
+        if (!empMarks) unmatchedDB.push({ club: cfg.name as string, name: emp.full_name });
+
+        let dias = 0, doms = 0, incap = 0, permiso = 0, fer = 0;
+        for (const day of periodDays) {
+          const code = progToCode(empMarks?.get(fmt(day)), day);
+          if      (code === '1') dias++;
+          else if (code === 'D') doms++;
+          else if (code === 'I') incap++;
+          else if (code === 'P') permiso++;
+          else if (code === 'F') fer++;
+        }
+        const bruto = parseFloat((dias * cfg.salary_dia + doms * cfg.salary_dom + incap * cfg.salary_dia + fer * cfg.salary_dia + permiso * cfg.salary_dia).toFixed(2));
+        const css   = parseFloat((bruto * cfg.css_rate).toFixed(2));
+        const neto  = parseFloat((bruto - css).toFixed(2));
+
+        const clearUpTo = Math.max(COL_N + numDays - 1, 52);
+        for (let c = 1; c <= clearUpTo; c++) {
+          try { const cell = row.getCell(c); if (!(cell as any).formula) cell.fill = { type: 'pattern', pattern: 'none' }; } catch {}
+        }
+        row.getCell(1).value  = seqNo;
+        row.getCell(2).value  = cfg.country.toUpperCase();
+        row.getCell(3).value  = emp.banco || '';
+        row.getCell(4).value  = emp.cuenta_bancaria || '';
+        row.getCell(5).value  = emp.cedula || '';
+        row.getCell(6).value  = kronos;
+        row.getCell(7).value  = emp.full_name;
+        row.getCell(8).value  = 'PSMT ' + (cfg.name as string).toUpperCase();
+        row.getCell(9).value  = 'Club ' + cfg.name;
+        row.getCell(10).value = emp.position || cfg.default_position;
+        row.getCell(11).value = emp.contract_start || '';
+        row.getCell(12).value = cfg.salary_mensual;
+        row.getCell(13).value = cfg.salary_dia;
+        for (let d = 0; d < Math.min(numDays, maxDaySlots); d++) {
+          try { row.getCell(COL_N + d).value = progToCode(empMarks?.get(fmt(periodDays[d])), periodDays[d]) || null; } catch {}
+        }
+        const sw = (col: number | undefined, val: any) => { if (!col) return; try { row.getCell(col).value = val; } catch {} };
+        sw(calcColMap.dias,         dias    || null);
+        sw(calcColMap.doms,         doms    || null);
+        sw(calcColMap.totalDoms,    doms    ? parseFloat((doms * cfg.salary_dom).toFixed(2))    : null);
+        sw(calcColMap.incap,        incap   || null);
+        sw(calcColMap.totalIncap,   incap   ? parseFloat((incap * cfg.salary_dia).toFixed(2))   : null);
+        sw(calcColMap.permiso,      permiso || null);
+        sw(calcColMap.totalPermiso, permiso ? parseFloat((permiso * cfg.salary_dia).toFixed(2)) : null);
+        sw(calcColMap.feriado,      fer     || null);
+        sw(calcColMap.totalFeriado, fer     ? parseFloat((fer * cfg.salary_dia).toFixed(2))     : null);
+        sw(calcColMap.bruto,        bruto   || null);
+        sw(calcColMap.css,          css     || null);
+        sw(calcColMap.neto,         neto    || null);
+        row.getCell(50).value = null; row.getCell(51).value = null; row.getCell(52).value = null;
+        row.commit();
+        hoja2Rows.push({ emp, neto });
+      }
+      rowOffset += empList.length;
+    }
+
+    const maxTemplateRow = half === '1' ? 84 : 92;
+    for (let rowIdx = DATA_START + rowOffset; rowIdx <= maxTemplateRow; rowIdx++) {
+      const row = wsPsmt.getRow(rowIdx);
+      for (let c = 1; c <= 52; c++) {
+        try { const cell = row.getCell(c); if (!(cell as any).formula) { cell.value = null; cell.fill = { type: 'pattern', pattern: 'none' }; } } catch {}
+      }
+      row.commit();
+    }
+
+    const wsHoja2 = wb.getWorksheet('Hoja2');
+    if (wsHoja2) {
+      const H2_START = 5, H2_MAX = 79;
+      for (let i = 0; i < hoja2Rows.length && i < H2_MAX - H2_START + 1; i++) {
+        const { emp, neto } = hoja2Rows[i];
+        const row2 = wsHoja2.getRow(H2_START + i);
+        row2.getCell(2).value = emp.banco || '';
+        row2.getCell(3).value = emp.cuenta_bancaria || '';
+        row2.getCell(4).value = emp.full_name;
+        row2.getCell(5).value = neto;
+        row2.commit();
+      }
+      for (let rowIdx = H2_START + hoja2Rows.length; rowIdx <= H2_MAX; rowIdx++) {
+        const row2 = wsHoja2.getRow(rowIdx);
+        for (let c = 2; c <= 5; c++) row2.getCell(c).value = null;
+        row2.commit();
+      }
+    }
+
+    addSinMatchSheetGS(wb, unmatchedDB);
+
+    const clubSuffix = singleClubId
+      ? (configuredCfgs[0]?.name as string || singleClubId).replace(/\s+/g, '_').toUpperCase()
+      : 'GLOBAL';
+    const filename = `PSMT_GS_${clubSuffix}_${periodoShort.replace(/ /g, '_')}_${monthNameEs}_${y}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await wb.xlsx.write(res);
+    res.end();
+
+  } catch (error: any) {
+    console.error('Error generando PSMT desde Google Sheets:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error?.message || 'Error al generar la planilla PSMT' });
+    }
+  }
 });
 // ─────────────────────────────────────────────────────────────────────────────
 
