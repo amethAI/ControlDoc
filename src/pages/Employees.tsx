@@ -20,6 +20,8 @@ interface Employee {
   termination_date?: string;
 }
 
+interface Club { id: string; name: string; }
+
 export default function Employees() {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -32,6 +34,22 @@ export default function Employees() {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isBulkEmployeeModalOpen, setIsBulkEmployeeModalOpen] = useState(false);
   const [isImportDatesModalOpen, setIsImportDatesModalOpen] = useState(false);
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [clubFilter, setClubFilter] = useState('');
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const filterRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    apiFetch('/api/clubs').then(r => r.ok ? r.json() : []).then(setClubs).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setShowFilterMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // All hooks must be declared unconditionally before any early return
   const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
@@ -96,10 +114,11 @@ export default function Employees() {
 
   const displayEmployees = showMissingContract ? missingContractEmployees : employees;
 
-  const filteredEmployees = displayEmployees.filter(emp =>
-    emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.cedula.includes(searchTerm)
-  );
+  const filteredEmployees = displayEmployees.filter(emp => {
+    const matchesSearch = emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || emp.cedula.includes(searchTerm);
+    const matchesClub = !clubFilter || emp.club_id === clubFilter;
+    return matchesSearch && matchesClub;
+  });
 
   return (
     <div className="space-y-6">
@@ -200,12 +219,49 @@ export default function Employees() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <div className="flex gap-3">
-          <button className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-            <Filter className="h-4 w-4 mr-2 text-slate-500" />
+        {!isRestricted && <div className="flex gap-3 relative" ref={filterRef}>
+          <button
+            onClick={() => setShowFilterMenu(v => !v)}
+            className={`inline-flex items-center px-4 py-2 border rounded-lg shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors ${
+              clubFilter
+                ? 'border-blue-500 bg-blue-50 text-blue-700'
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <Filter className={`h-4 w-4 mr-2 ${clubFilter ? 'text-blue-500' : 'text-slate-500'}`} />
             Filtros
+            {clubFilter && <span className="ml-2 bg-blue-500 text-white text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center">1</span>}
           </button>
-        </div>
+          {showFilterMenu && (
+            <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg z-20 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Club</span>
+                {clubFilter && (
+                  <button onClick={() => setClubFilter('')} className="text-xs text-blue-600 hover:text-blue-800">
+                    Limpiar
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1 max-h-60 overflow-y-auto">
+                <button
+                  onClick={() => { setClubFilter(''); setShowFilterMenu(false); }}
+                  className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors ${!clubFilter ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700 hover:bg-slate-50'}`}
+                >
+                  Todos los clubes
+                </button>
+                {clubs.map(club => (
+                  <button
+                    key={club.id}
+                    onClick={() => { setClubFilter(club.id); setShowFilterMenu(false); }}
+                    className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors ${clubFilter === club.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700 hover:bg-slate-50'}`}
+                  >
+                    {club.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>}
       </div>
 
       <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">

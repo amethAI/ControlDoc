@@ -2096,11 +2096,12 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
   }
 });
 
-// Generate PSMT planilla directly from a programación Excel file — no attendance table
+// Generate PSMT planilla from programación Excel — supports 1 or multiple clubs
 // Auth: isAuthenticated + role check
-// Body: multipart/form-data { file, clubId, year, month, half, sheetName, headerRow, nameCol, dataStartRow }
+// Body: multipart/form-data { files[], entries (JSON), year, month, half }
+// entries JSON: [{clubId?, sheetName, headerRow, nameCol, dataStartRow}, ...]
 router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: any, next: any) => {
-  uploadExcel.single('file')(req, res, (err: any) => {
+  uploadExcel.array('files', 10)(req, res, (err: any) => {
     if (err instanceof multer.MulterError) {
       return res.status(400).json({ error: `Error al subir: ${err.message}` });
     } else if (err) {
@@ -2115,63 +2116,89 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       return res.status(403).json({ error: 'Sin permiso para generar planilla PSMT' });
     }
 
-    if (!req.file) {
-      return res.status(400).json({ error: 'Se requiere el archivo de programación (.xlsx)' });
+    const files = (req.files || []) as Express.Multer.File[];
+    if (files.length === 0) {
+      return res.status(400).json({ error: 'Se requiere al menos un archivo de programación (.xlsx)' });
     }
 
-    const { clubId, year, month, half, sheetName } = req.body;
-    const hRow  = parseInt(req.body.headerRow)    || 4;
-    const nCol  = parseInt(req.body.nameCol)      || 2;
-    const dsRow = parseInt(req.body.dataStartRow) || 5;
+    let entries: Array<{ clubId?: string; sheetName: string; headerRow: number; nameCol: number; dataStartRow: number }>;
+    try {
+      entries = JSON.parse(req.body.entries || '[]');
+    } catch {
+      return res.status(400).json({ error: 'Parámetro entries inválido' });
+    }
+    if (entries.length === 0 || entries.length !== files.length) {
+      return res.status(400).json({ error: 'Número de archivos y configuraciones no coincide' });
+    }
 
-    if (!clubId || !year || !month || !['1', '2'].includes(half) || !sheetName) {
-      return res.status(400).json({ error: 'Parámetros requeridos: clubId, year, month, half (1 o 2), sheetName' });
+    const { year, month, half } = req.body;
+    if (!year || !month || !['1', '2'].includes(half)) {
+      return res.status(400).json({ error: 'Parámetros requeridos: year, month, half (1 o 2)' });
     }
 
     const y = parseInt(year);
-    const m = parseInt(month) - 1; // 0-indexed for Date constructor
-
-    // ── 1. Parse programación file with SheetJS (lightweight buffer parse — no OOM) ──
-    const { default: XLSX } = (await import('xlsx')) as any;
-    const progWb = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const sheetNames: string[] = progWb.SheetNames || [];
-
-    // Exact match first, then trimmed case-insensitive fallback
-    let resolvedSheetName = sheetName;
-    let progWs = progWb.Sheets[sheetName];
-    if (!progWs) {
-      const normalizedTarget = sheetName.trim().toUpperCase();
-      const match = sheetNames.find((s: string) => s.trim().toUpperCase() === normalizedTarget);
-      if (match) {
-        resolvedSheetName = match;
-        progWs = progWb.Sheets[match];
-      }
-    }
-    if (!progWs) {
-      return res.status(400).json({
-        error: `Hoja "${sheetName}" no encontrada. Hojas disponibles: ${sheetNames.join(' | ')}`
-      });
-    }
+    const m = parseInt(month) - 1;
 
     const startDay = half === '1' ? 1 : 16;
     const endDay   = half === '1' ? 15 : new Date(y, m + 1, 0).getDate();
-    const range    = XLSX.utils.decode_range(progWs['!ref'] || 'A1:A1');
 
-    // Map day number → SheetJS column index (0-based) from the header row
-    const dayColMap: Record<number, number> = {};
-    for (let C = range.s.c; C <= range.e.c; C++) {
-      const cell = progWs[XLSX.utils.encode_cell({ r: hRow - 1, c: C })];
-      if (!cell) continue;
-      const val = Number(cell.v);
-      if (!isNaN(val) && val >= startDay && val <= endDay) dayColMap[val] = C;
+    const normalize = (s: string) =>
+      s.trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+
+    // ── 1. Parse all programación files → build combined progAttMap ──
+    const { default: XLSX } = (await import('xlsx')) as any;
+    const progAttMap = new Map<string, Map<string, string>>();
+
+    for (let i = 0; i < files.length; i++) {
+      const file  = files[i];
+      const entry = entries[i];
+      const hRow  = entry.headerRow    || 4;
+      const nCol  = entry.nameCol      || 2;
+      const dsRow = entry.dataStartRow || 5;
+      const sName = entry.sheetName    || '';
+
+      const progWb = XLSX.read(file.buffer, { type: 'buffer' });
+      const sNames: string[] = progWb.SheetNames || [];
+      let progWs = progWb.Sheets[sName];
+      if (!progWs) {
+        const nt = sName.trim().toUpperCase();
+        const match = sNames.find((s: string) => s.trim().toUpperCase() === nt);
+        if (match) progWs = progWb.Sheets[match];
+      }
+      if (!progWs) {
+        return res.status(400).json({
+          error: `Archivo ${i + 1}: hoja "${sName}" no encontrada. Disponibles: ${sNames.join(' | ')}`
+        });
+      }
+
+      const range = XLSX.utils.decode_range(progWs['!ref'] || 'A1:A1');
+      const dayColMap: Record<number, number> = {};
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cell = progWs[XLSX.utils.encode_cell({ r: hRow - 1, c: C })];
+        if (!cell) continue;
+        const val = Number(cell.v);
+        if (!isNaN(val) && val >= startDay && val <= endDay) dayColMap[val] = C;
+      }
+      for (let R = dsRow - 1; R <= range.e.r; R++) {
+        const nameCell = progWs[XLSX.utils.encode_cell({ r: R, c: nCol - 1 })];
+        const rawName  = String(nameCell?.v ?? '').trim();
+        if (!rawName) continue;
+        const normName = normalize(rawName);
+        if (!progAttMap.has(normName)) progAttMap.set(normName, new Map());
+        const empMarks = progAttMap.get(normName)!;
+        for (let day = startDay; day <= endDay; day++) {
+          const col = dayColMap[day];
+          if (col === undefined) continue;
+          const markCell = progWs[XLSX.utils.encode_cell({ r: R, c: col })];
+          const mark = String(markCell?.v ?? '').trim().toUpperCase();
+          if (!mark) continue;
+          const mm = String(m + 1).padStart(2, '0');
+          const dd = String(day).padStart(2, '0');
+          empMarks.set(`${y}-${mm}-${dd}`, mark);
+        }
+      }
     }
 
-    // Normalize employee names for matching (strips accents, uppercases, collapses spaces)
-    const normalize = (s: string) =>
-      s.trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
-
-    // Fuzzy lookup: exact match first, then prefix match to handle programación having
-    // apellido materno that the DB doesn't (e.g. "BRITANY CABALLERO FLORES" vs "BRITANY CABALLERO")
     const findProgMarks = (empFullName: string): Map<string, string> | undefined => {
       const normEmp = normalize(empFullName);
       const exact = progAttMap.get(normEmp);
@@ -2184,30 +2211,39 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       return undefined;
     };
 
-    // Build attendance map: normalizedName → dateStr ('YYYY-MM-DD') → raw mark
-    const progAttMap = new Map<string, Map<string, string>>();
-    for (let R = dsRow - 1; R <= range.e.r; R++) {
-      const nameCell = progWs[XLSX.utils.encode_cell({ r: R, c: nCol - 1 })];
-      const rawName  = String(nameCell?.v ?? '').trim();
-      if (!rawName) continue;
+    // Single-club: 1 entry with clubId. Multi-club: everything else.
+    const clubId = (entries.length === 1 && entries[0].clubId) ? entries[0].clubId : undefined;
+    // For multi-file uploads: restrict to only the uploaded clubs (in DB sort order)
+    const specificClubIds = entries.length > 1
+      ? entries.map(e => e.clubId).filter(Boolean) as string[]
+      : null;
 
-      const normName = normalize(rawName);
-      if (!progAttMap.has(normName)) progAttMap.set(normName, new Map());
-      const empMarks = progAttMap.get(normName)!;
+    // ── 2. Build common period utilities ──
+    const startDate = half === '1' ? new Date(y, m, 1) : new Date(y, m, 16);
+    const endDate   = half === '1' ? new Date(y, m, 15) : new Date(y, m + 1, 0);
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    const periodDays: Date[] = [];
+    const cur = new Date(startDate);
+    while (cur <= endDate) { periodDays.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
 
-      for (let day = startDay; day <= endDay; day++) {
-        const col = dayColMap[day];
-        if (col === undefined) continue;
-        const markCell = progWs[XLSX.utils.encode_cell({ r: R, c: col })];
-        const mark = String(markCell?.v ?? '').trim().toUpperCase();
-        if (!mark) continue;
-        const mm = String(m + 1).padStart(2, '0');
-        const dd = String(day).padStart(2, '0');
-        empMarks.set(`${y}-${mm}-${dd}`, mark);
+    const progToCode = (mark: string | undefined, day: Date): string => {
+      if (!mark) return '';
+      const isSunday = day.getDay() === 0;
+      switch (mark) {
+        case 'A': return isSunday ? 'D' : '1';
+        case 'P': return 'P';
+        case 'I': return 'I';
+        case 'F': return 'F';
+        default:  return '';
       }
-    }
+    };
 
-    // ── 2. Fetch employees + club config from DB ──
+    const MONTHS_ES    = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    const monthNameEs  = MONTHS_ES[m];
+    const periodoShort = half === '1' ? '1RA Q' : '2DA Q';
+
+    if (clubId) {
+    // ── SINGLE-CLUB MODE ──
     const clubCfg = await getClubConfig(clubId);
     if (!clubCfg.name) return res.status(404).json({ error: 'Club no encontrado' });
 
@@ -2220,34 +2256,12 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
     if (empErr) throw empErr;
 
     const empList = employees || [];
-
-    // ── 3. Build period days array ──
-    const startDate = half === '1' ? new Date(y, m, 1) : new Date(y, m, 16);
-    const endDate   = half === '1' ? new Date(y, m, 15) : new Date(y, m + 1, 0);
-    const fmt = (d: Date) => d.toISOString().split('T')[0];
-    const periodDays: Date[] = [];
-    const cur = new Date(startDate);
-    while (cur <= endDate) { periodDays.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
-
-    // Convert programación mark → PSMT template code
-    const progToCode = (mark: string | undefined, day: Date): string => {
-      if (!mark) return '';
-      const isSunday = day.getDay() === 0;
-      switch (mark) {
-        case 'A': return isSunday ? 'D' : '1'; // presente: D=domingo, 1=día regular
-        case 'P': return 'P';  // permiso
-        case 'I': return 'I';  // incapacidad
-        case 'F': return 'F';  // feriado
-        default:  return '';   // L/X/D/blank = libre/descanso, no cuenta
-      }
-    };
-
     const SALARIO_MENSUAL = clubCfg.salary_mensual;
     const SALARIO_DIA     = clubCfg.salary_dia;
     const SALARIO_DOM     = clubCfg.salary_dom;
     const CSS_RATE        = clubCfg.css_rate;
 
-    // ── 4. Load PSMT template and fill with ExcelJS (reads from disk = fine, no OOM) ──
+    // ── Load PSMT template and fill with ExcelJS ──
     const { default: ExcelJS } = await import('exceljs');
     const templateFile = half === '1' ? 'psmt-1ra-q.xlsx' : 'psmt-2da-q.xlsx';
     const templatePath = path.join(process.cwd(), 'server', 'templates', templateFile);
@@ -2257,9 +2271,6 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
     const ws = wb.getWorksheet(clubCfg.sheet_name);
     if (!ws) throw new Error(`Sheet "${clubCfg.sheet_name}" no encontrada en plantilla PSMT`);
 
-    const MONTHS_ES    = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
-    const monthNameEs  = MONTHS_ES[m];
-    const periodoShort = half === '1' ? '1RA Q' : '2DA Q';
     ws.getRow(3).getCell(8).value = monthNameEs;
     ws.getRow(3).commit();
     ws.getRow(4).getCell(7).value = `PERIODO: ${periodoShort} ${monthNameEs} ${y}`;
@@ -2267,11 +2278,6 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
     ws.getRow(4).commit();
     try { (ws as any).conditionalFormattings.splice(0, (ws as any).conditionalFormattings.length); } catch {}
 
-    // Pre-fix shared formula clones: ExcelJS stores some cells as type=6 (Formula)
-    // with model.formula=undefined (the serializer path) even though the formula
-    // getter can still resolve it from the shared-formula cache.
-    // Fix: store the resolved formula back to _formula so model.formula is populated.
-    // Only clear to null if the formula genuinely can't be resolved.
     const nullValObj = {
       get type() { return 0; }, get formula() { return ''; },
       get value() { return null; }, get model() { return { type: 0 }; },
@@ -2299,13 +2305,10 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
     }
 
     const DATA_START_ROW = 9;
-    const COL_N          = 14; // column N = 14 (1-indexed), where day codes start
-    const numDays        = periodDays.length; // full period length, used for attendance counting
-
-    // ── Scan template header row to find calculation column positions by label ──
-    const HEADER_ROW = 8;
+    const COL_N          = 14;
+    const numDays        = periodDays.length;
+    const HEADER_ROW     = 8;
     const calcColMap: Record<string, number> = {};
-    // Check TOTAL variants first to avoid "INCAPACIDAD" matching "TOTAL INCAPACIDAD"
     const labelMap: Array<[string, string]> = [
       ['TOTAL DOMINGOS',     'totalDoms'],
       ['TOTAL INCAPACIDAD',  'totalIncap'],
@@ -2329,14 +2332,11 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       }
     });
 
-    // Cap day-code column writes at the first calc column — prevents overflowing into
-    // shared-formula cells when the period has 16 days (2da Q of 31-day months)
     const firstCalcCol = Math.min(
       ...[calcColMap.dias, calcColMap.doms, calcColMap.totalDoms].filter(Boolean as any)
     );
     const maxDaySlots = (firstCalcCol && isFinite(firstCalcCol)) ? firstCalcCol - COL_N : 15;
 
-    // Fill one row per employee
     for (let i = 0; i < empList.length; i++) {
       const emp      = empList[i] as any;
       const rowIdx   = DATA_START_ROW + i;
@@ -2344,7 +2344,6 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       const kronos   = emp.cedula ? clubCfg.kronos_prefix + emp.cedula.replace(/-/g, '') : '';
       const empMarks = findProgMarks(emp.full_name);
 
-      // Compute attendance totals for this employee
       let dias = 0, doms = 0, incap = 0, permiso = 0, fer = 0;
       for (const day of periodDays) {
         const code = progToCode(empMarks?.get(fmt(day)), day);
@@ -2358,7 +2357,6 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       const css   = parseFloat((bruto * CSS_RATE).toFixed(2));
       const neto  = parseFloat((bruto - css).toFixed(2));
 
-      // Clear fills (extend range to cover day cols + calc cols)
       const clearUpTo = Math.max(COL_N + numDays - 1, 52);
       for (let c = 1; c <= clearUpTo; c++) {
         try {
@@ -2381,17 +2379,12 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       row.getCell(12).value = SALARIO_MENSUAL;
       row.getCell(13).value = SALARIO_DIA;
 
-      // Day codes — capped at maxDaySlots to avoid overflowing into calc columns
-      // (2da Q of 31-day months has 16 days but template only has 15 day slots)
       for (let d = 0; d < Math.min(numDays, maxDaySlots); d++) {
         const day  = periodDays[d];
         const mark = empMarks?.get(fmt(day));
         try { row.getCell(COL_N + d).value = progToCode(mark, day) || null; } catch {}
       }
 
-      // Computed summary values — written directly because ExcelJS can't reliably
-      // replicate shared formulas from the template. Plain try/catch — ExcelJS may
-      // throw on shared-formula cells outside the master's ref range.
       const safeWrite = (col: number | undefined, val: any) => {
         if (!col) return;
         try { row.getCell(col).value = val; } catch {}
@@ -2409,7 +2402,6 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       safeWrite(calcColMap.css,          css     || null);
       safeWrite(calcColMap.neto,         neto    || null);
 
-      // Clear template's hardcoded deduction input cols (AX=50, AY=51, AZ=52)
       row.getCell(50).value = null;
       row.getCell(51).value = null;
       row.getCell(52).value = null;
@@ -2417,7 +2409,6 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       row.commit();
     }
 
-    // Clear unused template rows so sample data doesn't bleed through
     const maxTemplateRow = half === '1' ? 84 : 92;
     for (let rowIdx = DATA_START_ROW + empList.length; rowIdx <= maxTemplateRow; rowIdx++) {
       const row = ws.getRow(rowIdx);
@@ -2430,7 +2421,6 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       row.commit();
     }
 
-    // Fill Hoja2 (bank transfer summary)
     const ws2 = wb.getWorksheet('Hoja2');
     if (ws2) {
       const HOJA2_START = 5;
@@ -2471,6 +2461,204 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     await wb.xlsx.write(res);
     res.end();
+
+    } else {
+    // ── MULTI-CLUB MODE ──
+    let clubs: any[];
+    if (specificClubIds && specificClubIds.length > 0) {
+      const { data: scData, error: scErr } = await supabase
+        .from('clubs').select('id, name, sort_order')
+        .in('id', specificClubIds).order('sort_order', { ascending: true });
+      if (scErr) throw scErr;
+      clubs = scData || [];
+    } else {
+      const { data: acData, error: acErr } = await supabase
+        .from('clubs').select('id, name, sort_order')
+        .eq('is_active', 1).not('id', 'in', '("global","hr")')
+        .order('sort_order', { ascending: true });
+      if (acErr) throw acErr;
+      clubs = acData || [];
+    }
+    if (clubs.length === 0) return res.status(404).json({ error: 'No hay clubes activos' });
+
+    const clubConfigs = await Promise.all(clubs.map((c: any) => getClubConfig(c.id)));
+    const firstCfg = clubConfigs[0];
+
+    const { default: ExcelJS2 } = await import('exceljs');
+    const templateFile2 = half === '1' ? 'psmt-1ra-q.xlsx' : 'psmt-2da-q.xlsx';
+    const templatePath2 = path.join(process.cwd(), 'server', 'templates', templateFile2);
+    const wb2 = new ExcelJS2.Workbook();
+    await wb2.xlsx.readFile(templatePath2);
+
+    const ws2m = wb2.getWorksheet(firstCfg?.sheet_name ?? 'PRICESMART ');
+    if (!ws2m) throw new Error(`Sheet "${firstCfg?.sheet_name}" no encontrada en plantilla PSMT`);
+
+    ws2m.getRow(3).getCell(8).value = monthNameEs; ws2m.getRow(3).commit();
+    ws2m.getRow(4).getCell(7).value = `PERIODO: ${periodoShort} ${monthNameEs} ${y}`;
+    ws2m.getRow(4).getCell(8).value = periodoShort; ws2m.getRow(4).commit();
+    try { (ws2m as any).conditionalFormattings.splice(0, (ws2m as any).conditionalFormattings.length); } catch {}
+
+    const nullValObj2 = {
+      get type() { return 0; }, get formula() { return ''; },
+      get value() { return null; }, get model() { return { type: 0 }; },
+      release() {}, acquire() {}
+    };
+    for (const row of ((ws2m as any)._rows || [])) {
+      if (!row) continue;
+      for (const cell of ((row as any)._cells || [])) {
+        if (!cell) continue;
+        const v = (cell as any)._value;
+        if (v && v.model?.type === 6 && v.model?.formula == null) {
+          try {
+            const resolved = String(v.formula ?? '');
+            if (resolved) { (v.model as any).formula = resolved; delete (v.model as any).sharedFormula; }
+            else { (cell as any)._value = nullValObj2; }
+          } catch { (cell as any)._value = nullValObj2; }
+        }
+      }
+    }
+
+    const DATA_START_ROW2 = 9;
+    const COL_N2          = 14;
+    const numDays2        = periodDays.length;
+    const HEADER_ROW2     = 8;
+    const calcColMap2: Record<string, number> = {};
+    const labelMap2: Array<[string, string]> = [
+      ['TOTAL DOMINGOS',     'totalDoms'],
+      ['TOTAL INCAPACIDAD',  'totalIncap'],
+      ['TOTAL PERMISO',      'totalPermiso'],
+      ['TOTAL FERIADO',      'totalFeriado'],
+      ['DIAS LABORADOS',     'dias'],
+      ['DOMINGOS LABORADOS', 'doms'],
+      ['INCAPACIDAD',        'incap'],
+      ['PERMISO',            'permiso'],
+      ['FERIADO',            'feriado'],
+      ['BRUTO',              'bruto'],
+      ['CSS',                'css'],
+      ['NETO',               'neto'],
+    ];
+    const stripAccents2 = (s: string) =>
+      s.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    ws2m.getRow(HEADER_ROW2).eachCell({ includeEmpty: false }, (cell: any, col: number) => {
+      const text = stripAccents2(String(cell.value ?? ''));
+      for (const [label, key] of labelMap2) {
+        if (text.includes(label) && !calcColMap2[key]) { calcColMap2[key] = col; break; }
+      }
+    });
+    const firstCalcCol2 = Math.min(
+      ...[calcColMap2.dias, calcColMap2.doms, calcColMap2.totalDoms].filter(Boolean as any)
+    );
+    const maxDaySlots2 = (firstCalcCol2 && isFinite(firstCalcCol2)) ? firstCalcCol2 - COL_N2 : 15;
+
+    let rowOffset = 0;
+    const hoja2Rows: Array<{ emp: any; neto: number }> = [];
+
+    for (let ci = 0; ci < clubs.length; ci++) {
+      const club = clubs[ci] as any;
+      const cfg  = clubConfigs[ci];
+      const { data: empData, error: empErr2 } = await supabase
+        .from('employees')
+        .select('id, full_name, cedula, position, contract_start, banco, cuenta_bancaria')
+        .eq('club_id', club.id).eq('status', 'activo').order('full_name');
+      if (empErr2) throw empErr2;
+      const empList2 = empData || [];
+
+      for (let i = 0; i < empList2.length; i++) {
+        const emp      = empList2[i] as any;
+        const seqNo    = rowOffset + i + 1;
+        const row      = ws2m.getRow(DATA_START_ROW2 + rowOffset + i);
+        const kronos   = emp.cedula ? cfg.kronos_prefix + emp.cedula.replace(/-/g, '') : '';
+        const empMarks = findProgMarks(emp.full_name);
+
+        let dias = 0, doms = 0, incap = 0, permiso = 0, fer = 0;
+        for (const day of periodDays) {
+          const code = progToCode(empMarks?.get(fmt(day)), day);
+          if      (code === '1') dias++;
+          else if (code === 'D') doms++;
+          else if (code === 'I') incap++;
+          else if (code === 'P') permiso++;
+          else if (code === 'F') fer++;
+        }
+        const bruto = parseFloat((dias * cfg.salary_dia + doms * cfg.salary_dom + incap * cfg.salary_dia + fer * cfg.salary_dia + permiso * cfg.salary_dia).toFixed(2));
+        const css   = parseFloat((bruto * cfg.css_rate).toFixed(2));
+        const neto  = parseFloat((bruto - css).toFixed(2));
+
+        const clearUpTo2 = Math.max(COL_N2 + numDays2 - 1, 52);
+        for (let c = 1; c <= clearUpTo2; c++) {
+          try { const cell = row.getCell(c); if (!(cell as any).formula) cell.fill = { type: 'pattern', pattern: 'none' }; } catch {}
+        }
+        row.getCell(1).value  = seqNo;
+        row.getCell(2).value  = cfg.country.toUpperCase();
+        row.getCell(3).value  = emp.banco || '';
+        row.getCell(4).value  = emp.cuenta_bancaria || '';
+        row.getCell(5).value  = emp.cedula || '';
+        row.getCell(6).value  = kronos;
+        row.getCell(7).value  = emp.full_name;
+        row.getCell(8).value  = 'PSMT ' + (cfg.name as string).toUpperCase();
+        row.getCell(9).value  = 'Club ' + cfg.name;
+        row.getCell(10).value = emp.position || cfg.default_position;
+        row.getCell(11).value = emp.contract_start || '';
+        row.getCell(12).value = cfg.salary_mensual;
+        row.getCell(13).value = cfg.salary_dia;
+        for (let d = 0; d < Math.min(numDays2, maxDaySlots2); d++) {
+          try { row.getCell(COL_N2 + d).value = progToCode(empMarks?.get(fmt(periodDays[d])), periodDays[d]) || null; } catch {}
+        }
+        const safeWrite2 = (col: number | undefined, val: any) => { if (!col) return; try { row.getCell(col).value = val; } catch {} };
+        safeWrite2(calcColMap2.dias,         dias    || null);
+        safeWrite2(calcColMap2.doms,         doms    || null);
+        safeWrite2(calcColMap2.totalDoms,    doms    ? parseFloat((doms * cfg.salary_dom).toFixed(2)) : null);
+        safeWrite2(calcColMap2.incap,        incap   || null);
+        safeWrite2(calcColMap2.totalIncap,   incap   ? parseFloat((incap * cfg.salary_dia).toFixed(2)) : null);
+        safeWrite2(calcColMap2.permiso,      permiso || null);
+        safeWrite2(calcColMap2.totalPermiso, permiso ? parseFloat((permiso * cfg.salary_dia).toFixed(2)) : null);
+        safeWrite2(calcColMap2.feriado,      fer     || null);
+        safeWrite2(calcColMap2.totalFeriado, fer     ? parseFloat((fer * cfg.salary_dia).toFixed(2)) : null);
+        safeWrite2(calcColMap2.bruto,        bruto   || null);
+        safeWrite2(calcColMap2.css,          css     || null);
+        safeWrite2(calcColMap2.neto,         neto    || null);
+        row.getCell(50).value = null;
+        row.getCell(51).value = null;
+        row.getCell(52).value = null;
+        row.commit();
+        hoja2Rows.push({ emp, neto });
+      }
+      rowOffset += empList2.length;
+    }
+
+    const maxTemplateRow2 = half === '1' ? 84 : 92;
+    for (let rowIdx = DATA_START_ROW2 + rowOffset; rowIdx <= maxTemplateRow2; rowIdx++) {
+      const row = ws2m.getRow(rowIdx);
+      for (let c = 1; c <= 52; c++) {
+        try { const cell = row.getCell(c); if (!(cell as any).formula) { cell.value = null; cell.fill = { type: 'pattern', pattern: 'none' }; } } catch {}
+      }
+      row.commit();
+    }
+
+    const ws2h = wb2.getWorksheet('Hoja2');
+    if (ws2h) {
+      const HOJA2_START2 = 5, HOJA2_MAX2 = 79;
+      for (let i = 0; i < hoja2Rows.length && i < (HOJA2_MAX2 - HOJA2_START2 + 1); i++) {
+        const { emp, neto } = hoja2Rows[i];
+        const row2 = ws2h.getRow(HOJA2_START2 + i);
+        row2.getCell(2).value = emp.banco || '';
+        row2.getCell(3).value = emp.cuenta_bancaria || '';
+        row2.getCell(4).value = emp.full_name;
+        row2.getCell(5).value = neto;
+        row2.commit();
+      }
+      for (let rowIdx = HOJA2_START2 + hoja2Rows.length; rowIdx <= HOJA2_MAX2; rowIdx++) {
+        const row2 = ws2h.getRow(rowIdx);
+        for (let c = 2; c <= 5; c++) row2.getCell(c).value = null;
+        row2.commit();
+      }
+    }
+
+    const filename2 = `PSMT_GLOBAL_PROG_${periodoShort.replace(/ /g, '_')}_${monthNameEs}_${y}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename2}"`);
+    await wb2.xlsx.write(res);
+    res.end();
+    }
 
   } catch (error: any) {
     console.error('Error generando PSMT desde programación:', error);
