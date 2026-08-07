@@ -2199,16 +2199,41 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       }
     }
 
+    const matchedProgKeys = new Set<string>();
+    const LEGEND_KEYS = ['ASIGNADA', 'POR ASIGNAR', 'PARA CAPACITACION', 'PERMISO SOLICITADO',
+      'INCAPACIDAD', 'AUSENCIA', 'LIMPIEZA', 'REEMPLAZO', 'TRASLADO',
+      'BACKUP', 'VACACIONES', 'DESCANSO', 'IN HOUSE', 'SOLICITUD'];
+
     const findProgMarks = (empFullName: string): Map<string, string> | undefined => {
       const normEmp = normalize(empFullName);
       const exact = progAttMap.get(normEmp);
-      if (exact) return exact;
+      if (exact) { matchedProgKeys.add(normEmp); return exact; }
       for (const [progName, marks] of progAttMap) {
         if (progName.startsWith(normEmp + ' ') || normEmp.startsWith(progName + ' ')) {
+          matchedProgKeys.add(progName);
           return marks;
         }
       }
       return undefined;
+    };
+
+    const addSinMatchSheet = (workbook: any, unmatchedDB: Array<{ club: string; name: string }>) => {
+      const unmatchedExcel = [...progAttMap.keys()].filter(k =>
+        !matchedProgKeys.has(k) && !LEGEND_KEYS.some(lk => k.includes(normalize(lk)))
+      );
+      if (unmatchedDB.length === 0 && unmatchedExcel.length === 0) return;
+      const wsm = workbook.addWorksheet('SIN MATCH');
+      const hdr = wsm.addRow(['TIPO', 'CLUB', 'NOMBRE EN SISTEMA', 'DETALLE']);
+      hdr.font = { bold: true };
+      hdr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0B2' } };
+      unmatchedDB.forEach((u: any) => wsm.addRow([
+        'DB sin match en Excel', u.club, u.name, 'No se encontro en la programacion — revisar ortografia del nombre'
+      ]));
+      if (unmatchedDB.length > 0 && unmatchedExcel.length > 0) wsm.addRow([]);
+      unmatchedExcel.forEach((n: string) => wsm.addRow([
+        'Excel sin registro en DB', '', n, 'Empleada no registrada en el sistema'
+      ]));
+      wsm.columns = [{ width: 28 }, { width: 18 }, { width: 32 }, { width: 56 }];
     };
 
     // Single-club: 1 entry with clubId. Multi-club: everything else.
@@ -2337,12 +2362,14 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
     );
     const maxDaySlots = (firstCalcCol && isFinite(firstCalcCol)) ? firstCalcCol - COL_N : 15;
 
+    const unmatchedDB: Array<{ club: string; name: string }> = [];
     for (let i = 0; i < empList.length; i++) {
       const emp      = empList[i] as any;
       const rowIdx   = DATA_START_ROW + i;
       const row      = ws.getRow(rowIdx);
       const kronos   = emp.cedula ? clubCfg.kronos_prefix + emp.cedula.replace(/-/g, '') : '';
       const empMarks = findProgMarks(emp.full_name);
+      if (!empMarks) unmatchedDB.push({ club: clubCfg.name as string, name: emp.full_name });
 
       let dias = 0, doms = 0, incap = 0, permiso = 0, fer = 0;
       for (const day of periodDays) {
@@ -2455,6 +2482,7 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       }
     }
 
+    addSinMatchSheet(wb, unmatchedDB);
     const clubNameSafe = (clubCfg.name as string).replace(/\s+/g, '_').toUpperCase();
     const filename = `PSMT_${clubNameSafe}_${periodoShort.replace(/ /g, '_')}_${monthNameEs}_${y}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -2552,6 +2580,7 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
 
     let rowOffset = 0;
     const hoja2Rows: Array<{ emp: any; neto: number }> = [];
+    const unmatchedDB2: Array<{ club: string; name: string }> = [];
 
     for (let ci = 0; ci < clubs.length; ci++) {
       const club = clubs[ci] as any;
@@ -2569,6 +2598,7 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
         const row      = ws2m.getRow(DATA_START_ROW2 + rowOffset + i);
         const kronos   = emp.cedula ? cfg.kronos_prefix + emp.cedula.replace(/-/g, '') : '';
         const empMarks = findProgMarks(emp.full_name);
+        if (!empMarks) unmatchedDB2.push({ club: cfg.name as string, name: emp.full_name });
 
         let dias = 0, doms = 0, incap = 0, permiso = 0, fer = 0;
         for (const day of periodDays) {
@@ -2653,6 +2683,7 @@ router.post('/payroll/psmt-from-programacion', isAuthenticated, (req: any, res: 
       }
     }
 
+    addSinMatchSheet(wb2, unmatchedDB2);
     const filename2 = `PSMT_GLOBAL_PROG_${periodoShort.replace(/ /g, '_')}_${monthNameEs}_${y}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename2}"`);
