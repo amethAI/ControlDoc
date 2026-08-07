@@ -500,6 +500,28 @@ router.post('/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
+// ─── GET /employees-for-sheet ────────────────────────────────────────────────
+// Used by Google Apps Script to auto-populate employee names.
+// Auth: SHEET_API_KEY env var (no session required).
+router.get('/employees-for-sheet', async (req: any, res: any) => {
+  const key = (req.headers['x-sheet-key'] as string) || (req.query.key as string);
+  if (!key || key !== process.env.SHEET_API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const { club_id } = req.query;
+  if (!club_id) return res.status(400).json({ error: 'club_id requerido' });
+
+  const { data, error } = await supabase
+    .from('employees')
+    .select('full_name')
+    .eq('club_id', club_id as string)
+    .eq('status', 'activo')
+    .order('full_name');
+
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json({ names: (data || []).map((e: any) => e.full_name) });
+});
+
 // Apply authentication middleware to all routes below
 router.use(isAuthenticated);
 
@@ -4281,27 +4303,6 @@ router.get('/payroll/psmt-from-gsheet', isAuthenticated, async (req: any, res: a
       res.status(500).json({ error: error?.message || 'Error al generar la planilla PSMT' });
     }
   }
-});
-// ─── GET /employees-for-sheet ────────────────────────────────────────────────
-// Used by Google Apps Script to auto-populate employee names.
-// Auth: SHEET_API_KEY env var (no session required).
-router.get('/employees-for-sheet', async (req: any, res: any) => {
-  const key = (req.headers['x-sheet-key'] as string) || (req.query.key as string);
-  if (!key || key !== process.env.SHEET_API_KEY) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  const { club_id } = req.query;
-  if (!club_id) return res.status(400).json({ error: 'club_id requerido' });
-
-  const { data, error } = await supabase
-    .from('employees')
-    .select('full_name')
-    .eq('club_id', club_id as string)
-    .eq('status', 'activo')
-    .order('full_name');
-
-  if (error) return res.status(500).json({ error: error.message });
-  return res.json({ names: (data || []).map((e: any) => e.full_name) });
 });
 // ─────────────────────────────────────────────────────────────────────────────
 
