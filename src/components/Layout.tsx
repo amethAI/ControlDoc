@@ -46,7 +46,7 @@ export default function Layout() {
     ...((isAdmin || isKAM || user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente' || isRRHH) ? [
       { name: 'Cumpleaños', href: '/cumpleanos', icon: Cake }
     ] : []),
-    ...(!isAsistenteRRHH && user?.role !== 'Supervisor Cliente' && user?.role !== 'Coordinadora' ? [{ name: 'Asistencia', href: '/asistencia', icon: CalendarCheck }] : []),
+    ...(user?.role !== 'Supervisor Cliente' && user?.role !== 'Coordinadora' ? [{ name: 'Asistencia', href: '/asistencia', icon: CalendarCheck }] : []),
     ...((isAdmin || isKAM || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente' || isRRHH || isAsistenteRRHH) ? [
       { name: 'Clubes', href: '/clubes', icon: Building2 }
     ] : []),
