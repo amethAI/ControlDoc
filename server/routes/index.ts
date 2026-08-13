@@ -926,27 +926,37 @@ router.patch('/employees/:id', canModifyData, async (req, res) => {
 });
 
 // Get document types
-router.get('/document-types', isAuthenticated, async (req, res) => {
+router.get('/document-types', isAuthenticated, async (req: any, res) => {
   try {
-    const { data: types, error } = await supabase.from('document_types').select('*').eq('is_active', 1).order('sort_order');
+    const user = req.user;
+    const cfg = user.club_id ? await getClubConfig(user.club_id).catch(() => null) : null;
+    const countryCode = cfg?.country_code ?? 'PA';
+
+    let query = supabase.from('document_types').select('*').eq('is_active', 1).order('sort_order');
+    // Filter by country: show types matching the user's country OR universal types (null)
+    query = query.or(`country_code.eq.${countryCode},country_code.is.null`);
+
+    const { data: types, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
-    
+
     const processedTypes = types?.map(type => {
       if (type.is_combined_personal === 1 || type.is_hidden === 1) return null;
       return type;
     }).filter(Boolean) || [];
-    
-    // Add a virtual "Documentos Personales" type that will represent the combined file
-    processedTypes.unshift({
-      id: 'doc-personal-combined',
-      name: 'Documentos Personales',
-      description: 'Archivo unificado con Cédula, Carnet Verde y Carnet Blanco',
-      has_expiry: 1, // We need expiry to handle the alerts from the excel
-      is_required: 1,
-      is_active: 1,
-      sort_order: 0
-    });
-    
+
+    // Panama only: virtual combined "Documentos Personales" type
+    if (countryCode === 'PA') {
+      processedTypes.unshift({
+        id: 'doc-personal-combined',
+        name: 'Documentos Personales',
+        description: 'Archivo unificado con Cédula, Carnet Verde y Carnet Blanco',
+        has_expiry: 1,
+        is_required: 1,
+        is_active: 1,
+        sort_order: 0
+      });
+    }
+
     res.json(processedTypes);
   } catch (error: any) {
     console.error('Error in /document-types:', error);
