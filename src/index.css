@@ -4,18 +4,69 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Playfair Display", serif;
+
+  /* Dark design tokens */
+  --color-surface: #060e1e;
+  --color-surface-2: #0b1629;
+  --color-surface-3: #0f1e36;
+  --color-card: rgba(255,255,255,0.04);
+  --color-card-hover: rgba(255,255,255,0.06);
+  --color-border: rgba(255,255,255,0.07);
+  --color-border-strong: rgba(255,255,255,0.12);
 }
 
 @layer base {
   body {
-    @apply font-sans text-slate-900 bg-slate-50;
+    @apply font-sans;
+    background-color: #060e1e;
+    color: #f1f5f9;
   }
 
-  /* Make disabled inputs readable, especially on iOS Safari */
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+  /* Disabled inputs */
   input:disabled, select:disabled, textarea:disabled {
     opacity: 1 !important;
-    -webkit-text-fill-color: #334155 !important;
-    color: #334155 !important;
+    -webkit-text-fill-color: #94a3b8 !important;
+    color: #94a3b8 !important;
+  }
+
+  /* Dark select/input base */
+  input, select, textarea {
+    color-scheme: dark;
+  }
+}
+
+@layer utilities {
+  /* Glass card — main building block */
+  .glass {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 1rem;
+    backdrop-filter: blur(12px);
+  }
+
+  .glass-sm {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 0.75rem;
+    backdrop-filter: blur(12px);
+  }
+
+  /* Subtle inner glow on active/hover glass cards */
+  .glass-active {
+    background: rgba(59,130,246,0.12);
+    border: 1px solid rgba(59,130,246,0.25);
+    border-radius: 0.75rem;
+  }
+
+  /* Table row hover in dark mode */
+  .dark-row:hover {
+    background: rgba(255,255,255,0.03);
   }
 }
 
@@ -27,11 +78,11 @@
 
   body {
     background: white !important;
+    color: black !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  /* Ensure attendance grid table scrolls are visible */
   .attendance-print-wrapper {
     overflow: visible !important;
   }
