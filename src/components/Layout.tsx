@@ -108,7 +108,7 @@ export default function Layout() {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-[#eef2fb] flex overflow-hidden">
+    <div className="min-h-screen bg-[#eef2fb] flex overflow-x-hidden">
       {/* Mobile backdrop */}
       {sidebarOpen && (
         <div
@@ -243,7 +243,7 @@ export default function Layout() {
       </aside>
 
       {/* ── Main area ── */}
-      <div className="flex min-h-screen flex-1 min-w-0 flex-col overflow-hidden">
+      <div className="flex min-h-screen flex-1 min-w-0 flex-col">
         {/* Header */}
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 border-b border-black/[0.06] bg-white/90 px-4 backdrop-blur-md sm:px-6 print:hidden">
           {/* Mobile hamburger */}

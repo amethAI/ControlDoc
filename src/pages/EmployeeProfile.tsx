@@ -283,14 +283,14 @@ export default function EmployeeProfile() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate(-1)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <button onClick={() => navigate(-1)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors shrink-0">
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h2 className="text-2xl font-bold text-slate-800">Perfil del Empleado</h2>
+          <h2 className="text-2xl font-bold text-slate-800 truncate">Perfil del Empleado</h2>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 shrink-0">
           {(user?.role === 'Administrador' || user?.role === 'Super Administrador' || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
             <button
               onClick={() => setIsEditEmployeeModalOpen(true)}
