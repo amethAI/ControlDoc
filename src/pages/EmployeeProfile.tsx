@@ -2,7 +2,7 @@ import { apiFetch } from '../lib/api';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Upload, Download, FileText, AlertCircle, CheckCircle2, Clock, Edit2, UserMinus, UserPlus, Eye, Trash2 } from 'lucide-react';
+import { ArrowLeft, Upload, Download, FileText, AlertCircle, CheckCircle2, Clock, Edit2, UserMinus, UserPlus, Eye, Trash2, Smartphone, X } from 'lucide-react';
 import clsx from 'clsx';
 import UploadDocumentModal from '../components/UploadDocumentModal';
 import EditExpiryModal from '../components/EditExpiryModal';
@@ -28,6 +28,7 @@ interface Employee {
   termination_date?: string;
   banco?: string | null;
   cuenta_bancaria?: string | null;
+  user_id?: string | null;
 }
 
 interface DocumentType {
@@ -65,6 +66,10 @@ export default function EmployeeProfile() {
   const [isEditEmployeeModalOpen, setIsEditEmployeeModalOpen] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState<{id: string, name: string} | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<EmployeeDocument | null>(null);
+  const [isPortalModalOpen, setIsPortalModalOpen] = useState(false);
+  const [portalEmail, setPortalEmail] = useState('');
+  const [portalPassword, setPortalPassword] = useState('');
+  const [portalLoading, setPortalLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -246,6 +251,36 @@ export default function EmployeeProfile() {
     }
   };
 
+  const handleCreateAccess = async () => {
+    if (!portalEmail || !portalPassword) { toast.error('Completá email y contraseña'); return; }
+    setPortalLoading(true);
+    try {
+      const res = await apiFetch(`/api/admin/employees/${id}/create-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: portalEmail, password: portalPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Error al crear acceso'); return; }
+      toast.success('Acceso al portal creado correctamente');
+      setIsPortalModalOpen(false);
+      setPortalEmail('');
+      setPortalPassword('');
+      fetchData();
+    } catch { toast.error('Error de conexión'); }
+    finally { setPortalLoading(false); }
+  };
+
+  const handleRemoveAccess = async () => {
+    if (!confirm('¿Seguro que querés revocar el acceso al portal de este empleado?')) return;
+    try {
+      const res = await apiFetch(`/api/admin/employees/${id}/remove-access`, { method: 'DELETE' });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Error'); return; }
+      toast.success('Acceso revocado');
+      fetchData();
+    } catch { toast.error('Error de conexión'); }
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
@@ -283,7 +318,26 @@ export default function EmployeeProfile() {
               Reactivar Empleado
             </button>
           )}
-          <button 
+          {(user?.role === 'Administrador' || user?.role === 'Super Administrador') && (
+            employee.user_id ? (
+              <button
+                onClick={handleRemoveAccess}
+                className="inline-flex items-center px-4 py-2 border border-orange-200 rounded-lg shadow-sm text-sm font-medium text-orange-700 bg-orange-50 hover:bg-orange-100"
+              >
+                <Smartphone className="h-4 w-4 mr-2" />
+                Revocar portal
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsPortalModalOpen(true)}
+                className="inline-flex items-center px-4 py-2 border border-blue-200 rounded-lg shadow-sm text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"
+              >
+                <Smartphone className="h-4 w-4 mr-2" />
+                Dar acceso al portal
+              </button>
+            )
+          )}
+          <button
             onClick={handleDownloadZip}
             disabled={documents.length === 0}
             className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
@@ -503,6 +557,64 @@ export default function EmployeeProfile() {
         onSuccess={fetchData}
         employee={employee}
       />
+
+      {/* Portal access modal */}
+      {isPortalModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Acceso al portal</h2>
+                <p className="text-sm text-slate-500 mt-0.5">{employee.full_name}</p>
+              </div>
+              <button onClick={() => setIsPortalModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                  Correo electrónico
+                </label>
+                <input
+                  type="email"
+                  value={portalEmail}
+                  onChange={e => setPortalEmail(e.target.value)}
+                  placeholder="empleado@empresa.com"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                  Contraseña temporal
+                </label>
+                <input
+                  type="text"
+                  value={portalPassword}
+                  onChange={e => setPortalPassword(e.target.value)}
+                  placeholder="Mín. 6 caracteres"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-400"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setIsPortalModalOpen(false)}
+                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateAccess}
+                disabled={portalLoading || !portalEmail || !portalPassword}
+                className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {portalLoading ? 'Creando...' : 'Crear acceso'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
