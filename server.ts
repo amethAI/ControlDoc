@@ -32,7 +32,8 @@ async function startServer() {
     origin: (origin, cb) => {
       // Allow requests with no origin (mobile apps, curl, same-origin)
       if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-      cb(new Error('Not allowed by CORS'));
+      // Deny with false instead of Error to avoid HTML 500 responses that break res.json()
+      cb(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
