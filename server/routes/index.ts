@@ -4316,5 +4316,193 @@ router.get('/payroll/psmt-from-gsheet', isAuthenticated, async (req: any, res: a
 });
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Employee Portal ──────────────────────────────────────────────────────────
+
+const isEmployee = (req: any, res: any, next: any) => {
+  if (!req.user || req.user.role !== 'Empleado') {
+    return res.status(403).json({ error: 'Acceso denegado.' });
+  }
+  next();
+};
+
+// GET /api/employee/me — employee's profile + documents + required types
+router.get('/employee/me', isAuthenticated, isEmployee, async (req, res) => {
+  const user = (req as any).user;
+  try {
+    const { data: employee, error: empError } = await supabase
+      .from('employees')
+      .select('id, full_name, cedula, position, contract_type, contract_end, photo_url, club_id, clubs(name)')
+      .eq('user_id', user.id)
+      .eq('status', 'activo')
+      .single();
+
+    if (empError || !employee) {
+      return res.status(404).json({ error: 'Perfil de empleado no encontrado.' });
+    }
+
+    const [{ data: documents }, { data: docTypes }] = await Promise.all([
+      supabase
+        .from('employee_documents')
+        .select('id, document_type_id, file_name, expiry_date, status, uploaded_at, document_types(id, name, has_expiry)')
+        .eq('employee_id', employee.id)
+        .eq('is_current', 1)
+        .order('uploaded_at', { ascending: false }),
+      supabase
+        .from('document_types')
+        .select('id, name, has_expiry, is_required')
+        .eq('is_active', 1)
+        .eq('is_required', 1)
+        .order('sort_order'),
+    ]);
+
+    res.json({ employee, documents: documents || [], required_types: docTypes || [] });
+  } catch (error: any) {
+    console.error('[employee/me]', error);
+    res.status(500).json({ error: 'Error al obtener el perfil.' });
+  }
+});
+
+// POST /api/employee/documents/upload — employee uploads their own document
+router.post('/employee/documents/upload', isAuthenticated, isEmployee, upload.single('file'), async (req, res) => {
+  const user = (req as any).user;
+  const { document_type_id, expiry_date } = req.body;
+  const file = (req as any).file;
+
+  if (!file) return res.status(400).json({ error: 'Archivo requerido.' });
+  if (!document_type_id) return res.status(400).json({ error: 'Tipo de documento requerido.' });
+
+  try {
+    const { data: employee, error: empError } = await supabase
+      .from('employees')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (empError || !employee) return res.status(404).json({ error: 'Perfil de empleado no encontrado.' });
+
+    const docId = crypto.randomUUID();
+    const fileExt = file.originalname.split('.').pop()?.toLowerCase();
+    const filePath = `${employee.id}/${docId}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(filePath, file.buffer, { contentType: file.mimetype, upsert: false });
+
+    if (uploadError) throw new Error(`Error al subir archivo: ${uploadError.message}`);
+
+    // Mark previous version as not current
+    await supabase
+      .from('employee_documents')
+      .update({ is_current: 0 })
+      .eq('employee_id', employee.id)
+      .eq('document_type_id', document_type_id)
+      .eq('is_current', 1);
+
+    const { data: latest } = await supabase
+      .from('employee_documents')
+      .select('version')
+      .eq('employee_id', employee.id)
+      .eq('document_type_id', document_type_id)
+      .order('version', { ascending: false })
+      .limit(1)
+      .single();
+
+    const { error: insertError } = await supabase.from('employee_documents').insert({
+      id: docId,
+      employee_id: employee.id,
+      document_type_id,
+      file_url: filePath,
+      file_name: file.originalname,
+      file_size_kb: Math.round(file.size / 1024),
+      expiry_date: expiry_date || null,
+      status: 'pendiente',
+      version: (latest?.version || 0) + 1,
+      is_current: 1,
+      uploaded_by: user.id,
+    });
+
+    if (insertError) throw insertError;
+
+    res.json({ success: true, document_id: docId });
+  } catch (error: any) {
+    console.error('[employee/documents/upload]', error);
+    res.status(500).json({ error: error.message || 'Error al subir el documento.' });
+  }
+});
+
+// POST /api/admin/employees/:id/create-access — admin creates employee portal account
+router.post('/admin/employees/:id/create-access', isAuthenticated, isAdmin, async (req, res) => {
+  const { id: employeeId } = req.params;
+  const { email, password } = req.body;
+
+  if (!email || !password) return res.status(400).json({ error: 'Email y contraseña requeridos.' });
+  if (password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+
+  try {
+    const { data: employee, error: empError } = await supabase
+      .from('employees')
+      .select('id, full_name, user_id')
+      .eq('id', employeeId)
+      .single();
+
+    if (empError || !employee) return res.status(404).json({ error: 'Empleado no encontrado.' });
+    if (employee.user_id) return res.status(409).json({ error: 'Este empleado ya tiene acceso al portal.' });
+
+    const { data: existing } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (existing) return res.status(409).json({ error: 'El email ya está registrado.' });
+
+    const userId = crypto.randomUUID();
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const { error: userError } = await supabase.from('users').insert({
+      id: userId,
+      email: email.toLowerCase().trim(),
+      password_hash: passwordHash,
+      name: employee.full_name,
+      role: 'Empleado',
+      is_active: 1,
+    });
+    if (userError) throw userError;
+
+    const { error: linkError } = await supabase
+      .from('employees')
+      .update({ user_id: userId })
+      .eq('id', employeeId);
+    if (linkError) throw linkError;
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('[admin/employees/create-access]', error);
+    res.status(500).json({ error: 'Error al crear el acceso.' });
+  }
+});
+
+// DELETE /api/admin/employees/:id/remove-access
+router.delete('/admin/employees/:id/remove-access', isAuthenticated, isAdmin, async (req, res) => {
+  const { id: employeeId } = req.params;
+  try {
+    const { data: employee } = await supabase
+      .from('employees')
+      .select('id, user_id')
+      .eq('id', employeeId)
+      .single();
+
+    if (!employee?.user_id) return res.status(404).json({ error: 'Este empleado no tiene acceso al portal.' });
+
+    await supabase.from('employees').update({ user_id: null }).eq('id', employeeId);
+    await supabase.from('users').update({ is_active: 0 }).eq('id', employee.user_id);
+
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Error al eliminar el acceso.' });
+  }
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default router;
 

@@ -11,6 +11,7 @@ import { Toaster, toast } from 'sonner';
 // Static imports — always needed on first render
 import Login from './pages/Login';
 import Layout from './components/Layout';
+import EmployeeLayout from './components/EmployeeLayout';
 import PageErrorBoundary from './components/PageErrorBoundary';
 
 // Lazy imports — each page loads only when navigated to
@@ -30,6 +31,9 @@ const Expirations      = React.lazy(() => import('./pages/Expirations'));
 const ChecklistContratos = React.lazy(() => import('./pages/ChecklistContratos'));
 const RolesInfo        = React.lazy(() => import('./pages/RolesInfo'));
 const Cumpleanos       = React.lazy(() => import('./pages/Cumpleanos'));
+const EmployeeHome      = React.lazy(() => import('./pages/employee/EmployeeHome'));
+const EmployeeDocuments = React.lazy(() => import('./pages/employee/EmployeeDocuments'));
+const MyProfile         = React.lazy(() => import('./pages/employee/EmployeeProfile'));
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-full p-12 text-slate-400 text-sm">
@@ -41,6 +45,15 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to="/login" />;
+  if (user.role === 'Empleado') return <Navigate to="/mi-cuenta" replace />;
+  return <>{children}</>;
+};
+
+const ProtectedEmployeeRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return <PageLoader />;
+  if (!user) return <Navigate to="/login" />;
+  if (user.role !== 'Empleado') return <Navigate to="/" replace />;
   return <>{children}</>;
 };
 
@@ -55,6 +68,16 @@ function AppRoutes() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/login" element={<Login />} />
+
+        {/* Employee portal */}
+        <Route
+          path="/mi-cuenta"
+          element={<ProtectedEmployeeRoute><EmployeeLayout /></ProtectedEmployeeRoute>}
+        >
+          <Route index element={<PageErrorBoundary pageName="Mi Cuenta"><EmployeeHome /></PageErrorBoundary>} />
+          <Route path="documentos" element={<PageErrorBoundary pageName="Documentos"><EmployeeDocuments /></PageErrorBoundary>} />
+          <Route path="perfil" element={<PageErrorBoundary pageName="Mi Perfil"><MyProfile /></PageErrorBoundary>} />
+        </Route>
         <Route
           path="/"
           element={

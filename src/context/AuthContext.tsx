@@ -5,7 +5,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'Super Administrador' | 'Administrador' | 'Supervisora' | 'Supervisora Redvolution' | 'Coordinadora' | 'Supervisor Interno' | 'Supervisor Cliente' | 'Recursos Humanos' | 'Asistente RRHH';
+  role: 'Super Administrador' | 'Administrador' | 'Supervisora' | 'Supervisora Redvolution' | 'Coordinadora' | 'Supervisor Interno' | 'Supervisor Cliente' | 'Recursos Humanos' | 'Asistente RRHH' | 'KAM Redvolution' | 'Empleado';
   club_id?: string;
   country?: string;
   club_locale?: string;
