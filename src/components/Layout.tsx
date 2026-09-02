@@ -116,8 +116,8 @@ export default function Layout() {
       <aside
         className={clsx(
           'z-50 flex shrink-0 flex-col print:hidden',
+          /* Always fixed — sidebar never scrolls away */
           'fixed inset-y-0 left-0 transition-transform duration-300 ease-in-out',
-          'md:sticky md:top-0 md:h-screen md:transition-none',
           /* Mobile: 256px slide-in | Desktop: 66px always visible */
           'w-64 md:w-[66px]',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
@@ -371,8 +371,8 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* ── Main area ── */}
-      <div className="flex min-h-screen flex-1 min-w-0 flex-col">
+      {/* ── Main area — offset for fixed sidebar ── */}
+      <div className="flex min-h-screen min-w-0 flex-col w-full md:pl-[66px]">
         {/* Topbar */}
         <header
           className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 px-4 sm:px-6 print:hidden"

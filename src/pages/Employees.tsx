@@ -121,7 +121,9 @@ export default function Employees() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Sticky toolbar — stays visible when scrolling long employee lists */}
+      <div className="sticky top-0 z-20 space-y-3 pb-3 pt-0.5" style={{ background: '#070B16' }}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex p-1 bg-slate-100 rounded-lg w-fit flex-wrap gap-y-1">
           <button
@@ -263,6 +265,7 @@ export default function Employees() {
           )}
         </div>}
       </div>
+      </div> {/* end sticky toolbar */}
 
       <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
         <table className="min-w-full divide-y divide-slate-200">
