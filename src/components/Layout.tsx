@@ -102,7 +102,7 @@ export default function Layout() {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen flex overflow-x-hidden" style={{ background: '#070B16' }}>
+    <div className="h-screen flex overflow-hidden" style={{ background: '#070B16' }}>
       {/* Mobile backdrop */}
       {sidebarOpen && (
         <div
@@ -371,8 +371,8 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* ── Main area — offset for fixed sidebar ── */}
-      <div className="flex min-h-screen min-w-0 flex-col w-full md:pl-[66px]">
+      {/* ── Main area — h-screen forces overflow-auto to work on <main> ── */}
+      <div className="flex h-screen min-w-0 flex-col w-full md:pl-[66px]">
         {/* Topbar */}
         <header
           className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 px-4 sm:px-6 print:hidden"
