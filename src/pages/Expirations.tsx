@@ -536,7 +536,7 @@ export default function Expirations() {
               </tbody>
             ) : (
               Object.entries(groupedEmployees).map(([clubName, employeesInClub]) => {
-                const isCRClub = employeesInClub[0]?.club_country === 'Costa Rica';
+                const isCRClub = employeesInClub[0]?.country_code === 'CR' || employeesInClub[0]?.club_country === 'Costa Rica';
                 const colCount = isCRClub ? 9 : 11;
                 const dateCell = (emp: ChecklistEmployee, field: string) => (
                   <input
