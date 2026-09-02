@@ -3001,9 +3001,10 @@ router.get('/documents/expirations', canViewData, async (req, res) => {
 router.get('/reports/missing-document', canViewData, async (req, res) => {
   const { doc_type = 'Contrato sellado' } = req.query;
   const user = (req as any).user;
-  const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : req.query.club_id;
 
   try {
+    const { applyFilter } = await resolveClubScope(user, req.query.club_id as string | undefined);
+
     // Get all active employees
     let empQuery = supabase
       .from('employees')
@@ -3011,7 +3012,7 @@ router.get('/reports/missing-document', canViewData, async (req, res) => {
       .eq('status', 'activo')
       .order('full_name', { ascending: true });
 
-    if (club_id) empQuery = empQuery.eq('club_id', club_id);
+    empQuery = applyFilter(empQuery);
 
     const { data: employees, error: empError } = await empQuery;
     if (empError) throw empError;
