@@ -427,8 +427,9 @@ async function startServer() {
       maxAge: '1y',
       immutable: true,
       setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.html')) {
-          // index.html must NEVER be cached — it holds the latest chunk hashes
+        if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) {
+          // HTML: holds latest chunk hashes — must never be cached
+          // sw.js: browser must always fetch the latest SW script on every load
           res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
           res.set('Pragma', 'no-cache');
           res.set('Expires', '0');
