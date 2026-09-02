@@ -781,20 +781,15 @@ router.get('/employees/birthdays', canViewData, async (req, res) => {
   const { month, club_id: queryClubId } = req.query;
   const user = (req as any).user;
 
-  // Supervisors/Coordinadoras are always scoped to their own club
-  const scopedRoles = ['Supervisor Interno', 'Coordinadora'];
-  const club_id = scopedRoles.includes(user.role)
-    ? user.club_id
-    : (queryClubId as string | undefined);
+  const { applyFilter } = await resolveClubScope(user, queryClubId as string | undefined);
 
   let query = supabase
     .from('employees')
     .select('id, full_name, birth_date, club_id')
-    .eq('status', 'activo')
     .not('birth_date', 'is', null)
     .order('birth_date', { ascending: true });
 
-  if (club_id) query = query.eq('club_id', club_id);
+  query = applyFilter(query);
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
