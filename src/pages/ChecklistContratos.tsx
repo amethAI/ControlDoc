@@ -12,6 +12,7 @@ interface EmployeeChecklist {
   contract_start: string;
   contract_end: string;
   club_id: string;
+  country_code: string;
   documents: any[];
   isManual?: boolean;
   carta_ingreso?: string;
@@ -19,6 +20,10 @@ interface EmployeeChecklist {
   carnet_blanco?: string;
   aviso_css?: string;
   contrato_sellado?: string;
+  cr_ccss_date?: string;
+  cr_ins_date?: string;
+  cr_carne_vencimiento?: string;
+  cr_titulo_fecha?: string;
 }
 
 interface Club {
@@ -50,7 +55,6 @@ export default function ChecklistContratos() {
         if (clubsRes.ok) {
           const clubsData = await clubsRes.json();
           setClubs(clubsData);
-          // Pre-select first club for club-scoped roles
           if (user?.role === 'Supervisor Interno' && user.club_id) {
             setSelectedClubId(user.club_id);
           } else if (Array.isArray(clubsData) && clubsData.length > 0) {
@@ -81,12 +85,7 @@ export default function ChecklistContratos() {
 
   const selectedClub = clubs.find(c => c.id === selectedClubId);
   const clubName = selectedClub?.name?.toUpperCase() || '';
-
-  const getDocDate = (docs: any[], typeName: string) => {
-    const doc = docs.find(d => d.document_types?.name?.toLowerCase()?.includes(typeName.toLowerCase()) && d.is_current === 1);
-    if (!doc || !doc.expiry_date) return '';
-    return new Date(doc.expiry_date).toLocaleDateString(locale, { day: '2-digit', month: 'short', year: '2-digit' }).replace('.', '');
-  };
+  const isCR = selectedClub?.country === 'Costa Rica';
 
   const hasDoc = (docs: any[], typeName: string) => {
     const doc = docs.find(d => d.document_types?.name?.toLowerCase()?.includes(typeName.toLowerCase()) && d.is_current === 1);
@@ -134,6 +133,11 @@ export default function ChecklistContratos() {
       });
       return doc?.expiry_date ? doc.expiry_date.split('T')[0] : '';
     }
+    // CR fields
+    if (field === 'cr_ccss_date') return emp.cr_ccss_date ? emp.cr_ccss_date.split('T')[0] : '';
+    if (field === 'cr_ins_date') return emp.cr_ins_date ? emp.cr_ins_date.split('T')[0] : '';
+    if (field === 'cr_carne_vencimiento') return emp.cr_carne_vencimiento ? emp.cr_carne_vencimiento.split('T')[0] : '';
+    if (field === 'cr_titulo_fecha') return emp.cr_titulo_fecha ? emp.cr_titulo_fecha.split('T')[0] : '';
     return '';
   };
 
@@ -163,51 +167,71 @@ export default function ChecklistContratos() {
     return 'bg-green-100 text-green-700';
   };
 
-  // Filter employees: by selected club + contract type "Definido 1 año" + search term
-  const filteredEmployees = employees
-    .filter(emp => {
-      const contractType = localEdits[emp.id]?.contract_type ?? emp.contract_type;
-      const matchesClub = !selectedClubId || emp.club_id === selectedClubId;
-      const matchesSearch = !searchTerm ||
-        emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        emp.cedula.includes(searchTerm);
-      return contractType === 'Definido 1 año' && matchesClub && matchesSearch;
-    });
+  const filteredEmployees = employees.filter(emp => {
+    const matchesClub = !selectedClubId || emp.club_id === selectedClubId;
+    const matchesSearch = !searchTerm ||
+      emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.cedula.includes(searchTerm);
+    if (isCR) return matchesClub && matchesSearch;
+    // Panama: filter by "Definido 1 año" contract
+    const contractType = localEdits[emp.id]?.contract_type ?? emp.contract_type;
+    return contractType === 'Definido 1 año' && matchesClub && matchesSearch;
+  });
 
   const exportToExcel = () => {
-    const dataToExport = filteredEmployees.map((emp, index) => {
-      const contractStartStr = getVal(emp, 'contract_start');
-      return {
-        'No.': index + 1,
-        'NOMBRE': getVal(emp, 'full_name'),
-        'CÉDULA': getVal(emp, 'cedula'),
-        'CARTA DE INGRESO': getVal(emp, 'carta_ingreso'),
-        'CARNET VERDE': formatDateDisplay(getVal(emp, 'carnet_verde')),
-        'CARNET BLANCO': formatDateDisplay(getVal(emp, 'carnet_blanco')),
-        'FECHA DE AVISO CSS': formatDateDisplay(getVal(emp, 'aviso_css')),
-        'FECHA DE INICIO DE CONTRATO': formatDateDisplay(contractStartStr),
-        'FECHA DE TERMINACION DE PERIODO PROBATORIO': getProbatoryEnd(contractStartStr),
-        'FECHA DE TERMINACION DE CONTRATO': formatDateDisplay(getVal(emp, 'contract_end')),
-        'TIPO DE CONTRATOS': getVal(emp, 'contract_type'),
-      };
-    });
+    const dataToExport = isCR
+      ? filteredEmployees.map((emp, index) => ({
+          'No.': index + 1,
+          'NOMBRE': getVal(emp, 'full_name'),
+          'CÉDULA': getVal(emp, 'cedula'),
+          'FECHA CCSS': formatDateDisplay(getVal(emp, 'cr_ccss_date')),
+          'FECHA INS': formatDateDisplay(getVal(emp, 'cr_ins_date')),
+          'VENC. CARNÉ': formatDateDisplay(getVal(emp, 'cr_carne_vencimiento')),
+          'FECHA TÍTULO/INA': formatDateDisplay(getVal(emp, 'cr_titulo_fecha')),
+        }))
+      : filteredEmployees.map((emp, index) => {
+          const contractStartStr = getVal(emp, 'contract_start');
+          return {
+            'No.': index + 1,
+            'NOMBRE': getVal(emp, 'full_name'),
+            'CÉDULA': getVal(emp, 'cedula'),
+            'CARTA DE INGRESO': getVal(emp, 'carta_ingreso'),
+            'CARNET VERDE': formatDateDisplay(getVal(emp, 'carnet_verde')),
+            'CARNET BLANCO': formatDateDisplay(getVal(emp, 'carnet_blanco')),
+            'FECHA DE AVISO CSS': formatDateDisplay(getVal(emp, 'aviso_css')),
+            'FECHA DE INICIO DE CONTRATO': formatDateDisplay(contractStartStr),
+            'FECHA DE TERMINACION DE PERIODO PROBATORIO': getProbatoryEnd(contractStartStr),
+            'FECHA DE TERMINACION DE CONTRATO': formatDateDisplay(getVal(emp, 'contract_end')),
+            'TIPO DE CONTRATOS': getVal(emp, 'contract_type'),
+          };
+        });
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Checklist 1 Año');
-    XLSX.writeFile(wb, `Checklist_${clubName || 'Contratos'}_1_Año.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, isCR ? 'Checklist CR' : 'Checklist 1 Año');
+    XLSX.writeFile(wb, `Checklist_${clubName || 'Contratos'}.xlsx`);
   };
 
   if (loading) {
     return <div className="p-8 text-center text-slate-500">Cargando datos...</div>;
   }
 
+  const dateInput = (emp: EmployeeChecklist, field: string) => (
+    <input
+      readOnly={!canEdit}
+      type="date"
+      value={getVal(emp, field)}
+      onChange={e => handleEdit(emp.id, field, e.target.value)}
+      onBlur={e => handleSave(emp.id, field, e.target.value)}
+      className="bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
+    />
+  );
+
   return (
     <div className="space-y-4">
-      {/* ── Filters row ─────────────────────────────────────────────── */}
+      {/* Filters row */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex gap-3 flex-wrap">
-          {/* Search by name/cedula */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-slate-400" />
@@ -221,7 +245,6 @@ export default function ChecklistContratos() {
             />
           </div>
 
-          {/* Club filter */}
           {user?.role !== 'Supervisor Interno' && clubs.length > 0 && (
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -251,23 +274,21 @@ export default function ChecklistContratos() {
         </button>
       </div>
 
-      {/* ── Checklist table ─────────────────────────────────────────── */}
+      {/* Checklist table */}
       <div ref={tableRef} className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
 
-        {/* Logo + Title header */}
+        {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white">
-          {/* Redvolution logo */}
           <div className="flex items-center select-none">
             <span className="text-2xl font-black tracking-tight" style={{ color: '#e11d48' }}>RED</span>
             <span className="text-2xl font-black tracking-tight text-slate-500">VOLUTION</span>
           </div>
           <div className="text-right">
             <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">Check List</p>
-            <p className="text-xs text-slate-400">Contratos Definido 1 Año</p>
+            <p className="text-xs text-slate-400">{isCR ? 'Costa Rica' : 'Contratos Definido 1 Año'}</p>
           </div>
         </div>
 
-        {/* Club title banner */}
         {clubName && (
           <div className="bg-red-600 px-6 py-3 text-center">
             <h2 className="text-white font-black text-lg tracking-widest uppercase">
@@ -276,7 +297,6 @@ export default function ChecklistContratos() {
           </div>
         )}
 
-        {/* Table */}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-xs">
             <thead className="bg-[#1a2e5a] text-white">
@@ -284,23 +304,34 @@ export default function ChecklistContratos() {
                 <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">No.</th>
                 <th className="px-3 py-3 text-left font-bold uppercase tracking-wider border-r border-blue-900 min-w-[180px]">NOMBRE</th>
                 <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">CÉDULA</th>
-                <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">CARTA DE<br/>INGRESO</th>
-                <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">CARNET<br/>VERDE</th>
-                <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">CARNET<br/>BLANCO</th>
-                <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">FECHA DE<br/>AVISO CSS</th>
-                <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">INICIO DE<br/>CONTRATO</th>
-                <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">FIN PERÍODO<br/>PROBATORIO</th>
-                <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">FIN DE<br/>CONTRATO</th>
-                <th className="px-3 py-3 text-center font-bold uppercase tracking-wider whitespace-nowrap">TIPO DE<br/>CONTRATO</th>
+                {isCR ? (
+                  <>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">FECHA<br/>CCSS</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">FECHA<br/>INS</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">VENC.<br/>CARNÉ</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider whitespace-nowrap">TÍTULO<br/>/ INA</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">CARTA DE<br/>INGRESO</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">CARNET<br/>VERDE</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">CARNET<br/>BLANCO</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">FECHA DE<br/>AVISO CSS</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">INICIO DE<br/>CONTRATO</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">FIN PERÍODO<br/>PROBATORIO</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">FIN DE<br/>CONTRATO</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider whitespace-nowrap">TIPO DE<br/>CONTRATO</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-6 py-10 text-center text-slate-400">
+                  <td colSpan={isCR ? 7 : 11} className="px-6 py-10 text-center text-slate-400">
                     {selectedClubId
-                      ? 'No hay empleados con contrato "Definido 1 año" en este club.'
-                      : 'No hay empleados con contrato "Definido 1 año".'}
+                      ? `No hay empleados activos en este club.`
+                      : 'No hay empleados activos.'}
                   </td>
                 </tr>
               ) : (
@@ -331,78 +362,49 @@ export default function ChecklistContratos() {
                           className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
                         />
                       </td>
-                      <td className="px-2 py-1 border-r border-slate-100 text-center">
-                        <select
-                          disabled={!canEdit}
-                          value={getVal(emp, 'carta_ingreso')}
-                          onChange={e => { handleEdit(emp.id, 'carta_ingreso', e.target.value); handleSave(emp.id, 'carta_ingreso', e.target.value); }}
-                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs text-center"
-                        >
-                          <option value="SÍ">SÍ</option>
-                          <option value="NO">NO</option>
-                        </select>
-                      </td>
-                      <td className="px-2 py-1 border-r border-slate-100">
-                        <input
-                          readOnly={!canEdit}
-                          type="date"
-                          value={getVal(emp, 'carnet_verde')}
-                          onChange={e => { handleEdit(emp.id, 'carnet_verde', e.target.value); handleSave(emp.id, 'carnet_verde', e.target.value); }}
-                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
-                        />
-                      </td>
-                      <td className="px-2 py-1 border-r border-slate-100">
-                        <input
-                          readOnly={!canEdit}
-                          type="date"
-                          value={getVal(emp, 'carnet_blanco')}
-                          onChange={e => { handleEdit(emp.id, 'carnet_blanco', e.target.value); handleSave(emp.id, 'carnet_blanco', e.target.value); }}
-                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
-                        />
-                      </td>
-                      <td className="px-2 py-1 border-r border-slate-100">
-                        <input
-                          readOnly={!canEdit}
-                          type="date"
-                          value={getVal(emp, 'aviso_css')}
-                          onChange={e => { handleEdit(emp.id, 'aviso_css', e.target.value); handleSave(emp.id, 'aviso_css', e.target.value); }}
-                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
-                        />
-                      </td>
-                      <td className="px-2 py-1 border-r border-slate-100">
-                        <input
-                          readOnly={!canEdit}
-                          type="date"
-                          value={contractStartStr}
-                          onChange={e => { handleEdit(emp.id, 'contract_start', e.target.value); handleSave(emp.id, 'contract_start', e.target.value); }}
-                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
-                        />
-                      </td>
-                      <td className={`px-3 py-2 text-center whitespace-nowrap border-r border-slate-100 font-semibold rounded-sm ${probatoryColor}`}>
-                        {probatoryEnd}
-                      </td>
-                      <td className="px-2 py-1 border-r border-slate-100">
-                        <input
-                          readOnly={!canEdit}
-                          type="date"
-                          value={getVal(emp, 'contract_end')}
-                          onChange={e => { handleEdit(emp.id, 'contract_end', e.target.value); handleSave(emp.id, 'contract_end', e.target.value); }}
-                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
-                        />
-                      </td>
-                      <td className="px-2 py-1">
-                        <select
-                          value={getVal(emp, 'contract_type')}
-                          onChange={e => { handleEdit(emp.id, 'contract_type', e.target.value); handleSave(emp.id, 'contract_type', e.target.value); }}
-                          className="bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
-                        >
-                          <option value="">Seleccionar...</option>
-                          <option value="Definido">Definido</option>
-                          <option value="Definido 1 año">Definido 1 año</option>
-                          <option value="Indefinido">Indefinido</option>
-                          <option value="Servicios Profesionales">Servicios Profesionales</option>
-                        </select>
-                      </td>
+                      {isCR ? (
+                        <>
+                          <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'cr_ccss_date')}</td>
+                          <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'cr_ins_date')}</td>
+                          <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'cr_carne_vencimiento')}</td>
+                          <td className="px-2 py-1">{dateInput(emp, 'cr_titulo_fecha')}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-2 py-1 border-r border-slate-100 text-center">
+                            <select
+                              disabled={!canEdit}
+                              value={getVal(emp, 'carta_ingreso')}
+                              onChange={e => { handleEdit(emp.id, 'carta_ingreso', e.target.value); handleSave(emp.id, 'carta_ingreso', e.target.value); }}
+                              className="bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs text-center"
+                            >
+                              <option value="SÍ">SÍ</option>
+                              <option value="NO">NO</option>
+                            </select>
+                          </td>
+                          <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'carnet_verde')}</td>
+                          <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'carnet_blanco')}</td>
+                          <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'aviso_css')}</td>
+                          <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'contract_start')}</td>
+                          <td className={`px-3 py-2 text-center whitespace-nowrap border-r border-slate-100 font-semibold rounded-sm ${probatoryColor}`}>
+                            {probatoryEnd}
+                          </td>
+                          <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'contract_end')}</td>
+                          <td className="px-2 py-1">
+                            <select
+                              value={getVal(emp, 'contract_type')}
+                              onChange={e => { handleEdit(emp.id, 'contract_type', e.target.value); handleSave(emp.id, 'contract_type', e.target.value); }}
+                              className="bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
+                            >
+                              <option value="">Seleccionar...</option>
+                              <option value="Definido">Definido</option>
+                              <option value="Definido 1 año">Definido 1 año</option>
+                              <option value="Indefinido">Indefinido</option>
+                              <option value="Servicios Profesionales">Servicios Profesionales</option>
+                            </select>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   );
                 })
@@ -411,11 +413,11 @@ export default function ChecklistContratos() {
           </table>
         </div>
 
-        {/* Footer */}
         {filteredEmployees.length > 0 && (
           <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
             <span className="text-xs text-slate-500">
-              {filteredEmployees.length} empleado{filteredEmployees.length !== 1 ? 's' : ''} con contrato definido 1 año
+              {filteredEmployees.length} empleado{filteredEmployees.length !== 1 ? 's' : ''}
+              {isCR ? '' : ' con contrato definido 1 año'}
               {clubName ? ` — ${selectedClub?.name}` : ''}
             </span>
             <span className="text-[10px] font-black tracking-tight">

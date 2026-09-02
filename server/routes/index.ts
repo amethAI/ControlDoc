@@ -1412,8 +1412,9 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
 // Update employee checklist data
 router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
   const { id } = req.params;
-  const { full_name, cedula, contract_type, contract_start, contract_end, carta_ingreso, carnet_verde, carnet_blanco, aviso_css, contrato_sellado } = req.body;
-  
+  const { full_name, cedula, contract_type, contract_start, contract_end, carta_ingreso, carnet_verde, carnet_blanco, aviso_css, contrato_sellado,
+    cr_ccss_date, cr_ins_date, cr_carne_vencimiento, cr_titulo_fecha } = req.body;
+
   try {
     // 1. Update employee basic info
     const updateData: any = { updated_at: new Date().toISOString() };
@@ -1422,6 +1423,10 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
     if (contract_type !== undefined) updateData.contract_type = contract_type;
     if (contract_start !== undefined) updateData.contract_start = contract_start || null;
     if (contract_end !== undefined) updateData.contract_end = contract_end || null;
+    if (cr_ccss_date !== undefined) updateData.cr_ccss_date = cr_ccss_date || null;
+    if (cr_ins_date !== undefined) updateData.cr_ins_date = cr_ins_date || null;
+    if (cr_carne_vencimiento !== undefined) updateData.cr_carne_vencimiento = cr_carne_vencimiento || null;
+    if (cr_titulo_fecha !== undefined) updateData.cr_titulo_fecha = cr_titulo_fecha || null;
 
     const { error: empError } = await supabase
       .from('employees')
