@@ -924,8 +924,16 @@ router.patch('/employees/:id', canModifyData, async (req, res) => {
 router.get('/document-types', isAuthenticated, async (req: any, res) => {
   try {
     const user = req.user;
-    const cfg = user.club_id ? await getClubConfig(user.club_id).catch(() => null) : null;
-    const countryCode = cfg?.country_code ?? 'PA';
+    let countryCode = 'PA';
+    if (req.query.country_code) {
+      countryCode = req.query.country_code as string;
+    } else if (user.club_id) {
+      const cfg = await getClubConfig(user.club_id).catch(() => null);
+      countryCode = cfg?.country_code ?? 'PA';
+    } else if (user.country) {
+      const countryMap: Record<string, string> = { 'Costa Rica': 'CR', 'Panama': 'PA', 'Guatemala': 'GT' };
+      countryCode = countryMap[user.country] ?? 'PA';
+    }
 
     let query = supabase.from('document_types').select('*').eq('is_active', 1).order('sort_order');
     // Filter by country: show types matching the user's country OR universal types (null)

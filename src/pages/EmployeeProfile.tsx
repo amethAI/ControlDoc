@@ -73,21 +73,23 @@ export default function EmployeeProfile() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [empRes, typesRes, docsRes] = await Promise.all([
-        apiFetch(`/api/employees/${id}`),
-        apiFetch('/api/document-types'),
+      const empRes = await apiFetch(`/api/employees/${id}`);
+      if (!empRes.ok) return;
+      const empData = await empRes.json();
+
+      // Check if Supervisor Interno or Coordinadora is trying to view an employee from another club
+      if ((user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno') && empData.club_id !== user.club_id) {
+        navigate('/clubes');
+        return;
+      }
+
+      const countryCode = empData.country_code || 'PA';
+      const [typesRes, docsRes] = await Promise.all([
+        apiFetch(`/api/document-types?country_code=${countryCode}`),
         apiFetch(`/api/employees/${id}/documents`)
       ]);
 
-      if (empRes.ok && typesRes.ok && docsRes.ok) {
-        const empData = await empRes.json();
-        
-        // Check if Supervisor Interno or Coordinadora is trying to view an employee from another club
-        if ((user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno') && empData.club_id !== user.club_id) {
-          navigate('/clubes');
-          return;
-        }
-
+      if (typesRes.ok && docsRes.ok) {
         const typesData = await typesRes.json();
         const docsData = await docsRes.json();
         
