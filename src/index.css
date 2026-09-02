@@ -1,22 +1,41 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Outfit:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Playfair Display", serif;
+  --font-display: "Outfit", sans-serif;
+
+  --color-brand-50:  #EFF6FF;
+  --color-brand-100: #DBEAFE;
+  --color-brand-400: #60A5FA;
+  --color-brand-500: #3B82F6;
+  --color-brand-600: #2563EB;
+  --color-brand-700: #1D4ED8;
+
+  --color-surface-900: #070B16;
+  --color-surface-800: #0C1120;
+  --color-surface-700: #0D1528;
+  --color-surface-600: #111E38;
+}
+
+:root {
+  --sidebar-width-desktop: 66px;
+  --sidebar-width-mobile:  256px;
 }
 
 @layer base {
   body {
-    @apply font-sans text-slate-900;
-    background-color: #eef2fb;
+    @apply font-sans;
+    background-color: #070B16;
+    color: rgba(255,255,255,.85);
   }
 
-  /* Make disabled inputs readable, especially on iOS Safari */
+  /* Make disabled inputs readable */
   input:disabled, select:disabled, textarea:disabled {
     opacity: 1 !important;
-    -webkit-text-fill-color: #334155 !important;
-    color: #334155 !important;
+    -webkit-text-fill-color: #94a3b8 !important;
+    color: #94a3b8 !important;
   }
 
   /* Smooth transitions on interactive elements */
@@ -34,6 +53,105 @@
     display: none;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Dark-theme overrides — scoped to .app-content (Layout <main>)
+   Higher specificity (0,2,0) beats Tailwind utilities (0,1,0)
+   Does NOT affect Login page (outside Layout)
+   ───────────────────────────────────────────────────────────────── */
+
+/* Cards & surfaces */
+.app-content .bg-white          { background-color: #0D1528 !important; }
+.app-content .bg-slate-50       { background-color: rgba(255,255,255,.04) !important; }
+.app-content .bg-slate-100      { background-color: rgba(255,255,255,.06) !important; }
+.app-content .bg-slate-200      { background-color: rgba(255,255,255,.09) !important; }
+
+/* Hover states */
+.app-content .hover\:bg-slate-50:hover  { background-color: rgba(255,255,255,.05) !important; }
+.app-content .hover\:bg-slate-100:hover { background-color: rgba(255,255,255,.07) !important; }
+.app-content .hover\:bg-white:hover     { background-color: rgba(255,255,255,.07) !important; }
+
+/* Borders */
+.app-content .border-slate-100  { border-color: rgba(255,255,255,.07) !important; }
+.app-content .border-slate-200  { border-color: rgba(255,255,255,.09) !important; }
+.app-content .border-slate-300  { border-color: rgba(255,255,255,.12) !important; }
+.app-content .divide-slate-100 > * + * { border-color: rgba(255,255,255,.06) !important; }
+.app-content .divide-slate-200 > * + * { border-color: rgba(255,255,255,.08) !important; }
+
+/* Text */
+.app-content .text-slate-900    { color: rgba(255,255,255,.92) !important; }
+.app-content .text-slate-800    { color: rgba(255,255,255,.80) !important; }
+.app-content .text-slate-700    { color: rgba(255,255,255,.68) !important; }
+.app-content .text-slate-600    { color: rgba(255,255,255,.52) !important; }
+.app-content .text-slate-500    { color: rgba(255,255,255,.40) !important; }
+.app-content .text-slate-400    { color: rgba(255,255,255,.30) !important; }
+
+/* Shadows — soften on dark bg */
+.app-content .shadow-sm         { box-shadow: 0 1px 3px rgba(0,0,0,.4) !important; }
+.app-content .shadow-md         { box-shadow: 0 4px 12px rgba(0,0,0,.5) !important; }
+.app-content .shadow-lg         { box-shadow: 0 8px 24px rgba(0,0,0,.6) !important; }
+
+/* Headings that use text-slate-* */
+.app-content h1, .app-content h2, .app-content h3, .app-content h4 {
+  color: rgba(255,255,255,.92);
+}
+
+/* Form inputs */
+.app-content input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.app-content select,
+.app-content textarea {
+  background-color: rgba(255,255,255,.05) !important;
+  border-color: rgba(255,255,255,.10) !important;
+  color: rgba(255,255,255,.85) !important;
+}
+.app-content input::placeholder,
+.app-content textarea::placeholder {
+  color: rgba(255,255,255,.25) !important;
+}
+.app-content input:focus,
+.app-content select:focus,
+.app-content textarea:focus {
+  border-color: rgba(59,130,246,.5) !important;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59,130,246,.12) !important;
+}
+.app-content select option {
+  background-color: #0D1528;
+  color: rgba(255,255,255,.85);
+}
+
+/* Table zebra stripes */
+.app-content .odd\:bg-white:nth-child(odd)   { background-color: #0D1528 !important; }
+.app-content .even\:bg-slate-50:nth-child(even) { background-color: rgba(255,255,255,.025) !important; }
+.app-content .hover\:bg-slate-50:hover,
+.app-content tr:hover { background-color: rgba(255,255,255,.04) !important; }
+
+/* Scrollbar on dark */
+.app-content ::-webkit-scrollbar         { width: 6px; height: 6px; }
+.app-content ::-webkit-scrollbar-track   { background: rgba(255,255,255,.03); }
+.app-content ::-webkit-scrollbar-thumb   { background: rgba(255,255,255,.12); border-radius: 999px; }
+.app-content ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.22); }
+
+/* Ring / focus states */
+.app-content .ring-1       { --tw-ring-color: rgba(255,255,255,.08) !important; }
+.app-content .ring-slate-200 { --tw-ring-color: rgba(255,255,255,.08) !important; }
+
+/* Badge tweaks — keep colours but soften bg */
+.app-content .bg-emerald-100   { background-color: rgba(34,197,94,.15) !important; }
+.app-content .bg-red-100       { background-color: rgba(239,68,68,.15) !important; }
+.app-content .bg-amber-100     { background-color: rgba(251,191,36,.15) !important; }
+.app-content .bg-blue-100      { background-color: rgba(59,130,246,.15) !important; }
+.app-content .bg-purple-100    { background-color: rgba(139,92,246,.15) !important; }
+.app-content .bg-orange-100    { background-color: rgba(249,115,22,.15) !important; }
+.app-content .bg-gray-100      { background-color: rgba(255,255,255,.08) !important; }
+.app-content .text-emerald-800 { color: #4ADE80 !important; }
+.app-content .text-red-800     { color: #FCA5A5 !important; }
+.app-content .text-amber-800   { color: #FDE68A !important; }
+.app-content .text-blue-800    { color: #93C5FD !important; }
+.app-content .text-purple-800  { color: #C4B5FD !important; }
+.app-content .text-orange-800  { color: #FDBA74 !important; }
+.app-content .text-gray-800,
+.app-content .text-gray-700    { color: rgba(255,255,255,.65) !important; }
 
 @media print {
   @page {

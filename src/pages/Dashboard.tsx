@@ -1,23 +1,68 @@
 import { apiFetch } from '../lib/api';
 import React, { useEffect, useState } from 'react';
 import { useAuth, useLocale } from '../context/AuthContext';
-import { Users, AlertTriangle, FileWarning, UploadCloud, Building2, RefreshCw, X, ShieldCheck } from 'lucide-react';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  PieChart,
-  Pie
-} from 'recharts';
+  Users, AlertTriangle, FileWarning, UploadCloud, Building2,
+  RefreshCw, X, ShieldCheck, TrendingUp, Calendar,
+} from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Navigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-const COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#ec4899'];
+const PIE_COLORS = ['#3B82F6', '#22C55E', '#FBBF24', '#EF4444', '#8B5CF6', '#EC4899'];
+
+/* ── design tokens ── */
+const card = {
+  background: '#0D1528',
+  border: '1px solid rgba(255,255,255,.07)',
+  borderRadius: 20,
+};
+
+function Card({ children, className = '', style = {} }: {
+  children: React.ReactNode; className?: string; style?: React.CSSProperties;
+}) {
+  return (
+    <div className={`overflow-hidden ${className}`} style={{ ...card, ...style }}>
+      {children}
+    </div>
+  );
+}
+
+function CardHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,.06)' }}>
+      <h3 className="text-[13px] font-semibold" style={{ color: 'rgba(255,255,255,.9)', fontFamily: "'Outfit', sans-serif" }}>
+        {title}
+      </h3>
+      {subtitle && (
+        <p className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,.3)' }}>{subtitle}</p>
+      )}
+    </div>
+  );
+}
+
+/* Custom bar for projections */
+function ProjectionBar({ label, count, max }: { label: string; count: number; max: number }) {
+  const pct = max > 0 ? (count / max) * 100 : 0;
+  const isHigh = pct > 60;
+  const barColor = isHigh ? '#EF4444' : pct > 35 ? '#FBBF24' : '#3B82F6';
+  return (
+    <div className="flex items-center gap-3 py-1.5">
+      <span className="w-8 text-right text-[10px] font-semibold shrink-0" style={{ color: 'rgba(255,255,255,.3)' }}>
+        {label}
+      </span>
+      <div className="relative flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,.06)' }}>
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${pct}%`, background: barColor }}
+        />
+      </div>
+      <span className="w-6 text-right text-[11px] font-bold shrink-0" style={{ color: 'rgba(255,255,255,.7)' }}>
+        {count}
+      </span>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -33,16 +78,16 @@ export default function Dashboard() {
     expiringSoonDocuments: 0,
     incompleteEmployees: 0,
     documentsUploadedToday: 0,
-    clubDistribution: [] as { name: string, value: number }[],
-    performanceStats: null as { totalMeta: number, totalVentas: number } | null,
-    expiredList: [] as { id: string, employee_id: string, employee_name: string, type: string, date: string, status: string }[],
-    expiringList: [] as { id: string, employee_id: string, employee_name: string, type: string, date: string, status: string }[]
+    clubDistribution: [] as { name: string; value: number }[],
+    performanceStats: null as { totalMeta: number; totalVentas: number } | null,
+    expiredList: [] as { id: string; employee_id: string; employee_name: string; type: string; date: string; status: string }[],
+    expiringList: [] as { id: string; employee_id: string; employee_name: string; type: string; date: string; status: string }[],
   });
   const [loading, setLoading] = useState(true);
   const [projections, setProjections] = useState<{ label: string; count: number; month: string; clubs: { name: string; count: number }[] }[]>([]);
   const [compliance, setCompliance] = useState<{ name: string; total: number; withExpired: number; compliance: number }[]>([]);
   const [renewModal, setRenewModal] = useState<{ show: boolean; employeeId: string; employeeName: string; newDate: string }>({
-    show: false, employeeId: '', employeeName: '', newDate: ''
+    show: false, employeeId: '', employeeName: '', newDate: '',
   });
   const [renewing, setRenewing] = useState(false);
 
@@ -50,13 +95,11 @@ export default function Dashboard() {
     try {
       const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
       const params = isRestricted ? `?club_id=${user?.club_id}` : '';
-
       const [dashRes, projRes, compRes] = await Promise.all([
         apiFetch(`/api/dashboard${params}`),
         apiFetch(`/api/analytics/projections${params}`),
         apiFetch(`/api/analytics/compliance${params}`),
       ]);
-
       if (dashRes.ok) setStats(await dashRes.json());
       if (projRes.ok) setProjections(await projRes.json());
       if (compRes.ok) setCompliance(await compRes.json());
@@ -90,45 +133,53 @@ export default function Dashboard() {
     }
   };
 
-  useEffect(() => {
-    fetchStats();
-  }, [user]);
+  useEffect(() => { fetchStats(); }, [user]);
 
   const kpis = [
     {
-      name: 'Total Empleados Activos',
-      value: stats.totalEmployees,
-      icon: Users,
-      accent: '#2563eb',
-      bar: 88,
-    },
-    {
-      name: 'Documentos Vencidos',
+      label: 'Documentos Vencidos',
       value: stats.expiredDocuments,
       icon: AlertTriangle,
-      accent: '#dc2626',
-      bar: stats.expiredDocuments === 0 ? 0 : Math.min(95, 20 + stats.expiredDocuments * 6),
+      from: '#3D0A0A', to: '#1A0505',
+      accent: '#EF4444',
+      glow: 'rgba(239,68,68,.25)',
     },
     {
-      name: 'Próximos a Vencer',
+      label: 'Próximos a Vencer',
       value: stats.expiringSoonDocuments,
       icon: FileWarning,
-      accent: '#d97706',
-      bar: stats.expiringSoonDocuments === 0 ? 0 : Math.min(85, 15 + stats.expiringSoonDocuments * 5),
+      from: '#3D2A00', to: '#1A1000',
+      accent: '#FBBF24',
+      glow: 'rgba(251,191,36,.2)',
     },
     {
-      name: 'Doc. Incompleta',
+      label: 'Doc. Incompleta',
       value: stats.incompleteEmployees,
       icon: FileWarning,
-      accent: '#ea580c',
-      bar: stats.incompleteEmployees === 0 ? 0 : Math.min(80, 15 + stats.incompleteEmployees * 5),
+      from: '#3D1400', to: '#1A0800',
+      accent: '#F97316',
+      glow: 'rgba(249,115,22,.2)',
+    },
+    {
+      label: 'Subidos Hoy',
+      value: stats.documentsUploadedToday,
+      icon: UploadCloud,
+      from: '#002A1A', to: '#001008',
+      accent: '#22C55E',
+      glow: 'rgba(34,197,94,.2)',
     },
   ];
+
+  const projMax = projections.length > 0 ? Math.max(...projections.map(p => p.count), 1) : 1;
+  const alerts = [
+    ...stats.expiredList.map(e => ({ ...e, severity: 'expired' as const })),
+    ...stats.expiringList.map(e => ({ ...e, severity: 'expiring' as const })),
+  ].slice(0, 8);
 
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2" style={{ borderColor: '#3B82F6' }} />
       </div>
     );
   }
@@ -136,435 +187,317 @@ export default function Dashboard() {
   return (
     <div className="flex flex-col gap-5 max-w-7xl mx-auto">
 
-      {/* Page header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-[22px] font-extrabold tracking-tight text-slate-900">Panel de Control</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Resumen ejecutivo del estado de personal y documentación.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-          <ShieldCheck className="h-4 w-4 text-emerald-500" />
-          <span className="text-[11px] font-semibold text-slate-600">
-            {new Date().toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })}
-          </span>
+      {/* ── Hero card ── */}
+      <div
+        className="relative overflow-hidden rounded-[24px] p-6 sm:p-8"
+        style={{
+          background: 'linear-gradient(135deg, #0C1F5A 0%, #1A0B3D 50%, #070B16 100%)',
+          border: '1px solid rgba(255,255,255,.08)',
+        }}
+      >
+        {/* Glow orbs */}
+        <div
+          className="pointer-events-none absolute -top-12 -left-12 h-48 w-48 rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(59,130,246,.25) 0%, transparent 70%)' }}
+        />
+        <div
+          className="pointer-events-none absolute -bottom-8 right-32 h-40 w-40 rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(139,92,246,.2) 0%, transparent 70%)' }}
+        />
+
+        <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-xl"
+                style={{ background: 'rgba(59,130,246,.2)', border: '1px solid rgba(59,130,246,.3)' }}
+              >
+                <TrendingUp className="h-4 w-4" style={{ color: '#60A5FA' }} />
+              </div>
+              <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(96,165,250,.7)' }}>
+                Resumen Ejecutivo
+              </span>
+            </div>
+            <p
+              className="text-[13px] font-medium"
+              style={{ color: 'rgba(255,255,255,.5)', fontFamily: "'Outfit', sans-serif" }}
+            >
+              {user?.name ? `Hola, ${user.name.split(' ')[0]}` : 'Panel de Control'}
+            </p>
+            <div className="mt-1 flex items-end gap-3">
+              <span
+                className="text-[52px] font-black leading-none"
+                style={{ fontFamily: "'Outfit', sans-serif", color: '#fff' }}
+              >
+                {stats.totalEmployees}
+              </span>
+              <span className="mb-2 text-[14px] font-medium" style={{ color: 'rgba(255,255,255,.4)' }}>
+                empleados activos
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div
+              className="flex items-center gap-2 rounded-2xl px-4 py-3"
+              style={{ background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.08)' }}
+            >
+              <Calendar className="h-4 w-4 shrink-0" style={{ color: 'rgba(255,255,255,.4)' }} />
+              <span className="text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,.6)' }}>
+                {new Date().toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })}
+              </span>
+            </div>
+            <button
+              onClick={fetchStats}
+              className="flex h-10 w-10 items-center justify-center rounded-xl transition-all"
+              style={{ background: 'rgba(59,130,246,.15)', border: '1px solid rgba(59,130,246,.25)', color: '#60A5FA' }}
+              title="Actualizar"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* KPI cards */}
+      {/* ── KPI cards ── */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {kpis.map(kpi => (
           <div
-            key={kpi.name}
-            className="group relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+            key={kpi.label}
+            className="relative overflow-hidden rounded-[20px] p-5 transition-transform duration-200 hover:-translate-y-0.5"
+            style={{
+              background: `linear-gradient(135deg, ${kpi.from} 0%, ${kpi.to} 100%)`,
+              border: '1px solid rgba(255,255,255,.07)',
+              boxShadow: `0 0 30px ${kpi.glow}`,
+            }}
           >
-            {/* Icon */}
             <div
-              className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl"
-              style={{ background: `${kpi.accent}14`, color: kpi.accent }}
+              className="mb-4 flex h-9 w-9 items-center justify-center rounded-xl"
+              style={{ background: `${kpi.accent}22`, border: `1px solid ${kpi.accent}40` }}
             >
-              <kpi.icon className="h-5 w-5" />
+              <kpi.icon className="h-4 w-4" style={{ color: kpi.accent }} />
             </div>
-
-            {/* Value */}
             <p
-              className="text-[32px] font-extrabold leading-none tracking-tight"
-              style={{ color: kpi.accent === '#2563eb' ? '#0f172a' : kpi.accent }}
+              className="text-[36px] font-black leading-none"
+              style={{ fontFamily: "'Outfit', sans-serif", color: '#fff' }}
             >
               {kpi.value}
             </p>
-            <p className="mt-1.5 text-[11.5px] font-medium text-slate-500">{kpi.name}</p>
-
-            {/* Progress bar */}
-            <div
-              className="mt-4 h-1 overflow-hidden rounded-full"
-              style={{ background: `${kpi.accent}18` }}
-            >
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${kpi.bar}%`, background: kpi.accent }}
-              />
-            </div>
+            <p className="mt-1.5 text-[11px] font-medium" style={{ color: 'rgba(255,255,255,.4)' }}>
+              {kpi.label}
+            </p>
           </div>
         ))}
       </div>
 
-      {/* Row 2: Proyección + Alertas */}
+      {/* ── Row 2: Proyección + Alertas ── */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* Proyección de vencimientos */}
-        <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-2">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-            <div>
-              <h3 className="text-[13px] font-bold text-slate-900">Proyección de Vencimientos de Contratos</h3>
-              <p className="mt-0.5 text-[11px] text-slate-400">Próximos 12 meses — contratos no indefinidos</p>
-            </div>
-          </div>
-          <div className="h-[210px] p-4">
-            {projections.some(p => p.count > 0) ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={projections} barSize={18}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis
-                    dataKey="label"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: '#94a3b8', fontSize: 10 }}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: '#94a3b8', fontSize: 10 }}
-                    allowDecimals={false}
-                    width={24}
-                  />
-                  <Tooltip
-                    cursor={{ fill: '#f8fafc', radius: 6 }}
-                    contentStyle={{
-                      borderRadius: '12px',
-                      border: 'none',
-                      boxShadow: '0 10px 40px rgba(0,0,0,.1)',
-                      padding: '10px 14px',
-                      fontSize: '12px',
-                    }}
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const entry = payload[0].payload;
-                      return (
-                        <div className="text-xs">
-                          <p className="mb-1 font-bold text-slate-800">
-                            {entry.label} — {entry.count} contrato{entry.count !== 1 ? 's' : ''}
-                          </p>
-                          {entry.clubs?.map((c: { name: string; count: number }) => (
-                            <p key={c.name} className="text-slate-500">
-                              {c.name}: <span className="font-semibold text-slate-700">{c.count}</span>
-                            </p>
-                          ))}
-                        </div>
-                      );
-                    }}
-                  />
-                  <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                    {projections.map((entry, index) => (
-                      <Cell
-                        key={`proj-${index}`}
-                        fill={entry.count > 5 ? '#dc2626' : entry.count > 2 ? '#d97706' : '#2563eb'}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+        <Card className="lg:col-span-2">
+          <CardHeader
+            title="Proyección de Vencimientos de Contratos"
+            subtitle="Contratos que vencen en los próximos 6 meses"
+          />
+          <div className="p-5">
+            {projections.length === 0 ? (
+              <p className="text-center py-8 text-[12px]" style={{ color: 'rgba(255,255,255,.25)' }}>
+                Sin proyecciones disponibles
+              </p>
             ) : (
-              <div className="flex h-full items-center justify-center text-sm text-slate-400">
-                Sin contratos por vencer en los próximos 12 meses
+              <div className="space-y-1">
+                {projections.map(p => (
+                  <ProjectionBar key={p.month} label={p.label} count={p.count} max={projMax} />
+                ))}
               </div>
             )}
           </div>
-        </div>
+        </Card>
 
         {/* Alertas */}
-        <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
-            <h3 className="text-[13px] font-bold text-slate-900">Alertas</h3>
-            <div className="flex gap-1.5">
-              {stats.expiredDocuments > 0 && (
-                <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600">
-                  {stats.expiredDocuments} Venc.
-                </span>
-              )}
-              {stats.expiringSoonDocuments > 0 && (
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">
-                  {stats.expiringSoonDocuments} Próx.
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="scrollbar-none max-h-[250px] flex-1 divide-y divide-slate-50 overflow-y-auto">
-            {[...stats.expiredList, ...stats.expiringList].length > 0 ? (
-              [...stats.expiredList, ...stats.expiringList].map((doc, idx) => (
-                <div
-                  key={`${doc.id}-${idx}`}
-                  className="flex items-start gap-3 p-3.5 transition-colors hover:bg-slate-50"
-                >
-                  <div
-                    className={`mt-0.5 shrink-0 rounded-lg p-1.5 ${
-                      doc.status === 'expired'
-                        ? 'bg-red-50 text-red-600'
-                        : 'bg-amber-50 text-amber-600'
-                    }`}
-                  >
-                    {doc.status === 'expired' ? (
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                    ) : (
-                      <FileWarning className="h-3.5 w-3.5" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-1">
-                      <p className="truncate text-[11.5px] font-semibold text-slate-900">
-                        {doc.employee_name}
-                      </p>
-                      <span
-                        className={`shrink-0 text-[10px] font-bold ${
-                          doc.status === 'expired' ? 'text-red-600' : 'text-amber-600'
-                        }`}
-                      >
-                        {new Date(doc.date).toLocaleDateString(locale, { timeZone: 'UTC' })}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 flex items-center justify-between">
-                      <p className="truncate text-[10.5px] text-slate-400">{doc.type}</p>
-                      {doc.status === 'expired' && doc.type?.toLowerCase().includes('contrato') && (
-                        <button
-                          onClick={() =>
-                            setRenewModal({
-                              show: true,
-                              employeeId: doc.employee_id,
-                              employeeName: doc.employee_name,
-                              newDate: '',
-                            })
-                          }
-                          className="ml-1 flex shrink-0 items-center gap-0.5 text-[10px] font-semibold text-blue-600 hover:text-blue-800"
-                        >
-                          <RefreshCw className="h-2.5 w-2.5" />
-                          Renovar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center p-8 text-center">
-                <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-500">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-                <p className="text-sm font-semibold text-slate-900">Todo al día</p>
-                <p className="mt-1 text-xs text-slate-400">Sin alertas críticas</p>
+        <Card>
+          <CardHeader title="Alertas Recientes" subtitle={`${alerts.length} documentos requieren atención`} />
+          <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,.05)' }}>
+            {alerts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-10">
+                <ShieldCheck className="h-8 w-8" style={{ color: '#22C55E' }} />
+                <p className="text-[12px]" style={{ color: 'rgba(255,255,255,.3)' }}>Sin alertas activas</p>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Row 3: Distribución + Estado + Cumplimiento */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        {/* Distribución por Club */}
-        <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
-            <Building2 className="h-4 w-4 text-slate-400" />
-            <h3 className="text-[13px] font-bold text-slate-900">Distribución por Club</h3>
-          </div>
-          <div className="h-[200px] p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.clubDistribution} barSize={14}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#94a3b8', fontSize: 9 }}
-                  dy={6}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#94a3b8', fontSize: 9 }}
-                  width={20}
-                />
-                <Tooltip
-                  cursor={{ fill: '#f8fafc', radius: 6 }}
-                  contentStyle={{
-                    borderRadius: '12px',
-                    border: 'none',
-                    boxShadow: '0 10px 40px rgba(0,0,0,.1)',
-                  }}
-                />
-                <Bar dataKey="value" radius={[5, 5, 0, 0]}>
-                  {stats.clubDistribution.map((entry, index) => (
-                    <Cell key={`dist-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Estado de Documentación */}
-        <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-5 py-4">
-            <h3 className="text-[13px] font-bold text-slate-900">Estado de Documentación</h3>
-          </div>
-          <div className="flex h-[200px] items-center gap-4 p-4">
-            <ResponsiveContainer width="55%" height="100%">
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Vencidos', value: stats.expiredDocuments },
-                    { name: 'Próximos', value: stats.expiringSoonDocuments },
-                    {
-                      name: 'Al día',
-                      value: Math.max(
-                        0,
-                        stats.totalEmployees * 8 - stats.expiredDocuments - stats.expiringSoonDocuments
-                      ),
-                    },
-                  ]}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={42}
-                  outerRadius={62}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  <Cell fill="#dc2626" />
-                  <Cell fill="#d97706" />
-                  <Cell fill="#059669" />
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: '10px',
-                    border: 'none',
-                    boxShadow: '0 10px 40px rgba(0,0,0,.1)',
-                    fontSize: '11px',
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="flex-1 space-y-3.5">
-              {[
-                { label: 'Vencidos', value: stats.expiredDocuments, color: '#dc2626' },
-                { label: 'Próximos', value: stats.expiringSoonDocuments, color: '#d97706' },
-                {
-                  label: 'Al día',
-                  value: Math.max(
-                    0,
-                    stats.totalEmployees * 8 - stats.expiredDocuments - stats.expiringSoonDocuments
-                  ),
-                  color: '#059669',
-                },
-              ].map(item => (
-                <div key={item.label} className="flex items-center gap-2.5">
+            ) : (
+              alerts.map(a => (
+                <div key={a.id} className="flex items-start gap-3 px-4 py-3">
                   <div
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ background: item.color }}
+                    className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ background: a.severity === 'expired' ? '#EF4444' : '#FBBF24', marginTop: 6 }}
                   />
-                  <div>
-                    <p className="text-[10px] font-medium text-slate-400">{item.label}</p>
-                    <p className="text-[13px] font-bold text-slate-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      {item.value}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[11.5px] font-medium" style={{ color: 'rgba(255,255,255,.8)' }}>
+                      {a.employee_name}
+                    </p>
+                    <p className="text-[10px]" style={{ color: 'rgba(255,255,255,.35)' }}>
+                      {a.type} · {a.date ? new Date(a.date).toLocaleDateString(locale, { day: '2-digit', month: 'short' }) : '—'}
                     </p>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Cumplimiento por Club */}
-        <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-5 py-4">
-            <h3 className="text-[13px] font-bold text-slate-900">Cumplimiento por Club</h3>
-            <p className="mt-0.5 text-[11px] text-slate-400">% sin documentos vencidos</p>
-          </div>
-          <div className="scrollbar-none h-[200px] space-y-3.5 overflow-y-auto p-5">
-            {compliance.length > 0 ? (
-              compliance.map(club => (
-                <div key={club.name}>
-                  <div className="mb-1.5 flex items-baseline justify-between">
-                    <span className="truncate text-[11.5px] font-medium text-slate-700">{club.name}</span>
-                    <span
-                      className="ml-2 shrink-0 text-[12px] font-bold"
-                      style={{
-                        color:
-                          club.compliance >= 80
-                            ? '#059669'
-                            : club.compliance >= 60
-                            ? '#d97706'
-                            : '#dc2626',
-                      }}
+                  {a.severity === 'expired' && a.type?.toLowerCase().includes('contrato') && (
+                    <button
+                      onClick={() => setRenewModal({ show: true, employeeId: a.employee_id, employeeName: a.employee_name, newDate: '' })}
+                      className="shrink-0 rounded-lg px-2 py-1 text-[10px] font-semibold transition-colors"
+                      style={{ background: 'rgba(59,130,246,.15)', color: '#60A5FA', border: '1px solid rgba(59,130,246,.25)' }}
                     >
-                      {club.compliance}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${club.compliance}%`,
-                        background:
-                          club.compliance >= 80
-                            ? '#059669'
-                            : club.compliance >= 60
-                            ? '#d97706'
-                            : '#dc2626',
-                      }}
-                    />
-                  </div>
-                  <p className="mt-0.5 text-[10px] text-slate-400">
-                    {club.total - club.withExpired}/{club.total} empleados al día
-                  </p>
+                      Renovar
+                    </button>
+                  )}
                 </div>
               ))
-            ) : (
-              <div className="py-6 text-center text-xs text-slate-400">Sin datos disponibles</div>
             )}
           </div>
-        </div>
+        </Card>
       </div>
 
-      {/* Footer */}
-      <div className="flex items-center gap-2 pb-2 text-xs text-slate-400">
-        <UploadCloud className="h-3.5 w-3.5" />
-        <span>{stats.documentsUploadedToday} documentos cargados en las últimas 24 horas</span>
+      {/* ── Row 3: Clubes + Compliance + Distribución ── */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {/* Club distribution (pie) */}
+        <Card>
+          <CardHeader title="Distribución por Club" />
+          {stats.clubDistribution.length === 0 ? (
+            <div className="flex items-center justify-center py-10">
+              <Building2 className="h-8 w-8" style={{ color: 'rgba(255,255,255,.15)' }} />
+            </div>
+          ) : (
+            <>
+              <div className="px-5 pt-4" style={{ height: 180 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={stats.clubDistribution}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={48}
+                      outerRadius={70}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {stats.clubDistribution.map((_, i) => (
+                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} opacity={0.85} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        background: '#111E38',
+                        border: '1px solid rgba(255,255,255,.1)',
+                        borderRadius: 10,
+                        fontSize: 11,
+                        color: '#fff',
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="px-5 pb-4 space-y-1.5">
+                {stats.clubDistribution.slice(0, 5).map((c, i) => (
+                  <div key={c.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                      <span className="text-[11px] truncate max-w-[120px]" style={{ color: 'rgba(255,255,255,.55)' }}>{c.name}</span>
+                    </div>
+                    <span className="text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,.7)' }}>{c.value}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </Card>
+
+        {/* Compliance */}
+        <Card className="lg:col-span-2">
+          <CardHeader title="Compliance por Club" subtitle="% de empleados sin documentos vencidos" />
+          <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,.05)' }}>
+            {compliance.length === 0 ? (
+              <div className="flex items-center justify-center py-10">
+                <p className="text-[12px]" style={{ color: 'rgba(255,255,255,.25)' }}>Sin datos de compliance</p>
+              </div>
+            ) : (
+              compliance.slice(0, 7).map(c => {
+                const pct = Math.round(c.compliance);
+                const barColor = pct >= 90 ? '#22C55E' : pct >= 70 ? '#FBBF24' : '#EF4444';
+                return (
+                  <div key={c.name} className="flex items-center gap-4 px-5 py-3">
+                    <span className="w-32 truncate text-[12px] font-medium shrink-0" style={{ color: 'rgba(255,255,255,.7)' }}>
+                      {c.name}
+                    </span>
+                    <div className="flex-1">
+                      <div className="relative h-1.5 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,.07)' }}>
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${pct}%`, background: barColor }}
+                        />
+                      </div>
+                    </div>
+                    <span className="w-10 text-right text-[12px] font-bold shrink-0" style={{ color: barColor }}>
+                      {pct}%
+                    </span>
+                    <span className="w-16 text-right text-[10px] shrink-0" style={{ color: 'rgba(255,255,255,.3)' }}>
+                      {c.total - c.withExpired}/{c.total}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </Card>
       </div>
 
-      {/* Renewal Modal */}
+      {/* ── Renew modal ── */}
       {renewModal.show && (
-        <div className="fixed inset-0 z-[9999] overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div
-              className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"
-              onClick={() => setRenewModal(m => ({ ...m, show: false }))}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.7)', backdropFilter: 'blur(8px)' }}>
+          <div
+            className="w-full max-w-sm rounded-2xl p-6"
+            style={{ background: '#0D1528', border: '1px solid rgba(255,255,255,.1)' }}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-[15px] font-bold text-white" style={{ fontFamily: "'Outfit', sans-serif" }}>
+                Renovar Contrato
+              </h3>
+              <button
+                onClick={() => setRenewModal({ show: false, employeeId: '', employeeName: '', newDate: '' })}
+                className="flex h-7 w-7 items-center justify-center rounded-lg"
+                style={{ color: 'rgba(255,255,255,.3)', background: 'rgba(255,255,255,.05)' }}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mb-4 text-[12px]" style={{ color: 'rgba(255,255,255,.5)' }}>
+              Empleado: <span className="font-semibold text-white">{renewModal.employeeName}</span>
+            </p>
+            <label className="block mb-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,.4)' }}>
+              Nueva fecha de vencimiento
+            </label>
+            <input
+              type="date"
+              value={renewModal.newDate}
+              onChange={e => setRenewModal(m => ({ ...m, newDate: e.target.value }))}
+              className="w-full rounded-xl px-4 py-2.5 text-[13px] font-medium outline-none"
+              style={{
+                background: 'rgba(255,255,255,.05)',
+                border: '1px solid rgba(255,255,255,.1)',
+                color: '#fff',
+              }}
             />
-            <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-[15px] font-bold text-slate-900">Renovar Contrato</h3>
-                <button
-                  onClick={() => setRenewModal(m => ({ ...m, show: false }))}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <p className="mb-4 text-sm text-slate-600">{renewModal.employeeName}</p>
-              <div className="mb-5">
-                <label className="mb-1.5 block text-[12px] font-semibold text-slate-700">
-                  Nueva fecha de fin de contrato
-                </label>
-                <input
-                  type="date"
-                  value={renewModal.newDate}
-                  min={new Date().toISOString().split('T')[0]}
-                  onChange={e => setRenewModal(m => ({ ...m, newDate: e.target.value }))}
-                  className="block w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setRenewModal(m => ({ ...m, show: false }))}
-                  className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleRenew}
-                  disabled={renewing || !renewModal.newDate}
-                  className="flex-1 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {renewing ? 'Guardando...' : 'Renovar'}
-                </button>
-              </div>
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => setRenewModal({ show: false, employeeId: '', employeeName: '', newDate: '' })}
+                className="flex-1 rounded-xl py-2.5 text-[12px] font-semibold"
+                style={{ background: 'rgba(255,255,255,.06)', color: 'rgba(255,255,255,.5)' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRenew}
+                disabled={renewing || !renewModal.newDate}
+                className="flex-1 rounded-xl py-2.5 text-[12px] font-semibold text-white transition-opacity disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg, #2563EB, #1D4ED8)' }}
+              >
+                {renewing ? 'Guardando...' : 'Renovar'}
+              </button>
             </div>
           </div>
         </div>
