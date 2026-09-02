@@ -11,12 +11,20 @@ interface ChecklistEmployee {
   full_name: string;
   cedula: string;
   club_name: string;
+  club_country?: string | null;
+  country_code?: string;
   contract_start: string | null;
   contract_end: string | null;
   contract_type: string;
   probatorio_end: string | null;
   contratos_count: number;
   isManual?: boolean;
+  cr_ccss_date?: string | null;
+  cr_ins_date?: string | null;
+  cr_carne_vencimiento?: string | null;
+  cr_titulo_fecha?: string | null;
+  cr_carta_ingreso?: string | null;
+  cr_carta_induccion?: string | null;
   documents: {
     carta_ingreso: { exists: boolean; file_url?: string; manualValue?: string };
     carnet_verde: { expiry_date: string | null; file_url: string; manualValue?: string } | null;
@@ -271,13 +279,21 @@ export default function Expirations() {
     if (field === 'contract_start') return emp.contract_start ? emp.contract_start.split('T')[0] : '';
     if (field === 'contract_end') return emp.contract_end ? emp.contract_end.split('T')[0] : '';
     if (field === 'contract_type') return emp.contract_type || '';
-    
+
+    // CR fields
+    if (field === 'cr_carta_ingreso') return emp.cr_carta_ingreso || 'NO';
+    if (field === 'cr_carta_induccion') return emp.cr_carta_induccion || 'NO';
+    if (field === 'cr_ccss_date') return emp.cr_ccss_date ? emp.cr_ccss_date.split('T')[0] : '';
+    if (field === 'cr_ins_date') return emp.cr_ins_date ? emp.cr_ins_date.split('T')[0] : '';
+    if (field === 'cr_carne_vencimiento') return emp.cr_carne_vencimiento ? emp.cr_carne_vencimiento.split('T')[0] : '';
+    if (field === 'cr_titulo_fecha') return emp.cr_titulo_fecha ? emp.cr_titulo_fecha.split('T')[0] : '';
+
     const docs = emp.documents ?? { carta_ingreso: { exists: false }, carnet_verde: null, carnet_blanco: null, aviso_css: null };
     if (field === 'doc_carta_ingreso') return docs.carta_ingreso?.exists ? 'SÍ' : 'NO';
     if (field === 'doc_carnet_verde') return docs.carnet_verde?.expiry_date ? docs.carnet_verde.expiry_date.split('T')[0] : '';
     if (field === 'doc_carnet_blanco') return docs.carnet_blanco?.expiry_date ? docs.carnet_blanco.expiry_date.split('T')[0] : '';
     if (field === 'doc_aviso_css') return docs.aviso_css?.expiry_date ? docs.aviso_css.expiry_date.split('T')[0] : '';
-    
+
     return '';
   };
 
@@ -519,119 +535,123 @@ export default function Expirations() {
                 </tr>
               </tbody>
             ) : (
-              Object.entries(groupedEmployees).map(([clubName, employeesInClub]) => (
-                <React.Fragment key={clubName}>
-                  <thead className="bg-red-600 text-white font-bold">
-                    <tr>
-                      <th colSpan={13} className="px-4 py-3 text-lg tracking-wider uppercase">
-                        CHECK LIST {clubName}
-                      </th>
-                    </tr>
-                    <tr className="bg-slate-200 text-slate-800 border-b border-slate-300">
-                      <th className="px-3 py-3 border-r border-slate-300">No.</th>
-                      <th className="px-4 py-3 border-r border-slate-300 text-left min-w-[250px]">NOMBRE</th>
-                      <th className="px-4 py-3 border-r border-slate-300">CÉDULA</th>
-                      <th className="px-4 py-3 border-r border-slate-300">CARTA DE<br/>INGRESO</th>
-                      <th className="px-4 py-3 border-r border-slate-300">CARNET<br/>VERDE</th>
-                      <th className="px-4 py-3 border-r border-slate-300">CARNET<br/>BLANCO</th>
-                      <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>AVISO CSS</th>
-                      <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>INICIO DE<br/>CONTRATO</th>
-                      <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACION DE<br/>PERIODO<br/>PROBATORIO</th>
-                      <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACION DE<br/>CONTRATO</th>
-                      <th className="px-4 py-3 border-r border-slate-300">TIPO DE<br/>CONTRATOS</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 bg-white">
-                    {employeesInClub.map((emp, index) => (
-                      <tr key={emp.id} className={`${emp.isManual ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-slate-50'} transition-colors`}>
-                        <td className="px-3 py-2 border-r border-slate-200 font-medium">{index + 1}</td>
-                        
-                        <td className="px-2 py-2 border-r border-slate-200">
-                          <input disabled={!canEdit}
-                            type="text" value={getVal(emp, 'full_name')} onChange={(e) => handleEdit(emp.id, 'full_name', e.target.value)}
-                            onBlur={(e) => handleSave(emp.id, 'full_name', e.target.value)}
-                            className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Nombre..."
-                          />
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200">
-                          <input disabled={!canEdit}
-                            type="text" value={getVal(emp, 'cedula')} onChange={(e) => handleEdit(emp.id, 'cedula', e.target.value)}
-                            onBlur={(e) => handleSave(emp.id, 'cedula', e.target.value)}
-                            className="w-20 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Cédula..."
-                          />
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200">
-                          <select disabled={!canEdit}
-                            value={getVal(emp, 'doc_carta_ingreso')} 
-                            onChange={(e) => {
-                              handleEdit(emp.id, 'doc_carta_ingreso', e.target.value);
-                              handleSave(emp.id, 'doc_carta_ingreso', e.target.value);
-                            }}
-                            className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
-                          >
-                            <option value="SÍ">SÍ</option>
-                            <option value="NO">NO</option>
-                          </select>
-                        </td>
-                        <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_carnet_verde'))}`}>
-                          <input disabled={!canEdit}
-                            type="date" value={getVal(emp, 'doc_carnet_verde')}
-                            onChange={(e) => { handleEdit(emp.id, 'doc_carnet_verde', e.target.value); handleSave(emp.id, 'doc_carnet_verde', e.target.value); }}
-                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
-                          />
-                        </td>
-                        <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_carnet_blanco'))}`}>
-                          <input disabled={!canEdit}
-                            type="date" value={getVal(emp, 'doc_carnet_blanco')}
-                            onChange={(e) => { handleEdit(emp.id, 'doc_carnet_blanco', e.target.value); handleSave(emp.id, 'doc_carnet_blanco', e.target.value); }}
-                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
-                          />
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200">
-                          <input disabled={!canEdit}
-                            type="date" value={getVal(emp, 'doc_aviso_css')}
-                            onChange={(e) => { handleEdit(emp.id, 'doc_aviso_css', e.target.value); handleSave(emp.id, 'doc_aviso_css', e.target.value); }}
-                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
-                          />
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200">
-                          <input disabled={!canEdit}
-                            type="date" value={getVal(emp, 'contract_start')}
-                            onChange={(e) => { handleEdit(emp.id, 'contract_start', e.target.value); handleSave(emp.id, 'contract_start', e.target.value); }}
-                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
-                          />
-                        </td>
-                        <td className={`px-4 py-3 whitespace-nowrap text-center border-r border-slate-200 ${getCellColorClass(getVal(emp, 'probatorio_end'), getVal(emp, 'contract_type')?.toLowerCase() === 'indefinido')}`}>
-                          {formatDate(getVal(emp, 'probatorio_end'))}
-                        </td>
-                        <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'contract_end'), getVal(emp, 'contract_type')?.toLowerCase() === 'indefinido')}`}>
-                          <input disabled={!canEdit}
-                            type="date" value={getVal(emp, 'contract_end')}
-                            onChange={(e) => { handleEdit(emp.id, 'contract_end', e.target.value); handleSave(emp.id, 'contract_end', e.target.value); }}
-                            className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
-                          />
-                        </td>
-                        <td className="px-2 py-2 border-r border-slate-200">
-                          <select disabled={!canEdit}
-                            value={getVal(emp, 'contract_type')?.toLowerCase() === 'indefinido' ? 'Indefinido' : getVal(emp, 'contract_type')} 
-                            onChange={(e) => {
-                              handleEdit(emp.id, 'contract_type', e.target.value);
-                              handleSave(emp.id, 'contract_type', e.target.value);
-                            }}
-                            className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
-                          >
-                            <option value="">Seleccionar...</option>
-                            <option value="Definido">Definido</option>
-                            <option value="Definido 1 año">Definido 1 año</option>
-                            <option value="Indefinido">Indefinido</option>
-                            <option value="Servicios Profesionales">Servicios Profesionales</option>
-                          </select>
-                        </td>
+              Object.entries(groupedEmployees).map(([clubName, employeesInClub]) => {
+                const isCRClub = employeesInClub[0]?.club_country === 'Costa Rica';
+                const colCount = isCRClub ? 9 : 11;
+                const dateCell = (emp: ChecklistEmployee, field: string) => (
+                  <input
+                    disabled={!canEdit}
+                    type="date"
+                    value={getVal(emp, field)}
+                    onChange={e => { handleEdit(emp.id, field, e.target.value); handleSave(emp.id, field, e.target.value); }}
+                    className="w-32 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs text-center disabled:opacity-75 disabled:cursor-not-allowed"
+                  />
+                );
+                const siNoCell = (emp: ChecklistEmployee, field: string) => (
+                  <select
+                    disabled={!canEdit}
+                    value={getVal(emp, field)}
+                    onChange={e => { handleEdit(emp.id, field, e.target.value); handleSave(emp.id, field, e.target.value); }}
+                    className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
+                  >
+                    <option value="SÍ">SÍ</option>
+                    <option value="NO">NO</option>
+                  </select>
+                );
+                return (
+                  <React.Fragment key={clubName}>
+                    <thead className="bg-red-600 text-white font-bold">
+                      <tr>
+                        <th colSpan={colCount} className="px-4 py-3 text-lg tracking-wider uppercase">
+                          CHECK LIST {clubName}
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </React.Fragment>
-              ))
+                      <tr className="bg-slate-200 text-slate-800 border-b border-slate-300">
+                        <th className="px-3 py-3 border-r border-slate-300">No.</th>
+                        <th className="px-4 py-3 border-r border-slate-300 text-left min-w-[250px]">NOMBRE</th>
+                        <th className="px-4 py-3 border-r border-slate-300">CÉDULA</th>
+                        {isCRClub ? (
+                          <>
+                            <th className="px-4 py-3 border-r border-slate-300">CARTA DE<br/>INGRESO</th>
+                            <th className="px-4 py-3 border-r border-slate-300">CARTA DE<br/>INDUCCIÓN</th>
+                            <th className="px-4 py-3 border-r border-slate-300">FECHA<br/>CCSS</th>
+                            <th className="px-4 py-3 border-r border-slate-300">FECHA<br/>INS</th>
+                            <th className="px-4 py-3 border-r border-slate-300">VENC.<br/>CARNÉ</th>
+                            <th className="px-4 py-3 border-r border-slate-300">TÍTULO<br/>/ INA</th>
+                          </>
+                        ) : (
+                          <>
+                            <th className="px-4 py-3 border-r border-slate-300">CARTA DE<br/>INGRESO</th>
+                            <th className="px-4 py-3 border-r border-slate-300">CARNET<br/>VERDE</th>
+                            <th className="px-4 py-3 border-r border-slate-300">CARNET<br/>BLANCO</th>
+                            <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>AVISO CSS</th>
+                            <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>INICIO DE<br/>CONTRATO</th>
+                            <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACION DE<br/>PERIODO<br/>PROBATORIO</th>
+                            <th className="px-4 py-3 border-r border-slate-300">FECHA DE<br/>TERMINACION DE<br/>CONTRATO</th>
+                            <th className="px-4 py-3 border-r border-slate-300">TIPO DE<br/>CONTRATOS</th>
+                          </>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 bg-white">
+                      {employeesInClub.map((emp, index) => (
+                        <tr key={emp.id} className={`${emp.isManual ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-slate-50'} transition-colors`}>
+                          <td className="px-3 py-2 border-r border-slate-200 font-medium">{index + 1}</td>
+                          <td className="px-2 py-2 border-r border-slate-200">
+                            <input disabled={!canEdit} type="text" value={getVal(emp, 'full_name')}
+                              onChange={e => handleEdit(emp.id, 'full_name', e.target.value)}
+                              onBlur={e => handleSave(emp.id, 'full_name', e.target.value)}
+                              className="w-full bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Nombre..."
+                            />
+                          </td>
+                          <td className="px-2 py-2 border-r border-slate-200">
+                            <input disabled={!canEdit} type="text" value={getVal(emp, 'cedula')}
+                              onChange={e => handleEdit(emp.id, 'cedula', e.target.value)}
+                              onBlur={e => handleSave(emp.id, 'cedula', e.target.value)}
+                              className="w-20 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Cédula..."
+                            />
+                          </td>
+                          {isCRClub ? (
+                            <>
+                              <td className="px-2 py-2 border-r border-slate-200">{siNoCell(emp, 'cr_carta_ingreso')}</td>
+                              <td className="px-2 py-2 border-r border-slate-200">{siNoCell(emp, 'cr_carta_induccion')}</td>
+                              <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'cr_ccss_date'))}`}>{dateCell(emp, 'cr_ccss_date')}</td>
+                              <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'cr_ins_date'))}`}>{dateCell(emp, 'cr_ins_date')}</td>
+                              <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'cr_carne_vencimiento'))}`}>{dateCell(emp, 'cr_carne_vencimiento')}</td>
+                              <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'cr_titulo_fecha'))}`}>{dateCell(emp, 'cr_titulo_fecha')}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="px-2 py-2 border-r border-slate-200">{siNoCell(emp, 'doc_carta_ingreso')}</td>
+                              <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_carnet_verde'))}`}>{dateCell(emp, 'doc_carnet_verde')}</td>
+                              <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'doc_carnet_blanco'))}`}>{dateCell(emp, 'doc_carnet_blanco')}</td>
+                              <td className="px-2 py-2 border-r border-slate-200">{dateCell(emp, 'doc_aviso_css')}</td>
+                              <td className="px-2 py-2 border-r border-slate-200">{dateCell(emp, 'contract_start')}</td>
+                              <td className={`px-4 py-3 whitespace-nowrap text-center border-r border-slate-200 ${getCellColorClass(getVal(emp, 'probatorio_end'), getVal(emp, 'contract_type')?.toLowerCase() === 'indefinido')}`}>
+                                {formatDate(getVal(emp, 'probatorio_end'))}
+                              </td>
+                              <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'contract_end'), getVal(emp, 'contract_type')?.toLowerCase() === 'indefinido')}`}>{dateCell(emp, 'contract_end')}</td>
+                              <td className="px-2 py-2 border-r border-slate-200">
+                                <select disabled={!canEdit}
+                                  value={getVal(emp, 'contract_type')?.toLowerCase() === 'indefinido' ? 'Indefinido' : getVal(emp, 'contract_type')}
+                                  onChange={e => { handleEdit(emp.id, 'contract_type', e.target.value); handleSave(emp.id, 'contract_type', e.target.value); }}
+                                  className="bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed"
+                                >
+                                  <option value="">Seleccionar...</option>
+                                  <option value="Definido">Definido</option>
+                                  <option value="Definido 1 año">Definido 1 año</option>
+                                  <option value="Indefinido">Indefinido</option>
+                                  <option value="Servicios Profesionales">Servicios Profesionales</option>
+                                </select>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </React.Fragment>
+                );
+              })
             )}
           </table>
         </div>

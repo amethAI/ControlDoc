@@ -1413,7 +1413,8 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
 router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
   const { id } = req.params;
   const { full_name, cedula, contract_type, contract_start, contract_end, carta_ingreso, carnet_verde, carnet_blanco, aviso_css, contrato_sellado,
-    cr_ccss_date, cr_ins_date, cr_carne_vencimiento, cr_titulo_fecha } = req.body;
+    cr_ccss_date, cr_ins_date, cr_carne_vencimiento, cr_titulo_fecha,
+    cr_carta_ingreso, cr_carta_induccion } = req.body;
 
   try {
     // 1. Update employee basic info
@@ -1427,6 +1428,8 @@ router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
     if (cr_ins_date !== undefined) updateData.cr_ins_date = cr_ins_date || null;
     if (cr_carne_vencimiento !== undefined) updateData.cr_carne_vencimiento = cr_carne_vencimiento || null;
     if (cr_titulo_fecha !== undefined) updateData.cr_titulo_fecha = cr_titulo_fecha || null;
+    if (cr_carta_ingreso !== undefined) updateData.cr_carta_ingreso = cr_carta_ingreso;
+    if (cr_carta_induccion !== undefined) updateData.cr_carta_induccion = cr_carta_induccion;
 
     const { error: empError } = await supabase
       .from('employees')
@@ -3078,8 +3081,15 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
         contract_start,
         contract_end,
         contract_type,
+        country_code,
+        cr_ccss_date,
+        cr_ins_date,
+        cr_carne_vencimiento,
+        cr_titulo_fecha,
+        cr_carta_ingreso,
+        cr_carta_induccion,
         club_id,
-        clubs ( name ),
+        clubs ( name, country ),
         employee_documents (
           id,
           file_url,
@@ -3125,11 +3135,19 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
         full_name: emp.full_name,
         cedula: emp.cedula,
         club_name: (emp.clubs as any)?.name || 'N/A',
+        club_country: (emp.clubs as any)?.country || null,
+        country_code: emp.country_code,
         contract_start: emp.contract_start,
         contract_end: emp.contract_end,
         contract_type: emp.contract_type,
         probatorio_end: probatorioEnd,
         contratos_count: contratosCount,
+        cr_ccss_date: emp.cr_ccss_date,
+        cr_ins_date: emp.cr_ins_date,
+        cr_carne_vencimiento: emp.cr_carne_vencimiento,
+        cr_titulo_fecha: emp.cr_titulo_fecha,
+        cr_carta_ingreso: emp.cr_carta_ingreso,
+        cr_carta_induccion: emp.cr_carta_induccion,
         documents: {
           carta_ingreso: cartaIngreso ? { exists: true, file_url: cartaIngreso.file_url } : { exists: false },
           carnet_verde: carnetVerde ? { expiry_date: carnetVerde.expiry_date, file_url: carnetVerde.file_url } : null,
