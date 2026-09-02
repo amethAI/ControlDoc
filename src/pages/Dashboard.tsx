@@ -90,6 +90,7 @@ export default function Dashboard() {
     show: false, employeeId: '', employeeName: '', newDate: '',
   });
   const [renewing, setRenewing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchStats = async () => {
     try {
@@ -248,12 +249,17 @@ export default function Dashboard() {
               </span>
             </div>
             <button
-              onClick={fetchStats}
+              onClick={async () => {
+                setRefreshing(true);
+                await fetchStats();
+                setRefreshing(false);
+              }}
+              disabled={refreshing}
               className="flex h-10 w-10 items-center justify-center rounded-xl transition-all"
               style={{ background: 'rgba(59,130,246,.15)', border: '1px solid rgba(59,130,246,.25)', color: '#60A5FA' }}
               title="Actualizar"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
