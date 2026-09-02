@@ -54,7 +54,7 @@ export default function Layout() {
       ? [{ name: 'Empleados', href: '/empleados', icon: Users, group: 'Gestión' }]
       : []),
     { name: 'Check List', href: '/vencimientos', icon: CalendarClock, group: 'Gestión' },
-    { name: 'Check List 1 Año', href: '/checklist-contratos', icon: ClipboardList, group: 'Gestión' },
+    ...(user?.country !== 'Costa Rica' ? [{ name: 'Check List 1 Año', href: '/checklist-contratos', icon: ClipboardList, group: 'Gestión' }] : []),
     ...((isAdmin || isKAM || user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente' || isRRHH)
       ? [{ name: 'Cumpleaños', href: '/cumpleanos', icon: Cake, group: 'Gestión' }]
       : []),
