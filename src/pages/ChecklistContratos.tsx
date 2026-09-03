@@ -175,7 +175,7 @@ export default function ChecklistContratos() {
     const matchesClub = !selectedClubId || emp.club_id === selectedClubId;
     const matchesSearch = !searchTerm ||
       emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.cedula.includes(searchTerm);
+      emp.cedula.replace(/-/g, '').includes(searchTerm.replace(/-/g, ''));
     if (isCR) return matchesClub && matchesSearch;
     // Panama: filter by "Definido 1 año" contract
     const contractType = localEdits[emp.id]?.contract_type ?? emp.contract_type;
@@ -364,7 +364,7 @@ export default function ChecklistContratos() {
                         <input
                           readOnly={!canEdit}
                           type="text"
-                          value={getVal(emp, 'cedula')}
+                          value={getVal(emp, 'cedula').replace(/-/g, ' ')}
                           onChange={e => handleEdit(emp.id, 'cedula', e.target.value)}
                           onBlur={e => handleSave(emp.id, 'cedula', e.target.value)}
                           className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
