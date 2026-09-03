@@ -57,6 +57,15 @@ const ProtectedEmployeeRoute = ({ children }: { children: React.ReactNode }) => 
   return <>{children}</>;
 };
 
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return <PageLoader />;
+  if (!user) return <Navigate to="/login" />;
+  const isAdmin = user.role === 'Administrador' || user.role === 'Super Administrador';
+  if (!isAdmin) return <Navigate to="/" replace />;
+  return <>{children}</>;
+};
+
 const HomeRoute = () => {
   const { user } = useAuth();
   if (user?.role === 'Asistente RRHH') return <Navigate to="/empleados" replace />;
@@ -95,11 +104,11 @@ function AppRoutes() {
           <Route path="asistencia" element={<PageErrorBoundary pageName="Asistencia"><Attendance /></PageErrorBoundary>} />
           <Route path="rendimiento" element={<PageErrorBoundary pageName="Rendimiento"><RendimientoVentas /></PageErrorBoundary>} />
           <Route path="vencimientos" element={<PageErrorBoundary pageName="Vencimientos"><Expirations /></PageErrorBoundary>} />
-          <Route path="configuracion" element={<PageErrorBoundary pageName="Configuración"><Configuracion /></PageErrorBoundary>} />
-          <Route path="configuracion/usuarios" element={<PageErrorBoundary pageName="Gestión de Usuarios"><GestionUsuarios /></PageErrorBoundary>} />
-          <Route path="configuracion/alertas" element={<PageErrorBoundary pageName="Destinatarios"><DestinatariosAlertas /></PageErrorBoundary>} />
-          <Route path="configuracion/auditoria" element={<PageErrorBoundary pageName="Auditoría"><LogAuditoria /></PageErrorBoundary>} />
-          <Route path="configuracion/accesos" element={<PageErrorBoundary pageName="Accesos"><AccessLogs /></PageErrorBoundary>} />
+          <Route path="configuracion" element={<AdminRoute><PageErrorBoundary pageName="Configuración"><Configuracion /></PageErrorBoundary></AdminRoute>} />
+          <Route path="configuracion/usuarios" element={<AdminRoute><PageErrorBoundary pageName="Gestión de Usuarios"><GestionUsuarios /></PageErrorBoundary></AdminRoute>} />
+          <Route path="configuracion/alertas" element={<AdminRoute><PageErrorBoundary pageName="Destinatarios"><DestinatariosAlertas /></PageErrorBoundary></AdminRoute>} />
+          <Route path="configuracion/auditoria" element={<AdminRoute><PageErrorBoundary pageName="Auditoría"><LogAuditoria /></PageErrorBoundary></AdminRoute>} />
+          <Route path="configuracion/accesos" element={<AdminRoute><PageErrorBoundary pageName="Accesos"><AccessLogs /></PageErrorBoundary></AdminRoute>} />
           <Route path="roles" element={<PageErrorBoundary pageName="Roles y Permisos"><RolesInfo /></PageErrorBoundary>} />
           <Route path="cumpleanos" element={<PageErrorBoundary pageName="Cumpleaños"><Cumpleanos /></PageErrorBoundary>} />
         </Route>
