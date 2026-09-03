@@ -1630,12 +1630,19 @@ router.get('/attendance', canViewData, async (req, res) => {
 
   // If user is Supervisor Interno or Coordinadora, they can only see their club
   const club_id = (user.role === 'Supervisor Interno' || user.role === 'Coordinadora') ? user.club_id : queryClubId;
-  
+
   if (!club_id) {
     return res.status(400).json({ error: 'Se requiere club_id' });
   }
 
   try {
+    // Validate the requested club belongs to the user's country scope
+    if (user.role !== 'Super Administrador') {
+      const { data: targetClub } = await supabase.from('clubs').select('country').eq('id', club_id).maybeSingle();
+      if (!canAccessResource(user, club_id as string, targetClub?.country ?? null)) {
+        return res.status(403).json({ error: 'Acceso denegado' });
+      }
+    }
     // We need to join attendance with employees to filter by club_id
     const { data: attendance, error } = await supabase
       .from('attendance')
@@ -1947,6 +1954,16 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
 
     const clubCfg = await getClubConfig(clubId);
     if (!clubCfg.name) return res.status(404).json({ error: 'Club no encontrado' });
+
+    // Validate country scope
+    const user = (req as any).user;
+    if (user.role !== 'Super Administrador') {
+      const { data: targetClub } = await supabase.from('clubs').select('country').eq('id', clubId).maybeSingle();
+      if (!canAccessResource(user, clubId, targetClub?.country ?? null)) {
+        return res.status(403).json({ error: 'Acceso denegado' });
+      }
+    }
+
     const club = clubCfg;
 
     const { data: employees, error: empErr } = await supabase
