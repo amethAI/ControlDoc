@@ -589,7 +589,7 @@ export async function sendLoginAlert(
   }
 ) {
   try {
-    const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'amethacosta0108@gmail.com';
+    const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'auxcontablepanama@redvolutionlatam.com';
     const toEmails = [SUPER_ADMIN_EMAIL];
 
     let clubName: string | null = null;
