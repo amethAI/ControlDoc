@@ -140,8 +140,11 @@ function useAutoUpdate() {
     let reloading = false;
 
     const handleControllerChange = () => {
-      if (reloading) return; // prevent double reload
+      if (reloading) return;
+      // sessionStorage persists across reloads in the same tab — prevents infinite SW reload loop
+      if (sessionStorage.getItem('sw-reloaded')) return;
       reloading = true;
+      sessionStorage.setItem('sw-reloaded', '1');
       toast.success('🚀 Nueva versión disponible — actualizando...', {
         duration: 1500,
       });
