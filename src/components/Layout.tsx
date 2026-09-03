@@ -62,7 +62,7 @@ export default function Layout() {
     ...((isAdmin || isKAM || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente' || isRRHH || isAsistenteRRHH)
       ? [{ name: 'Clubes', href: '/clubes', icon: Building2, group: 'Gestión' }]
       : []),
-    ...(isAdmin ? [{ name: 'Roles y Permisos', href: '/roles', icon: Info, group: 'Sistema' }] : []),
+    ...(isSuperAdmin ? [{ name: 'Roles y Permisos', href: '/roles', icon: Info, group: 'Sistema' }] : []),
     ...(isSuperAdmin ? [{ name: 'Configuración', href: '/configuracion', icon: Settings, group: 'Sistema' }] : []),
   ];
 

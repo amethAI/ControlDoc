@@ -109,7 +109,7 @@ function AppRoutes() {
           <Route path="configuracion/alertas" element={<AdminRoute><PageErrorBoundary pageName="Destinatarios"><DestinatariosAlertas /></PageErrorBoundary></AdminRoute>} />
           <Route path="configuracion/auditoria" element={<AdminRoute><PageErrorBoundary pageName="Auditoría"><LogAuditoria /></PageErrorBoundary></AdminRoute>} />
           <Route path="configuracion/accesos" element={<AdminRoute><PageErrorBoundary pageName="Accesos"><AccessLogs /></PageErrorBoundary></AdminRoute>} />
-          <Route path="roles" element={<PageErrorBoundary pageName="Roles y Permisos"><RolesInfo /></PageErrorBoundary>} />
+          <Route path="roles" element={<AdminRoute><PageErrorBoundary pageName="Roles y Permisos"><RolesInfo /></PageErrorBoundary></AdminRoute>} />
           <Route path="cumpleanos" element={<PageErrorBoundary pageName="Cumpleaños"><Cumpleanos /></PageErrorBoundary>} />
         </Route>
       </Routes>
