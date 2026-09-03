@@ -436,26 +436,82 @@ export async function sendExpirationAlerts(isTest = false) {
         }
       }
 
-      // Fetch upcoming birthdays (today + next 7 days)
+      // Fetch birthdays — today's and upcoming (next 7 days)
       const { data: allEmpsBirthday } = await supabase
         .from('employees')
         .select('full_name, birth_date, club_id')
         .eq('status', 'activo')
         .not('birth_date', 'is', null);
 
+      const todayBirthdays:    { full_name: string; birth_date: string; club_name: string }[] = [];
       const upcomingBirthdays: { full_name: string; birth_date: string; club_name: string }[] = [];
       if (allEmpsBirthday) {
         for (const emp of allEmpsBirthday) {
-          const birth = new Date(emp.birth_date);
-          const thisYear = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
+          const [, mm, dd] = (emp.birth_date as string).split('-').map(Number);
+          const thisYear = new Date(today.getFullYear(), mm - 1, dd);
           const diffDays = Math.ceil((thisYear.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-          if (diffDays >= 0 && diffDays <= 7) {
-            upcomingBirthdays.push({
-              full_name: emp.full_name,
-              birth_date: emp.birth_date,
-              club_name: clubMap.get(emp.club_id) || 'Desconocido'
+          const entry = { full_name: emp.full_name, birth_date: emp.birth_date, club_name: clubMap.get(emp.club_id) || 'Desconocido' };
+          if (diffDays === 0) todayBirthdays.push(entry);
+          else if (diffDays > 0 && diffDays <= 7) upcomingBirthdays.push(entry);
+        }
+      }
+
+      // Dedicated "hoy cumple" alert — sent only when there are birthdays today
+      if (todayBirthdays.length > 0) {
+        const birthdayNames = todayBirthdays.map(e => e.full_name).join(', ');
+        const birthdayHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+            <div style="background: linear-gradient(135deg, #f59e0b, #ec4899); color: white; padding: 24px; text-align: center;">
+              <div style="font-size: 48px; margin-bottom: 8px;">🎂</div>
+              <h2 style="margin: 0; font-size: 20px;">¡Hoy es el cumpleaños de ${todayBirthdays.length === 1 ? 'un colaborador' : 'varios colaboradores'}!</h2>
+            </div>
+            <div style="padding: 24px;">
+              <table style="width: 100%; border-collapse: collapse;">
+                ${todayBirthdays.map(e => `
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                  <td style="padding: 14px 8px;">
+                    <div style="font-size: 16px; font-weight: bold; color: #1e293b;">🎉 ${e.full_name}</div>
+                    <div style="font-size: 13px; color: #64748b; margin-top: 2px;">${e.club_name}</div>
+                  </td>
+                </tr>`).join('')}
+              </table>
+            </div>
+            <div style="background-color: #fffbeb; padding: 14px; text-align: center; color: #92400e; font-size: 12px; border-top: 1px solid #fde68a;">
+              Alerta automática de cumpleaños — Sistema ControlDoc PSMT
+            </div>
+          </div>
+        `;
+        try {
+          if (useBrevo) {
+            await fetch('https://api.brevo.com/v3/smtp/email', {
+              method: 'POST',
+              headers: { 'accept': 'application/json', 'api-key': process.env.BREVO_API_KEY as string, 'content-type': 'application/json' },
+              body: JSON.stringify({
+                sender: { name: 'Sistema PSMT', email: process.env.EMAIL_USER || 'alertaspsmt@gmail.com' },
+                to: hrEmails.split(',').map((e: string) => ({ email: e.trim() })),
+                subject: `🎂 Hoy cumple años: ${birthdayNames}`,
+                htmlContent: birthdayHtml,
+              })
+            });
+          } else if (useResend && resend) {
+            await resend.emails.send({
+              from: process.env.EMAIL_FROM || 'Sistema PSMT <onboarding@resend.dev>',
+              to: hrEmails.split(',').map((e: string) => e.trim()),
+              subject: `🎂 Hoy cumple años: ${birthdayNames}`,
+              html: birthdayHtml,
+            });
+          } else if (transporter) {
+            await transporter.sendMail({
+              from: process.env.EMAIL_FROM || `"Sistema PSMT" <${process.env.EMAIL_USER}>`,
+              to: hrEmails,
+              subject: `🎂 Hoy cumple años: ${birthdayNames}`,
+              html: birthdayHtml,
             });
           }
+          console.log(`[BIRTHDAY] Alerta enviada a ${hrEmails} — ${birthdayNames}`);
+          sentCount++;
+        } catch (bdErr: any) {
+          console.error('[BIRTHDAY] Error al enviar alerta de cumpleaños:', bdErr.message);
         }
       }
 
