@@ -461,6 +461,16 @@ async function startServer() {
     }
   });
 
+  // Self-ping cada 10 minutos para evitar cold starts en Render
+  if (process.env.RENDER_EXTERNAL_URL) {
+    cron.schedule('*/10 * * * *', async () => {
+      try {
+        await fetch(`${process.env.RENDER_EXTERNAL_URL}/api/health`);
+      } catch {}
+    });
+    console.log('[CRON] Keep-alive activo →', process.env.RENDER_EXTERNAL_URL);
+  }
+
   // Reporte ejecutivo mensual — 1° de cada mes a las 7:00 AM
   cron.schedule('0 7 1 * *', async () => {
     console.log('[CRON] Generando reporte mensual...');
