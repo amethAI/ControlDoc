@@ -1636,9 +1636,12 @@ router.get('/attendance', canViewData, async (req, res) => {
   }
 
   try {
-    // Validate the requested club belongs to the user's country scope
-    if (user.role !== 'Super Administrador') {
-      const { data: targetClub } = await supabase.from('clubs').select('country').eq('id', club_id).maybeSingle();
+    // Validate country scope — skip for club-scoped roles (already pinned to user.club_id above)
+    // and skip for Super Administrador (no restriction).
+    const CLUB_SCOPED = ['Supervisor Interno', 'Coordinadora'];
+    if (!CLUB_SCOPED.includes(user.role) && user.role !== 'Super Administrador') {
+      const { data: targetClub, error: clubErr } = await supabase.from('clubs').select('country').eq('id', club_id).maybeSingle();
+      if (clubErr) return res.status(500).json({ error: 'Error al verificar acceso' });
       if (!canAccessResource(user, club_id as string, targetClub?.country ?? null)) {
         return res.status(403).json({ error: 'Acceso denegado' });
       }
@@ -1952,18 +1955,21 @@ router.get('/payroll/psmt-planilla', canViewData, async (req, res) => {
     const endDate   = half === '1' ? new Date(y, m, 15) : new Date(y, m + 1, 0);
     const fmt = (d: Date) => d.toISOString().split('T')[0];
 
-    const clubCfg = await getClubConfig(clubId);
-    if (!clubCfg.name) return res.status(404).json({ error: 'Club no encontrado' });
+    // Auth check before fetching data — use a direct DB query so 404 is reliable
+    // (getClubConfig falls back to clubId as name, making its 404 guard dead code)
+    const { data: clubRow, error: clubRowErr } = await supabase
+      .from('clubs').select('id, country').eq('id', clubId).maybeSingle();
+    if (clubRowErr) return res.status(500).json({ error: 'Error al verificar club' });
+    if (!clubRow) return res.status(404).json({ error: 'Club no encontrado' });
 
-    // Validate country scope
     const user = (req as any).user;
     if (user.role !== 'Super Administrador') {
-      const { data: targetClub } = await supabase.from('clubs').select('country').eq('id', clubId).maybeSingle();
-      if (!canAccessResource(user, clubId, targetClub?.country ?? null)) {
+      if (!canAccessResource(user, clubId, clubRow.country ?? null)) {
         return res.status(403).json({ error: 'Acceso denegado' });
       }
     }
 
+    const clubCfg = await getClubConfig(clubId);
     const club = clubCfg;
 
     const { data: employees, error: empErr } = await supabase
