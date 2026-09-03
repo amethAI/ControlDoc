@@ -115,7 +115,7 @@ export default function Employees() {
   const displayEmployees = showMissingContract ? missingContractEmployees : employees;
 
   const filteredEmployees = displayEmployees.filter(emp => {
-    const matchesSearch = emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || emp.cedula.includes(searchTerm);
+    const matchesSearch = emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || emp.cedula.replace(/-/g, '').includes(searchTerm.replace(/-/g, ''));
     const matchesClub = !clubFilter || emp.club_id === clubFilter;
     return matchesSearch && matchesClub;
   });
@@ -318,7 +318,7 @@ export default function Employees() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                    {person.cedula}
+                    {person.cedula.replace(/-/g, '')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                     {person.position}

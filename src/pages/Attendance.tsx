@@ -142,6 +142,24 @@ export default function Attendance() {
     );
   }
 
+  if (user?.name === 'Nancy Meza') {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="max-w-sm w-full rounded-2xl p-10 text-center" style={{ background: '#0D1528', border: '1px solid rgba(255,255,255,.08)' }}>
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl text-3xl" style={{ background: 'rgba(251,191,36,.1)', border: '1px solid rgba(251,191,36,.2)' }}>
+            🔧
+          </div>
+          <h2 className="text-[17px] font-bold mb-2" style={{ fontFamily: "'Outfit', sans-serif", color: 'rgba(255,255,255,.9)' }}>
+            En mantenimiento
+          </h2>
+          <p className="text-[13px]" style={{ color: 'rgba(255,255,255,.4)' }}>
+            Esta sección está temporalmente fuera de servicio. Intentá más tarde.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const isReadOnly = user?.role !== 'Administrador' && user?.role !== 'Super Administrador'
     && user?.role !== 'Supervisor Interno' && user?.role !== 'Supervisora'
     && user?.role !== 'Supervisora Redvolution';
