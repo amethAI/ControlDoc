@@ -122,7 +122,7 @@ export default function Employees() {
 
   return (
     <div className="space-y-4">
-      {/* Sticky toolbar — negative margin eats into main's padding so no gap appears above when scrolled */}
+      {/* Sticky toolbar — -mt cancels the Layout wrapper's pt so toolbar sticks at the very top of <main> with no gap */}
       <div className="sticky top-0 z-20 space-y-3 pb-3 -mt-4 pt-4 sm:-mt-6 sm:pt-6 -mx-4 sm:-mx-6 px-4 sm:px-6" style={{ background: '#070B16' }}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex p-1 bg-slate-100 rounded-lg w-fit flex-wrap gap-y-1">
