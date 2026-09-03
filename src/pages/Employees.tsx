@@ -318,7 +318,7 @@ export default function Employees() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                    {person.cedula.replace(/-/g, '')}
+                    {person.cedula.replace(/-/g, ' ')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                     {person.position}
