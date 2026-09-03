@@ -1,7 +1,6 @@
 import { apiFetch } from '../lib/api';
 import React from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import AiAssistant from './AiAssistant';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard,
@@ -469,7 +468,6 @@ export default function Layout() {
         </main>
       </div>
 
-      <AiAssistant />
     </div>
   );
 }
