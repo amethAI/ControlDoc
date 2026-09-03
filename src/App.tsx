@@ -30,6 +30,8 @@ const AccessLogs       = React.lazy(() => import('./pages/AccessLogs'));
 const Expirations      = React.lazy(() => import('./pages/Expirations'));
 const ChecklistContratos = React.lazy(() => import('./pages/ChecklistContratos'));
 const RolesInfo        = React.lazy(() => import('./pages/RolesInfo'));
+const Dotacion         = React.lazy(() => import('./pages/Dotacion'));
+const DotacionPublica  = React.lazy(() => import('./pages/DotacionPublica'));
 const Cumpleanos       = React.lazy(() => import('./pages/Cumpleanos'));
 const EmployeeHome      = React.lazy(() => import('./pages/employee/EmployeeHome'));
 const EmployeeDocuments = React.lazy(() => import('./pages/employee/EmployeeDocuments'));
@@ -78,6 +80,9 @@ function AppRoutes() {
       <Routes>
         <Route path="/login" element={<Login />} />
 
+        {/* Dotación pública — sin auth */}
+        <Route path="/d/:token" element={<PageErrorBoundary pageName="Dotación"><DotacionPublica /></PageErrorBoundary>} />
+
         {/* Employee portal */}
         <Route
           path="/mi-cuenta"
@@ -111,6 +116,7 @@ function AppRoutes() {
           <Route path="configuracion/accesos" element={<AdminRoute><PageErrorBoundary pageName="Accesos"><AccessLogs /></PageErrorBoundary></AdminRoute>} />
           <Route path="roles" element={<AdminRoute><PageErrorBoundary pageName="Roles y Permisos"><RolesInfo /></PageErrorBoundary></AdminRoute>} />
           <Route path="cumpleanos" element={<PageErrorBoundary pageName="Cumpleaños"><Cumpleanos /></PageErrorBoundary>} />
+          <Route path="dotacion" element={<PageErrorBoundary pageName="Dotación"><Dotacion /></PageErrorBoundary>} />
         </Route>
       </Routes>
     </Suspense>

@@ -4563,5 +4563,351 @@ router.delete('/admin/employees/:id/remove-access', isAuthenticated, isAdmin, as
 });
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ══════════════════════════════════════════════════════════════════════════════
+// DOTACIÓN DE CAMISAS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// List tandas for a club (admin)
+router.get('/dotacion/tandas', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    const { club_id } = req.query;
+
+    let query = supabase
+      .from('dotacion_tandas')
+      .select(`
+        *,
+        clubs(name),
+        dotacion_asignaciones(id, estado, monto_total)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (user.role !== 'Super Administrador') {
+      if (!user.club_id) return res.status(403).json({ error: 'Sin club asignado' });
+      query = query.eq('club_id', user.club_id);
+    } else if (club_id) {
+      query = query.eq('club_id', club_id as string);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al obtener tandas' });
+  }
+});
+
+// Create tanda (admin)
+router.post('/dotacion/tandas', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    if (!['Super Administrador', 'Administrador'].includes(user.role)) {
+      return res.status(403).json({ error: 'Sin permiso' });
+    }
+    const { club_id, descripcion, fecha, precio_por_camisa, total_compra } = req.body;
+    if (!club_id || !descripcion || !fecha || !precio_por_camisa) {
+      return res.status(400).json({ error: 'Faltan campos requeridos' });
+    }
+    const { data, error } = await supabase
+      .from('dotacion_tandas')
+      .insert({ club_id, descripcion, fecha, precio_por_camisa, total_compra: total_compra || null })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al crear tanda' });
+  }
+});
+
+// Get tanda detail with assignments (admin)
+router.get('/dotacion/tandas/:id', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('dotacion_tandas')
+      .select(`
+        *,
+        clubs(name, country),
+        dotacion_asignaciones(
+          id, cantidad, cuotas, monto_total, estado, accepted_at,
+          employees(id, full_name, cedula)
+        )
+      `)
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Tanda no encontrada' });
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al obtener tanda' });
+  }
+});
+
+// Toggle tanda activa (admin)
+router.patch('/dotacion/tandas/:id/toggle', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    if (!['Super Administrador', 'Administrador'].includes(user.role)) {
+      return res.status(403).json({ error: 'Sin permiso' });
+    }
+    const { id } = req.params;
+    const { data: tanda, error: fetchErr } = await supabase
+      .from('dotacion_tandas').select('activa').eq('id', id).single();
+    if (fetchErr || !tanda) return res.status(404).json({ error: 'Tanda no encontrada' });
+    const { data, error } = await supabase
+      .from('dotacion_tandas').update({ activa: !tanda.activa }).eq('id', id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al actualizar tanda' });
+  }
+});
+
+// Public: get tanda info by token (no auth)
+router.get('/dotacion/public/:token', async (req: any, res: any) => {
+  try {
+    const { token } = req.params;
+    const { data, error } = await supabase
+      .from('dotacion_tandas')
+      .select('id, descripcion, fecha, precio_por_camisa, activa, clubs(name, country)')
+      .eq('token', token)
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Enlace no válido' });
+    if (!data.activa) return res.status(410).json({ error: 'Este enlace ya no está activo' });
+    res.json({
+      descripcion: data.descripcion,
+      fecha: data.fecha,
+      precio_por_camisa: data.precio_por_camisa,
+      club_name: (data.clubs as any)?.name || '',
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al obtener información de la tanda' });
+  }
+});
+
+// Public: validate cédula (no auth — just checks existence, no side effects)
+router.post('/dotacion/public/:token/validate', async (req: any, res: any) => {
+  try {
+    const { token } = req.params;
+    const { cedula } = req.body;
+    if (!cedula) return res.status(400).json({ error: 'Cédula requerida' });
+
+    const { data: tanda, error: tandaErr } = await supabase
+      .from('dotacion_tandas')
+      .select('id, club_id, activa')
+      .eq('token', token)
+      .single();
+    if (tandaErr || !tanda) return res.status(404).json({ error: 'Enlace no válido' });
+    if (!tanda.activa) return res.status(410).json({ error: 'Enlace inactivo' });
+
+    const { data: employee, error: empErr } = await supabase
+      .from('employees')
+      .select('id, full_name')
+      .eq('cedula', cedula.trim())
+      .eq('club_id', tanda.club_id)
+      .eq('status', 'activo')
+      .maybeSingle();
+    if (empErr) return res.status(500).json({ error: 'Error al verificar' });
+    if (!employee) return res.status(404).json({ error: 'Cédula no encontrada en este club' });
+
+    // Check if already responded
+    const { data: existing } = await supabase
+      .from('dotacion_asignaciones')
+      .select('id')
+      .eq('tanda_id', tanda.id)
+      .eq('employee_id', employee.id)
+      .maybeSingle();
+    if (existing) return res.status(409).json({ error: 'Ya respondiste para esta tanda' });
+
+    res.json({ full_name: employee.full_name });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al validar cédula' });
+  }
+});
+
+// Public: submit employee selection (no auth — verified by cédula match)
+router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
+  try {
+    const { token } = req.params;
+    const { cedula, cantidad, cuotas } = req.body;
+
+    if (!cedula || !cantidad || !cuotas) {
+      return res.status(400).json({ error: 'Faltan campos requeridos' });
+    }
+    if (![1, 2].includes(Number(cuotas))) {
+      return res.status(400).json({ error: 'Cuotas inválidas' });
+    }
+    if (Number(cantidad) < 1 || Number(cantidad) > 10) {
+      return res.status(400).json({ error: 'Cantidad inválida' });
+    }
+
+    // Get tanda
+    const { data: tanda, error: tandaErr } = await supabase
+      .from('dotacion_tandas')
+      .select('id, club_id, precio_por_camisa, activa')
+      .eq('token', token)
+      .single();
+    if (tandaErr || !tanda) return res.status(404).json({ error: 'Enlace no válido' });
+    if (!tanda.activa) return res.status(410).json({ error: 'Este enlace ya no está activo' });
+
+    // Find employee by cédula in this club
+    const { data: employee, error: empErr } = await supabase
+      .from('employees')
+      .select('id, full_name')
+      .eq('cedula', cedula.trim())
+      .eq('club_id', tanda.club_id)
+      .eq('status', 'activo')
+      .maybeSingle();
+    if (empErr) return res.status(500).json({ error: 'Error al verificar empleado' });
+    if (!employee) return res.status(404).json({ error: 'Cédula no encontrada en este club' });
+
+    // Check already submitted
+    const { data: existing } = await supabase
+      .from('dotacion_asignaciones')
+      .select('id')
+      .eq('tanda_id', tanda.id)
+      .eq('employee_id', employee.id)
+      .maybeSingle();
+    if (existing) return res.status(409).json({ error: 'Ya registraste tu selección para esta tanda' });
+
+    // Insert
+    const monto_total = parseFloat((Number(cantidad) * Number(tanda.precio_por_camisa)).toFixed(2));
+    const { data: asignacion, error: insertErr } = await supabase
+      .from('dotacion_asignaciones')
+      .insert({
+        tanda_id: tanda.id,
+        employee_id: employee.id,
+        cantidad: Number(cantidad),
+        cuotas: Number(cuotas),
+        monto_total,
+        estado: 'pendiente',
+      })
+      .select()
+      .single();
+    if (insertErr) throw insertErr;
+
+    res.status(201).json({
+      success: true,
+      full_name: employee.full_name,
+      cantidad: Number(cantidad),
+      cuotas: Number(cuotas),
+      monto_total,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al registrar selección' });
+  }
+});
+
+// Mark a payment applied for an assignment (admin)
+router.post('/dotacion/asignaciones/:id/pago', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    if (!['Super Administrador', 'Administrador'].includes(user.role)) {
+      return res.status(403).json({ error: 'Sin permiso' });
+    }
+    const { id } = req.params;
+
+    const { data: asig, error: asigErr } = await supabase
+      .from('dotacion_asignaciones')
+      .select('id, cuotas, monto_total, estado')
+      .eq('id', id)
+      .single();
+    if (asigErr || !asig) return res.status(404).json({ error: 'Asignación no encontrada' });
+    if (asig.estado === 'pagado') return res.status(400).json({ error: 'Ya está completamente pagado' });
+
+    // Count existing pagos
+    const { data: pagos } = await supabase
+      .from('dotacion_pagos')
+      .select('id, numero_cuota')
+      .eq('asignacion_id', id);
+    const numPagos = (pagos || []).length;
+    const nextCuota = numPagos + 1;
+
+    if (nextCuota > asig.cuotas) {
+      return res.status(400).json({ error: 'Todas las cuotas ya fueron aplicadas' });
+    }
+
+    const montoCuota = parseFloat((Number(asig.monto_total) / asig.cuotas).toFixed(2));
+
+    await supabase.from('dotacion_pagos').insert({
+      asignacion_id: id,
+      monto: montoCuota,
+      numero_cuota: nextCuota,
+    });
+
+    const nuevoEstado = nextCuota === asig.cuotas ? 'pagado' : 'parcial';
+    const { data: updated, error: updErr } = await supabase
+      .from('dotacion_asignaciones')
+      .update({ estado: nuevoEstado })
+      .eq('id', id)
+      .select()
+      .single();
+    if (updErr) throw updErr;
+
+    res.json({ success: true, estado: nuevoEstado, cuota_aplicada: nextCuota });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al registrar pago' });
+  }
+});
+
+// Get report data for a tanda (admin)
+router.get('/dotacion/tandas/:id/reporte', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { data: tanda, error } = await supabase
+      .from('dotacion_tandas')
+      .select(`
+        id, descripcion, fecha, precio_por_camisa, total_compra,
+        clubs(name),
+        dotacion_asignaciones(
+          id, cantidad, cuotas, monto_total, estado, accepted_at,
+          employees(full_name, cedula)
+        )
+      `)
+      .eq('id', id)
+      .single();
+    if (error || !tanda) return res.status(404).json({ error: 'Tanda no encontrada' });
+
+    const asigs = (tanda.dotacion_asignaciones as any[]) || [];
+    const totalAsignado = asigs.reduce((s: number, a: any) => s + Number(a.monto_total), 0);
+    const totalRecuperado = asigs
+      .filter((a: any) => a.estado === 'pagado')
+      .reduce((s: number, a: any) => s + Number(a.monto_total), 0);
+    const totalPendiente = asigs
+      .filter((a: any) => a.estado !== 'pagado')
+      .reduce((s: number, a: any) => s + Number(a.monto_total), 0);
+
+    res.json({
+      tanda: {
+        descripcion: tanda.descripcion,
+        fecha: tanda.fecha,
+        precio_por_camisa: tanda.precio_por_camisa,
+        total_compra: tanda.total_compra,
+        club_name: (tanda.clubs as any)?.name || '',
+      },
+      resumen: {
+        total_asignado: parseFloat(totalAsignado.toFixed(2)),
+        total_recuperado: parseFloat(totalRecuperado.toFixed(2)),
+        total_pendiente: parseFloat(totalPendiente.toFixed(2)),
+      },
+      asignaciones: asigs.map((a: any) => ({
+        id: a.id,
+        full_name: a.employees?.full_name || '',
+        cedula: a.employees?.cedula || '',
+        cantidad: a.cantidad,
+        cuotas: a.cuotas,
+        monto_total: a.monto_total,
+        estado: a.estado,
+        accepted_at: a.accepted_at,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al generar reporte' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default router;
 
