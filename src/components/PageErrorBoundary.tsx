@@ -29,8 +29,17 @@ class PageErrorBoundary extends Component<Props, State> {
     console.error(`[PageErrorBoundary] Error en ${this.props.pageName || 'página'}:`, error);
   }
 
-  handleRetry = () => {
+  handleRetry = async () => {
     if (this.state.isChunkError) {
+      // Clear SW caches and unregister so the reload fetches fresh assets
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
       window.location.reload();
     } else {
       this.setState({ hasError: false, isChunkError: false });
