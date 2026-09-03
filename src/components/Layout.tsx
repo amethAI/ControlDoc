@@ -64,7 +64,7 @@ export default function Layout() {
       ? [{ name: 'Clubes', href: '/clubes', icon: Building2, group: 'Gestión' }]
       : []),
     ...(isAdmin ? [{ name: 'Roles y Permisos', href: '/roles', icon: Info, group: 'Sistema' }] : []),
-    ...(isAdmin ? [{ name: 'Configuración', href: '/configuracion', icon: Settings, group: 'Sistema' }] : []),
+    ...(isSuperAdmin ? [{ name: 'Configuración', href: '/configuracion', icon: Settings, group: 'Sistema' }] : []),
   ];
 
   const groupOrder = ['Principal', 'Gestión', 'Sistema'];
