@@ -4604,13 +4604,13 @@ router.post('/dotacion/tandas', isAuthenticated, async (req: any, res: any) => {
     if (!['Super Administrador', 'Administrador'].includes(user.role)) {
       return res.status(403).json({ error: 'Sin permiso' });
     }
-    const { club_id, descripcion, fecha, precio_por_camisa, total_compra } = req.body;
+    const { club_id, descripcion, fecha, precio_por_camisa, total_compra, cantidad_total } = req.body;
     if (!club_id || !descripcion || !fecha || !precio_por_camisa) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
     }
     const { data, error } = await supabase
       .from('dotacion_tandas')
-      .insert({ club_id, descripcion, fecha, precio_por_camisa, total_compra: total_compra || null })
+      .insert({ club_id, descripcion, fecha, precio_por_camisa, total_compra: total_compra || null, cantidad_total: cantidad_total || null })
       .select()
       .single();
     if (error) throw error;

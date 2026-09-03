@@ -11,10 +11,11 @@ interface Tanda {
   fecha: string;
   precio_por_camisa: number;
   total_compra: number | null;
+  cantidad_total: number | null;
   token: string;
   activa: boolean;
   clubs: { name: string } | null;
-  dotacion_asignaciones: { id: string; estado: string; monto_total: number }[];
+  dotacion_asignaciones: { id: string; estado: string; monto_total: number; cantidad: number }[];
 }
 
 interface Asignacion {
@@ -82,6 +83,7 @@ function NuevaTandaModal({ clubs, onClose, onCreated }: {
     descripcion: '',
     fecha: new Date().toISOString().split('T')[0],
     precio_por_camisa: '',
+    cantidad_total: '',
     total_compra: '',
   });
   const [saving, setSaving] = useState(false);
@@ -100,6 +102,7 @@ function NuevaTandaModal({ clubs, onClose, onCreated }: {
         body: JSON.stringify({
           ...form,
           precio_por_camisa: parseFloat(form.precio_por_camisa),
+          cantidad_total: form.cantidad_total ? parseInt(form.cantidad_total) : null,
           total_compra: form.total_compra ? parseFloat(form.total_compra) : null,
         }),
       });
@@ -172,17 +175,30 @@ function NuevaTandaModal({ clubs, onClose, onCreated }: {
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Total de compra (opcional)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="181.00"
-              value={form.total_compra}
-              onChange={e => setForm(f => ({ ...f, total_compra: e.target.value }))}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Camisas compradas</label>
+              <input
+                type="number"
+                min="1"
+                placeholder="30"
+                value={form.cantidad_total}
+                onChange={e => setForm(f => ({ ...f, cantidad_total: e.target.value }))}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Total de compra</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="181.00"
+                value={form.total_compra}
+                onChange={e => setForm(f => ({ ...f, total_compra: e.target.value }))}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 border border-slate-200 text-slate-600 rounded-lg py-2 text-sm hover:bg-slate-50">
@@ -207,6 +223,8 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
   const asigs = tanda.dotacion_asignaciones || [];
   const pendientes = asigs.filter(a => a.estado !== 'pagado').length;
   const totalAsignado = asigs.reduce((s, a) => s + Number(a.monto_total), 0);
+  const camisasAsignadas = asigs.reduce((s, a) => s + Number((a as any).cantidad || 0), 0);
+  const camisasDisponibles = tanda.cantidad_total != null ? tanda.cantidad_total - camisasAsignadas : null;
 
   const publicLink = `${window.location.origin}/d/${tanda.token}`;
 
@@ -280,6 +298,14 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
           </p>
           <p className="text-xs text-slate-400">
             {asigs.length} respuesta{asigs.length !== 1 ? 's' : ''} · ${totalAsignado.toFixed(2)} asignado
+            {camisasDisponibles != null && (
+              <span className={camisasDisponibles < 0 ? ' · text-red-500' : ''}>
+                {' '}· {camisasAsignadas}/{tanda.cantidad_total} camisas
+                {camisasDisponibles > 0 && ` (${camisasDisponibles} disponibles)`}
+                {camisasDisponibles === 0 && ' (agotadas)'}
+                {camisasDisponibles < 0 && ` (excedido por ${Math.abs(camisasDisponibles)})`}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
