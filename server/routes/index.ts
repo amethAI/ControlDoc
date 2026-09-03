@@ -3138,7 +3138,7 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
       return {
         id: emp.id,
         full_name: emp.full_name,
-        cedula: emp.cedula,
+        cedula: emp.cedula ? emp.cedula.replace(/-/g, ' ') : emp.cedula,
         club_name: (emp.clubs as any)?.name || 'N/A',
         club_country: (emp.clubs as any)?.country || null,
         country_code: emp.country_code,
