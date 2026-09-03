@@ -1,7 +1,7 @@
 import { apiFetch } from '../lib/api';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Search, Plus, Filter, Upload, FileSpreadsheet, ClipboardList } from 'lucide-react';
+import { Search, Plus, Filter, Upload, FileSpreadsheet } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import NewEmployeeModal from '../components/NewEmployeeModal';
 import BulkUploadModal from '../components/BulkUploadModal';
@@ -27,9 +27,6 @@ export default function Employees() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('activo');
-  const [showMissingContract, setShowMissingContract] = useState(false);
-  const [missingContractEmployees, setMissingContractEmployees] = useState<Employee[]>([]);
-  const [loadingMissing, setLoadingMissing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isBulkEmployeeModalOpen, setIsBulkEmployeeModalOpen] = useState(false);
@@ -56,7 +53,6 @@ export default function Employees() {
   const noAccess = user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente';
 
   const fetchEmployees = useCallback(async () => {
-    if (showMissingContract) return;
     try {
       let url = isRestricted
         ? `/api/employees?club_id=${user?.club_id}&status=${statusFilter}`
@@ -69,7 +65,7 @@ export default function Employees() {
     } catch (error) {
       console.error('Error fetching employees:', error);
     }
-  }, [user, statusFilter, showMissingContract, isRestricted]);
+  }, [user, statusFilter, isRestricted]);
 
   useEffect(() => {
     if (noAccess) return; // Don't fetch if user has no access
@@ -86,35 +82,11 @@ export default function Employees() {
     );
   }
 
-  const fetchMissingContract = async () => {
-    setLoadingMissing(true);
-    try {
-      const res = await apiFetch('/api/reports/missing-document?doc_type=Contrato+sellado');
-      if (res.ok) {
-        const data = await res.json();
-        setMissingContractEmployees(data);
-      }
-    } catch (error) {
-      console.error('Error fetching missing contracts:', error);
-    } finally {
-      setLoadingMissing(false);
-    }
-  };
-
-  const handleMissingContractTab = () => {
-    setShowMissingContract(true);
-    setStatusFilter('');
-    fetchMissingContract();
-  };
-
   const handleStatusFilter = (status: string) => {
     setStatusFilter(status);
-    setShowMissingContract(false);
   };
 
-  const displayEmployees = showMissingContract ? missingContractEmployees : employees;
-
-  const filteredEmployees = displayEmployees.filter(emp => {
+  const filteredEmployees = employees.filter(emp => {
     const matchesSearch = emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || emp.cedula.replace(/-/g, '').includes(searchTerm.replace(/-/g, ''));
     const matchesClub = !clubFilter || emp.club_id === clubFilter;
     return matchesSearch && matchesClub;
@@ -129,7 +101,7 @@ export default function Employees() {
           <button
             onClick={() => handleStatusFilter('activo')}
             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-              statusFilter === 'activo' && !showMissingContract
+              statusFilter === 'activo'
                 ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
             }`}
@@ -139,35 +111,13 @@ export default function Employees() {
           <button
             onClick={() => handleStatusFilter('inactivo')}
             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-              statusFilter === 'inactivo' && !showMissingContract
+              statusFilter === 'inactivo'
                 ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
             }`}
           >
             Inactivos (Historial)
           </button>
-          <button
-            onClick={handleMissingContractTab}
-            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-1.5 ${
-              showMissingContract
-                ? 'bg-white text-orange-600 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Sin Contrato Sellado
-            {showMissingContract && !loadingMissing && (
-              <span className="bg-orange-100 text-orange-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
-                {missingContractEmployees.length}
-              </span>
-            )}
-          </button>
-          <Link
-            to="/checklist-contratos"
-            className="px-4 py-1.5 text-sm font-medium rounded-md transition-all text-slate-500 hover:text-slate-700 flex items-center gap-2"
-          >
-            <ClipboardList className="h-4 w-4" />
-            Checklist 1 Año
-          </Link>
         </div>
 
         <div className="flex gap-3">
@@ -298,13 +248,7 @@ export default function Employees() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
-            {showMissingContract && loadingMissing ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                  Cargando...
-                </td>
-              </tr>
-            ) : filteredEmployees.length > 0 ? (
+            {filteredEmployees.length > 0 ? (
               filteredEmployees.map((person) => (
                 <tr key={person.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
