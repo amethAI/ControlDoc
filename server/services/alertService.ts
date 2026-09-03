@@ -643,7 +643,7 @@ export async function sendLoginAlert(
     `;
 
     if (process.env.BREVO_API_KEY) {
-      await fetch('https://api.brevo.com/v3/smtp/email', {
+      const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: { 'accept': 'application/json', 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -653,6 +653,12 @@ export async function sendLoginAlert(
           htmlContent: html
         })
       });
+      if (!brevoRes.ok) {
+        const errBody = await brevoRes.text().catch(() => '');
+        console.error(`[LOGIN ALERT] Brevo error ${brevoRes.status}:`, errBody);
+      } else {
+        console.log(`[LOGIN ALERT] Enviado a ${toEmails.join(', ')} (${type})`);
+      }
     } else if (process.env.RESEND_API_KEY) {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({ from: process.env.EMAIL_FROM || 'ControlDoc PSMT <onboarding@resend.dev>', to: toEmails, subject, html });
