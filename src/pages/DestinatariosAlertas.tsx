@@ -1,7 +1,7 @@
 import { apiFetch } from '../lib/api';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Bell, Shield, UserCheck } from 'lucide-react';
+import { ArrowLeft, Bell, Globe, Shield, UserCheck } from 'lucide-react';
 import AlertRecipientsModal from '../components/AlertRecipientsModal';
 
 export default function DestinatariosAlertas() {
@@ -117,14 +117,86 @@ export default function DestinatariosAlertas() {
                       </span>
                     ))
                   ) : (
-                    <span className="text-sm text-slate-400 italic">Sin configurar (Recomendado para Coordinación)</span>
+                    <span className="text-sm text-slate-400 italic">Sin configurar</span>
                   )}
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button 
+                <button
                   onClick={() => handleEdit({ id: 'global', name: 'Destinatarios Globales' })}
                   className="text-amber-600 hover:text-amber-900 font-bold"
+                >
+                  Editar
+                </button>
+              </td>
+            </tr>
+
+            {/* Panama Country Row */}
+            <tr className="bg-blue-50/30">
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="flex items-center">
+                  <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                    <Globe className="h-4 w-4" />
+                  </div>
+                  <div className="ml-3">
+                    <div className="text-sm font-bold text-slate-900">🇵🇦 Panamá</div>
+                    <div className="text-xs text-slate-500">Reciben alertas de clubes en Panamá</div>
+                  </div>
+                </div>
+              </td>
+              <td className="px-6 py-4">
+                <div className="flex flex-wrap gap-2">
+                  {getEmailsForClub('panama').length > 0 ? (
+                    getEmailsForClub('panama').map(email => (
+                      <span key={email} className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                        {email}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-slate-400 italic">Sin configurar</span>
+                  )}
+                </div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button
+                  onClick={() => handleEdit({ id: 'panama', name: 'Panamá' })}
+                  className="text-blue-600 hover:text-blue-900 font-bold"
+                >
+                  Editar
+                </button>
+              </td>
+            </tr>
+
+            {/* Costa Rica Country Row */}
+            <tr className="bg-green-50/30">
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="flex items-center">
+                  <div className="h-8 w-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+                    <Globe className="h-4 w-4" />
+                  </div>
+                  <div className="ml-3">
+                    <div className="text-sm font-bold text-slate-900">🇨🇷 Costa Rica</div>
+                    <div className="text-xs text-slate-500">Reciben alertas de clubes en Costa Rica</div>
+                  </div>
+                </div>
+              </td>
+              <td className="px-6 py-4">
+                <div className="flex flex-wrap gap-2">
+                  {getEmailsForClub('costa-rica').length > 0 ? (
+                    getEmailsForClub('costa-rica').map(email => (
+                      <span key={email} className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 border border-green-200">
+                        {email}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-slate-400 italic">Sin configurar</span>
+                  )}
+                </div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button
+                  onClick={() => handleEdit({ id: 'costa-rica', name: 'Costa Rica' })}
+                  className="text-green-600 hover:text-green-900 font-bold"
                 >
                   Editar
                 </button>

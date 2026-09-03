@@ -3689,6 +3689,8 @@ router.post('/alert-recipients', isAuthenticated, isAdmin, async (req, res) => {
     const virtualClubs: Record<string, { name: string; description: string }> = {
       global: { name: 'Global', description: 'Destinatarios Globales' },
       hr: { name: 'Recursos Humanos', description: 'Destinatarios RRHH' },
+      panama: { name: 'Panamá', description: 'Destinatarios País Panamá' },
+      'costa-rica': { name: 'Costa Rica', description: 'Destinatarios País Costa Rica' },
     };
 
     if (virtualClubs[club_id]) {

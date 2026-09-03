@@ -107,9 +107,9 @@ export async function sendExpirationAlerts(isTest = false) {
 
     if (empError) throw empError;
 
-    // We need to fetch clubs separately to get their names
-    const { data: clubs } = await supabase.from('clubs').select('id, name');
+    const { data: clubs } = await supabase.from('clubs').select('id, name, country');
     const clubMap = new Map(clubs?.map(c => [c.id, c.name]) || []);
+    const clubCountryMap = new Map(clubs?.map(c => [c.id, c.country]) || []);
 
     // Agrupar por club
     const alertsByClub: Record<string, any> = {};
@@ -290,15 +290,22 @@ export async function sendExpirationAlerts(isTest = false) {
         .select('email')
         .eq('club_id', clubId);
         
-      // Fetch global recipients (e.g., supervisors/coordinators)
       const { data: globalRecipients } = await supabase
         .from('alert_recipients')
         .select('email')
         .eq('club_id', 'global');
-        
+
+      const clubCountry = clubCountryMap.get(clubId);
+      const countryVirtualId = clubCountry === 'Costa Rica' ? 'costa-rica' : 'panama';
+      const { data: countryRecipients } = await supabase
+        .from('alert_recipients')
+        .select('email')
+        .eq('club_id', countryVirtualId);
+
       const allRecipients = [
         ...(clubRecipients || []),
-        ...(globalRecipients || [])
+        ...(globalRecipients || []),
+        ...(countryRecipients || []),
       ];
 
       if (allRecipients.length === 0) continue;
