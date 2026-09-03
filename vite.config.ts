@@ -17,7 +17,7 @@ export default defineConfig(({mode}) => {
           name: 'ControlDoc PSMT',
           short_name: 'ControlDoc',
           description: 'Gestión de documentos y contratos PSMT',
-          version: '1.4.3',
+          version: '1.4.4',
           theme_color: '#3B82F6',
           background_color: '#070B16',
           display: 'standalone',
