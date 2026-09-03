@@ -589,14 +589,8 @@ export async function sendLoginAlert(
   }
 ) {
   try {
-    const { data: recipients } = await supabase
-      .from('alert_recipients')
-      .select('email')
-      .in('club_id', ['global']);
-
-    if (!recipients?.length) return;
-
-    const toEmails = Array.from(new Set(recipients.map(r => r.email)));
+    const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'amethacosta0108@gmail.com';
+    const toEmails = [SUPER_ADMIN_EMAIL];
 
     let clubName: string | null = null;
     let timezone = process.env.APP_DEFAULT_TIMEZONE || 'America/Panama';
