@@ -1,7 +1,7 @@
 import { apiFetch } from '../lib/api';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Search, Plus, Filter, Upload, FileSpreadsheet } from 'lucide-react';
+import { Search, Plus, Filter, Upload, FileSpreadsheet, ClipboardList } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import NewEmployeeModal from '../components/NewEmployeeModal';
 import BulkUploadModal from '../components/BulkUploadModal';
@@ -34,6 +34,9 @@ export default function Employees() {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [clubFilter, setClubFilter] = useState('');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [showMissingContract, setShowMissingContract] = useState(false);
+  const [missingContractEmployees, setMissingContractEmployees] = useState<Employee[]>([]);
+  const [loadingMissing, setLoadingMissing] = useState(false);
   const filterRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,8 +52,29 @@ export default function Employees() {
   }, []);
 
   // All hooks must be declared unconditionally before any early return
+  const isSuperAdmin = user?.role === 'Super Administrador';
   const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
   const noAccess = user?.role === 'Supervisor Interno' || user?.role === 'Coordinadora' || user?.role === 'Supervisor Cliente';
+
+  const fetchMissingContract = useCallback(async () => {
+    setLoadingMissing(true);
+    try {
+      const res = await apiFetch('/api/reports/missing-document?doc_type=Contrato+sellado');
+      if (res.ok) {
+        const data = await res.json();
+        setMissingContractEmployees(Array.isArray(data) ? data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching missing contracts:', error);
+    } finally {
+      setLoadingMissing(false);
+    }
+  }, []);
+
+  const handleMissingContractTab = () => {
+    setShowMissingContract(true);
+    fetchMissingContract();
+  };
 
   const fetchEmployees = useCallback(async () => {
     try {
@@ -84,6 +108,7 @@ export default function Employees() {
 
   const handleStatusFilter = (status: string) => {
     setStatusFilter(status);
+    setShowMissingContract(false);
   };
 
   const filteredEmployees = employees.filter(emp => {
@@ -91,6 +116,8 @@ export default function Employees() {
     const matchesClub = !clubFilter || emp.club_id === clubFilter;
     return matchesSearch && matchesClub;
   });
+
+  const displayEmployees = showMissingContract ? missingContractEmployees : filteredEmployees;
 
   return (
     <div className="space-y-4">
@@ -101,7 +128,7 @@ export default function Employees() {
           <button
             onClick={() => handleStatusFilter('activo')}
             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-              statusFilter === 'activo'
+              statusFilter === 'activo' && !showMissingContract
                 ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
             }`}
@@ -111,14 +138,40 @@ export default function Employees() {
           <button
             onClick={() => handleStatusFilter('inactivo')}
             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-              statusFilter === 'inactivo'
+              statusFilter === 'inactivo' && !showMissingContract
                 ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
             }`}
           >
             Inactivos (Historial)
           </button>
+          {isSuperAdmin && (
+            <button
+              onClick={handleMissingContractTab}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                showMissingContract
+                  ? 'bg-white text-orange-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Sin Contrato Sellado
+              {showMissingContract && missingContractEmployees.length > 0 && (
+                <span className="ml-2 bg-orange-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                  {missingContractEmployees.length}
+                </span>
+              )}
+            </button>
+          )}
         </div>
+        {isSuperAdmin && (
+          <Link
+            to="/checklist-contratos"
+            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
+          >
+            <ClipboardList className="h-4 w-4 mr-1.5" />
+            Checklist 1 Año
+          </Link>
+        )}
 
         <div className="flex gap-3">
           {(user?.role === 'Administrador' || user?.role === 'Super Administrador') && (
@@ -248,8 +301,14 @@ export default function Employees() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
-            {filteredEmployees.length > 0 ? (
-              filteredEmployees.map((person) => (
+            {showMissingContract && loadingMissing ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                  Cargando empleados sin contrato sellado...
+                </td>
+              </tr>
+            ) : displayEmployees.length > 0 ? (
+              displayEmployees.map((person) => (
                 <tr key={person.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -298,7 +357,7 @@ export default function Employees() {
             ) : (
               <tr>
                 <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                  No se encontraron empleados.
+                  {showMissingContract ? 'Todos los empleados tienen contrato sellado.' : 'No se encontraron empleados.'}
                 </td>
               </tr>
             )}
