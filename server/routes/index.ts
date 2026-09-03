@@ -3686,16 +3686,18 @@ router.post('/alert-recipients', isAuthenticated, isAdmin, async (req, res) => {
   const { club_id, emails } = req.body; // emails is an array of strings
   
   try {
-    if (club_id === 'global') {
-      // Ensure the 'global' club exists to satisfy foreign key constraints
-      const { data: globalClub } = await supabase.from('clubs').select('id').eq('id', 'global').maybeSingle();
-      if (!globalClub) {
-        await supabase.from('clubs').upsert([{ id: 'global', name: 'Global', description: 'Destinatarios Globales', is_active: 1 }]);
+    const virtualClubs: Record<string, { name: string; description: string }> = {
+      global: { name: 'Global', description: 'Destinatarios Globales' },
+      hr: { name: 'Recursos Humanos', description: 'Destinatarios RRHH' },
+    };
+
+    if (virtualClubs[club_id]) {
+      const { data: existing } = await supabase.from('clubs').select('id').eq('id', club_id).maybeSingle();
+      if (!existing) {
+        await supabase.from('clubs').upsert([{ id: club_id, ...virtualClubs[club_id], is_active: 1 }]);
       }
-      await supabase.from('alert_recipients').delete().eq('club_id', 'global');
-    } else {
-      await supabase.from('alert_recipients').delete().eq('club_id', club_id);
     }
+    await supabase.from('alert_recipients').delete().eq('club_id', club_id);
     
     if (emails && emails.length > 0) {
       const insertData = emails.map((email: string) => ({
