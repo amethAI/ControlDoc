@@ -682,7 +682,11 @@ router.get('/employees', canViewData, async (req, res) => {
 
     const { data: employees, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
-    res.json(employees);
+    const normalized = (employees || []).map((e: any) => ({
+      ...e,
+      cedula: e.cedula ? e.cedula.replace(/-/g, ' ') : e.cedula,
+    }));
+    res.json(normalized);
   } catch (error: any) {
     console.error('Error in /employees:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
@@ -829,6 +833,7 @@ router.get('/employees/:id', isAuthenticated, async (req, res) => {
 
     // Strip the joined clubs field before returning (not part of the employee schema)
     const { clubs, ...emp } = employee as any;
+    if (emp.cedula) emp.cedula = emp.cedula.replace(/-/g, ' ');
     res.json(emp);
   } catch (error: any) {
     console.error('Error in /employees/:id:', error);
