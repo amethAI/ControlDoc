@@ -4961,6 +4961,109 @@ router.delete('/admin/employees/:id/remove-access', isAuthenticated, isAdmin, as
 // DOTACIÓN DE CAMISAS
 // ══════════════════════════════════════════════════════════════════════════════
 
+// ─── Dotación periodos ────────────────────────────────────────────────────────
+
+// GET /dotacion/periodos — list periods with groups and tandas
+router.get('/dotacion/periodos', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    const isSuperAdmin = user.role === 'Super Administrador';
+
+    const { data: periodos, error } = await supabase
+      .from('dotacion_periodos')
+      .select(`
+        id, mes, descripcion, activo, created_at,
+        dotacion_grupos(
+          id, nombre, presupuesto_total,
+          dotacion_tandas(
+            id, club_id, descripcion, fecha, precio_por_camisa,
+            total_compra, cantidad_total, token, activa,
+            clubs(name),
+            dotacion_asignaciones(id, estado, monto_total, cantidad)
+          )
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // For non-super-admin, filter tandas to only their club
+    if (!isSuperAdmin && user.club_id) {
+      const filtered = (periodos || []).map((p: any) => ({
+        ...p,
+        dotacion_grupos: (p.dotacion_grupos || []).map((g: any) => ({
+          ...g,
+          dotacion_tandas: (g.dotacion_tandas || []).filter((t: any) => t.club_id === user.club_id),
+        })).filter((g: any) => g.dotacion_tandas.length > 0),
+      })).filter((p: any) => p.dotacion_grupos.length > 0);
+      return res.json(filtered);
+    }
+
+    res.json(periodos || []);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al obtener períodos' });
+  }
+});
+
+// POST /dotacion/periodos — create period with groups and tandas
+router.post('/dotacion/periodos', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const { mes, precio_por_camisa, grupos } = req.body;
+    if (!mes || !precio_por_camisa || !grupos?.length) {
+      return res.status(400).json({ error: 'Faltan campos requeridos' });
+    }
+
+    // Build description from mes: "2026-09" → "Dotación Septiembre 2026"
+    const [year, month] = mes.split('-');
+    const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const descripcion = `Dotación ${monthNames[parseInt(month) - 1]} ${year}`;
+    const fecha = `${mes}-01`;
+
+    const { data: periodo, error: pErr } = await supabase
+      .from('dotacion_periodos')
+      .insert({ mes, descripcion })
+      .select('id')
+      .single();
+    if (pErr) throw pErr;
+
+    for (const grupo of grupos) {
+      const { data: grupoRow, error: gErr } = await supabase
+        .from('dotacion_grupos')
+        .insert({
+          periodo_id: periodo.id,
+          nombre: grupo.nombre,
+          presupuesto_total: grupo.presupuesto_total ? parseFloat(grupo.presupuesto_total) : null,
+        })
+        .select('id')
+        .single();
+      if (gErr) throw gErr;
+
+      for (const club of grupo.clubes) {
+        const token = crypto.randomUUID();
+        const { error: tErr } = await supabase
+          .from('dotacion_tandas')
+          .insert({
+            club_id: club.club_id,
+            descripcion,
+            fecha,
+            precio_por_camisa: parseFloat(precio_por_camisa),
+            cantidad_total: club.cantidad_total ? parseInt(club.cantidad_total) : null,
+            total_compra: grupo.presupuesto_total ? parseFloat(grupo.presupuesto_total) : null,
+            token,
+            activa: true,
+            periodo_id: periodo.id,
+            grupo_id: grupoRow.id,
+          });
+        if (tErr) throw tErr;
+      }
+    }
+
+    res.status(201).json({ id: periodo.id, descripcion });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error al crear período' });
+  }
+});
+
 // List tandas for a club (admin)
 router.get('/dotacion/tandas', isAuthenticated, async (req: any, res: any) => {
   try {
