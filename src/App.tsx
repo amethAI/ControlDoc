@@ -116,7 +116,7 @@ function AppRoutes() {
           <Route path="configuracion/accesos" element={<AdminRoute><PageErrorBoundary pageName="Accesos"><AccessLogs /></PageErrorBoundary></AdminRoute>} />
           <Route path="roles" element={<AdminRoute><PageErrorBoundary pageName="Roles y Permisos"><RolesInfo /></PageErrorBoundary></AdminRoute>} />
           <Route path="cumpleanos" element={<PageErrorBoundary pageName="Cumpleaños"><Cumpleanos /></PageErrorBoundary>} />
-          <Route path="dotacion" element={<PageErrorBoundary pageName="Dotación"><Dotacion /></PageErrorBoundary>} />
+          <Route path="dotacion" element={<AdminRoute><PageErrorBoundary pageName="Dotación"><Dotacion /></PageErrorBoundary></AdminRoute>} />
         </Route>
       </Routes>
     </Suspense>
