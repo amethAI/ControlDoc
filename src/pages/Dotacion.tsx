@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Link2, Plus, ChevronDown, ChevronUp, Check, Clock, AlertCircle, Copy, FileText, X } from 'lucide-react';
+import { Link2, Plus, ChevronDown, ChevronUp, Check, Clock, AlertCircle, Copy, FileText, X, Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Tanda {
@@ -251,6 +251,42 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
     setExpanded(e => !e);
   };
 
+  const [downloadingReport, setDownloadingReport] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
+
+  const downloadReporte = async () => {
+    setDownloadingReport(true);
+    try {
+      const res = await apiFetch(`/api/dotacion/tandas/${tanda.id}/reporte-pdf`);
+      if (!res.ok) { toast.error('Error al generar reporte'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reporte-dotacion-${tanda.descripcion.replace(/\s+/g, '-').toLowerCase()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Error al descargar reporte');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
+
+  const downloadAuthPdf = async (asignacionId: string) => {
+    setDownloadingPdf(asignacionId);
+    try {
+      const res = await apiFetch(`/api/dotacion/asignaciones/${asignacionId}/pdf`);
+      if (!res.ok) { toast.error('PDF aún no disponible'); return; }
+      const { url } = await res.json();
+      window.open(url, '_blank');
+    } catch {
+      toast.error('Error al obtener PDF');
+    } finally {
+      setDownloadingPdf(null);
+    }
+  };
+
   const handlePago = async (asignacionId: string) => {
     setApplyingId(asignacionId);
     try {
@@ -350,11 +386,19 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
                 <div className="divide-y divide-slate-50">
                   {detail.asignaciones.map(a => (
                     <div key={a.id} className="flex items-center justify-between px-4 py-3 gap-3">
-                      <div className="min-w-0">
+                      <div className="min-w-0flex-1">
                         <p className="text-sm font-medium text-slate-700 truncate">{a.full_name}</p>
                         <p className="text-xs text-slate-400">{a.cedula} · {a.cantidad} camisa{a.cantidad !== 1 ? 's' : ''} · ${Number(a.monto_total).toFixed(2)}</p>
                       </div>
-                      <div className="shrink-0">
+                      <div className="shrink-0 flex items-center gap-2">
+                        <button
+                          onClick={() => downloadAuthPdf(a.id)}
+                          disabled={downloadingPdf === a.id}
+                          title="Descargar autorización PDF"
+                          className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-40 transition-colors"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
                         <EstadoBadge
                           estado={a.estado}
                           cuotas={a.cuotas}
@@ -367,14 +411,19 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
                 </div>
               )}
 
-              {/* Footer con link para reporte */}
-              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-50 bg-slate-50/50">
-                <p className="text-xs text-slate-400">
-                  Link: <span className="font-mono">/d/{tanda.token.slice(0, 8)}…</span>
-                </p>
+              {/* Footer */}
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-50 bg-slate-50/50 gap-2 flex-wrap">
                 <button onClick={copyLink} className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium">
                   <FileText className="h-3.5 w-3.5" />
                   Copiar link para empleadas
+                </button>
+                <button
+                  onClick={downloadReporte}
+                  disabled={downloadingReport}
+                  className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 font-medium disabled:opacity-50"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {downloadingReport ? 'Generando…' : 'Reporte planilla'}
                 </button>
               </div>
             </>

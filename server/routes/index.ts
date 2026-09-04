@@ -11,6 +11,198 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
+import PDFDocument from 'pdfkit';
+
+// ─── PDF helpers ─────────────────────────────────────────────────────────────
+
+function buildPDFBuffer(fn: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new (PDFDocument as any)({ margin: 50, size: 'A4' });
+    const chunks: Buffer[] = [];
+    doc.on('data', (c: Buffer) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    fn(doc);
+    doc.end();
+  });
+}
+
+function fmtDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-PA', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Panama' });
+}
+
+function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString('es-PA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Panama' });
+}
+
+async function buildAuthPDF(data: {
+  full_name: string; cedula: string; club_name: string;
+  descripcion: string; fecha: string; precio_por_camisa: number;
+  cantidad: number; cuotas: number; monto_total: number; accepted_at: string;
+}): Promise<Buffer> {
+  return buildPDFBuffer(doc => {
+    const RED = '#c01818';
+    const DARK = '#1a1a1a';
+    const GRAY = '#64748b';
+    const LINE = '#e2e8f0';
+    const W = 495; // usable width
+
+    // Header bar
+    doc.rect(50, 50, W, 60).fill(DARK);
+    doc.fillColor('#e02020').fontSize(22).font('Helvetica-Bold').text('RED', 65, 68, { continued: true });
+    doc.fillColor('#9a9a9a').font('Helvetica').text('VOLUTION', { continued: false });
+    doc.fillColor('white').fontSize(9).text('Autorización de Descuento en Planilla', 65, 93);
+
+    let y = 130;
+
+    // Meta row
+    doc.fillColor(GRAY).fontSize(9).font('Helvetica');
+    doc.text(`Club: ${data.club_name}`, 50, y);
+    doc.text(`Fecha: ${fmtDate(data.fecha)}`, 350, y);
+    y += 16;
+    doc.text(`Tanda: ${data.descripcion}`, 50, y);
+    y += 28;
+
+    // Divider
+    doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor(LINE).stroke();
+    y += 18;
+
+    // Employee section
+    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text('DATOS DEL EMPLEADO', 50, y);
+    y += 18;
+    doc.fillColor(GRAY).fontSize(9).font('Helvetica');
+    doc.text('Nombre:', 50, y);  doc.fillColor(DARK).font('Helvetica-Bold').text(data.full_name, 130, y);
+    y += 15;
+    doc.fillColor(GRAY).font('Helvetica').text('Cédula:', 50, y);  doc.fillColor(DARK).font('Helvetica-Bold').text(data.cedula, 130, y);
+    y += 28;
+
+    doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor(LINE).stroke();
+    y += 18;
+
+    // Detail section
+    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text('DETALLE DE LA DOTACIÓN', 50, y);
+    y += 18;
+
+    const rows = [
+      ['Cantidad de camisas', String(data.cantidad)],
+      ['Precio por camisa', `$${data.precio_por_camisa.toFixed(2)}`],
+      ['Total a descontar', `$${data.monto_total.toFixed(2)}`],
+      ['Forma de pago', data.cuotas === 1 ? '1 cuota (pago único)' : `2 cuotas ($${(data.monto_total / 2).toFixed(2)} c/u)`],
+    ];
+    rows.forEach(([label, val]) => {
+      doc.fillColor(GRAY).fontSize(9).font('Helvetica').text(label, 50, y);
+      doc.fillColor(DARK).font('Helvetica-Bold').text(val, 300, y);
+      y += 16;
+    });
+    y += 12;
+
+    doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor(LINE).stroke();
+    y += 18;
+
+    // Acceptance declaration
+    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text('DECLARACIÓN DE ACEPTACIÓN', 50, y);
+    y += 16;
+    const cuotaText = data.cuotas === 1
+      ? '1 cuota (pago único en planilla)'
+      : `2 cuotas de $${(data.monto_total / 2).toFixed(2)} cada una en planilla`;
+    doc.fillColor('#334155').fontSize(9).font('Helvetica')
+      .text(`El/la empleado/a declara haber recibido la dotación indicada y autoriza expresamente el descuento de $${data.monto_total.toFixed(2)} de su planilla en ${cuotaText}.`, 50, y, { width: W });
+    y += 40;
+    doc.fillColor(GRAY).text('Aceptado digitalmente el:', 50, y, { continued: true });
+    doc.fillColor(DARK).font('Helvetica-Bold').text(`  ${fmtDateTime(data.accepted_at)}`);
+    y += 20;
+    doc.fillColor(GRAY).font('Helvetica').fontSize(8)
+      .text('Este documento digital tiene la misma validez que la firma física de autorización y reemplaza el formulario de papel.', 50, y, { width: W });
+
+    // Footer
+    const footerY = 780;
+    doc.moveTo(50, footerY).lineTo(545, footerY).lineWidth(0.5).strokeColor(LINE).stroke();
+    doc.fillColor(GRAY).fontSize(8).font('Helvetica')
+      .text(`Generado por ControlDoc · Redvolution Management · ${fmtDateTime(new Date().toISOString())}`, 50, footerY + 8, { width: W, align: 'center' });
+  });
+}
+
+async function buildReportePDF(data: {
+  tanda: { descripcion: string; fecha: string; precio_por_camisa: number; total_compra: number | null; club_name: string };
+  resumen: { total_asignado: number; total_recuperado: number; total_pendiente: number };
+  asignaciones: Array<{ full_name: string; cedula: string; cantidad: number; cuotas: number; monto_total: number; estado: string; accepted_at: string | null }>;
+}): Promise<Buffer> {
+  return buildPDFBuffer(doc => {
+    const DARK = '#1a1a1a';
+    const GRAY = '#64748b';
+    const LINE = '#e2e8f0';
+    const W = 495;
+
+    // Header
+    doc.rect(50, 50, W, 60).fill(DARK);
+    doc.fillColor('#e02020').fontSize(22).font('Helvetica-Bold').text('RED', 65, 68, { continued: true });
+    doc.fillColor('#9a9a9a').font('Helvetica').text('VOLUTION', { continued: false });
+    doc.fillColor('white').fontSize(9).text('Reporte de Dotación — Planilla', 65, 93);
+
+    let y = 130;
+
+    doc.fillColor(GRAY).fontSize(9).font('Helvetica');
+    doc.text(`Tanda: ${data.tanda.descripcion}`, 50, y);
+    y += 14;
+    doc.text(`Club: ${data.tanda.club_name}  ·  Fecha: ${fmtDate(data.tanda.fecha)}  ·  Precio por camisa: $${data.tanda.precio_por_camisa.toFixed(2)}`, 50, y);
+    if (data.tanda.total_compra) { y += 14; doc.text(`Total de compra: $${Number(data.tanda.total_compra).toFixed(2)}`, 50, y); }
+    y += 24;
+
+    doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor(LINE).stroke();
+    y += 16;
+
+    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text('RESUMEN FINANCIERO', 50, y);
+    y += 16;
+    [
+      ['Total asignado', `$${data.resumen.total_asignado.toFixed(2)}`],
+      ['Total recuperado', `$${data.resumen.total_recuperado.toFixed(2)}`],
+      ['Pendiente de descontar', `$${data.resumen.total_pendiente.toFixed(2)}`],
+    ].forEach(([l, v]) => {
+      doc.fillColor(GRAY).fontSize(9).font('Helvetica').text(l, 50, y);
+      doc.fillColor(DARK).font('Helvetica-Bold').text(v, 350, y);
+      y += 15;
+    });
+    y += 20;
+
+    doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor(LINE).stroke();
+    y += 16;
+
+    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text(`AUTORIZACIONES (${data.asignaciones.length} empleado${data.asignaciones.length !== 1 ? 's' : ''})`, 50, y);
+    y += 18;
+
+    // Table header
+    doc.rect(50, y, W, 18).fill('#f1f5f9');
+    doc.fillColor(GRAY).fontSize(8).font('Helvetica-Bold');
+    doc.text('NOMBRE', 55, y + 5);
+    doc.text('CÉDULA', 220, y + 5);
+    doc.text('CAM', 310, y + 5);
+    doc.text('CUOTAS', 340, y + 5);
+    doc.text('MONTO', 385, y + 5);
+    doc.text('ESTADO', 435, y + 5);
+    y += 20;
+
+    const estadoLabel: Record<string, string> = { pendiente: 'Pendiente', parcial: 'Parcial', pagado: 'Pagado' };
+    data.asignaciones.forEach((a, i) => {
+      if (i % 2 === 1) doc.rect(50, y - 3, W, 16).fill('#f8fafc');
+      doc.fillColor(DARK).fontSize(8).font('Helvetica');
+      doc.text(a.full_name.length > 28 ? a.full_name.slice(0, 26) + '…' : a.full_name, 55, y);
+      doc.text(a.cedula, 220, y);
+      doc.text(String(a.cantidad), 310, y);
+      doc.text(String(a.cuotas), 340, y);
+      doc.text(`$${Number(a.monto_total).toFixed(2)}`, 385, y);
+      doc.text(estadoLabel[a.estado] || a.estado, 435, y);
+      y += 16;
+    });
+
+    // Footer
+    const footerY = 780;
+    doc.moveTo(50, footerY).lineTo(545, footerY).lineWidth(0.5).strokeColor(LINE).stroke();
+    doc.fillColor(GRAY).fontSize(8).font('Helvetica')
+      .text(`Generado el ${fmtDateTime(new Date().toISOString())} · ControlDoc · Redvolution Management`, 50, footerY + 8, { width: W, align: 'center' });
+  });
+}
 
 // ─── Zod validation schemas ───────────────────────────────────────────────────
 const dateOrEmpty = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').or(z.literal('').transform(() => undefined)).optional();
@@ -625,6 +817,8 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
     if (existing) return res.status(409).json({ error: 'Ya registraste tu selección para esta tanda' });
 
     const monto_total = parseFloat((Number(cantidad) * Number(tanda.precio_por_camisa)).toFixed(2));
+    const accepted_at = new Date().toISOString();
+
     const { data: asignacion, error: insertErr } = await supabase
       .from('dotacion_asignaciones')
       .insert({
@@ -634,10 +828,40 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
         cuotas: Number(cuotas),
         monto_total,
         estado: 'pendiente',
+        accepted_at,
       })
-      .select()
+      .select('id')
       .single();
     if (insertErr) throw insertErr;
+
+    // Generate and upload authorization PDF (non-blocking — don't fail submit if PDF fails)
+    try {
+      const { data: tandaInfo } = await supabase
+        .from('dotacion_tandas')
+        .select('descripcion, fecha, precio_por_camisa, clubs(name)')
+        .eq('id', tanda.id)
+        .single();
+
+      const pdfBuffer = await buildAuthPDF({
+        full_name: employee.full_name,
+        cedula: cedula.trim(),
+        club_name: (tandaInfo?.clubs as any)?.name || '',
+        descripcion: tandaInfo?.descripcion || '',
+        fecha: tandaInfo?.fecha || new Date().toISOString(),
+        precio_por_camisa: Number(tanda.precio_por_camisa),
+        cantidad: Number(cantidad),
+        cuotas: Number(cuotas),
+        monto_total,
+        accepted_at,
+      });
+
+      const pdfPath = `${tanda.id}/${employee.id}.pdf`;
+      await supabase.storage.from('dotacion-auth').upload(pdfPath, pdfBuffer, {
+        contentType: 'application/pdf',
+        upsert: true,
+      });
+      await supabase.from('dotacion_asignaciones').update({ pdf_path: pdfPath }).eq('id', asignacion.id);
+    } catch (_) { /* PDF generation is best-effort */ }
 
     res.status(201).json({
       success: true,
@@ -4550,6 +4774,47 @@ router.get('/employee/me', isAuthenticated, isEmployee, async (req, res) => {
   }
 });
 
+// GET /api/employee/dotacion — employee's own dotacion authorizations with PDF signed URLs
+router.get('/employee/dotacion', isAuthenticated, isEmployee, async (req: any, res: any) => {
+  const user = req.user;
+  try {
+    const { data: employee } = await supabase
+      .from('employees').select('id').eq('user_id', user.id).eq('status', 'activo').single();
+    if (!employee) return res.status(404).json({ error: 'Empleado no encontrado' });
+
+    const { data: asigs, error } = await supabase
+      .from('dotacion_asignaciones')
+      .select('id, cantidad, cuotas, monto_total, estado, accepted_at, pdf_path, dotacion_tandas(descripcion, fecha, precio_por_camisa, clubs(name))')
+      .eq('employee_id', employee.id)
+      .order('accepted_at', { ascending: false });
+    if (error) throw error;
+
+    const result = await Promise.all((asigs || []).map(async (a: any) => {
+      let pdf_url: string | null = null;
+      if (a.pdf_path) {
+        const { data: signed } = await supabase.storage.from('dotacion-auth').createSignedUrl(a.pdf_path, 3600);
+        pdf_url = signed?.signedUrl || null;
+      }
+      return {
+        id: a.id,
+        descripcion: a.dotacion_tandas?.descripcion || '',
+        fecha: a.dotacion_tandas?.fecha || '',
+        club_name: (a.dotacion_tandas?.clubs as any)?.name || '',
+        cantidad: a.cantidad,
+        cuotas: a.cuotas,
+        monto_total: a.monto_total,
+        estado: a.estado,
+        accepted_at: a.accepted_at,
+        pdf_url,
+      };
+    }));
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al obtener autorizaciones' });
+  }
+});
+
 // POST /api/employee/documents/upload — employee uploads their own document
 router.post('/employee/documents/upload', isAuthenticated, isEmployee, upload.single('file'), async (req, res) => {
   const user = (req as any).user;
@@ -4790,6 +5055,85 @@ router.patch('/dotacion/tandas/:id/toggle', isAuthenticated, async (req: any, re
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: 'Error al actualizar tanda' });
+  }
+});
+
+// Download authorization PDF for a single assignment (admin or employee who owns it)
+router.get('/dotacion/asignaciones/:id/pdf', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { data: asig, error } = await supabase
+      .from('dotacion_asignaciones')
+      .select('id, pdf_path, employee_id')
+      .eq('id', id)
+      .single();
+    if (error || !asig) return res.status(404).json({ error: 'Autorización no encontrada' });
+    if (!asig.pdf_path) return res.status(404).json({ error: 'PDF aún no generado' });
+
+    const { data: signed } = await supabase.storage
+      .from('dotacion-auth')
+      .createSignedUrl(asig.pdf_path, 3600);
+    if (!signed?.signedUrl) return res.status(500).json({ error: 'No se pudo generar el enlace' });
+
+    res.json({ url: signed.signedUrl });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al obtener PDF' });
+  }
+});
+
+// Download consolidated planilla report PDF for a tanda (admin)
+router.get('/dotacion/tandas/:id/reporte-pdf', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { data: tanda, error } = await supabase
+      .from('dotacion_tandas')
+      .select(`
+        descripcion, fecha, precio_por_camisa, total_compra,
+        clubs(name),
+        dotacion_asignaciones(
+          full_name:employees(full_name), cedula:employees(cedula),
+          cantidad, cuotas, monto_total, estado, accepted_at,
+          employees(full_name, cedula)
+        )
+      `)
+      .eq('id', id)
+      .single();
+    if (error || !tanda) return res.status(404).json({ error: 'Tanda no encontrada' });
+
+    const asigs = (tanda.dotacion_asignaciones as any[]) || [];
+    const totalAsignado = asigs.reduce((s: number, a: any) => s + Number(a.monto_total), 0);
+    const totalRecuperado = asigs.filter((a: any) => a.estado === 'pagado').reduce((s: number, a: any) => s + Number(a.monto_total), 0);
+
+    const pdfBuffer = await buildReportePDF({
+      tanda: {
+        descripcion: tanda.descripcion,
+        fecha: tanda.fecha,
+        precio_por_camisa: tanda.precio_por_camisa,
+        total_compra: tanda.total_compra,
+        club_name: (tanda.clubs as any)?.name || '',
+      },
+      resumen: {
+        total_asignado: parseFloat(totalAsignado.toFixed(2)),
+        total_recuperado: parseFloat(totalRecuperado.toFixed(2)),
+        total_pendiente: parseFloat((totalAsignado - totalRecuperado).toFixed(2)),
+      },
+      asignaciones: asigs.map((a: any) => ({
+        full_name: a.employees?.full_name || '',
+        cedula: a.employees?.cedula || '',
+        cantidad: a.cantidad,
+        cuotas: a.cuotas,
+        monto_total: a.monto_total,
+        estado: a.estado,
+        accepted_at: a.accepted_at,
+      })),
+    });
+
+    const filename = `reporte-dotacion-${tanda.descripcion.replace(/\s+/g, '-').toLowerCase()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al generar reporte PDF' });
   }
 });
 

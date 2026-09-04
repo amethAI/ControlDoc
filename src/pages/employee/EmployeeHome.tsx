@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle, AlertTriangle, XCircle, Clock, Upload, ChevronRight } from 'lucide-react';
+import { CheckCircle, AlertTriangle, XCircle, Clock, Upload, ChevronRight, Download, Shirt } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { differenceInDays, parseISO } from 'date-fns';
@@ -41,16 +41,31 @@ const STATUS_CONFIG: Record<DocStatus, { label: string; icon: React.ElementType;
   missing: { label: 'Faltante',  icon: XCircle,        color: '#dc2626', bg: 'rgba(220,38,38,.1)'  },
 };
 
+interface DotacionAuth {
+  id: string; descripcion: string; fecha: string; club_name: string;
+  cantidad: number; cuotas: number; monto_total: number;
+  estado: string; accepted_at: string; pdf_url: string | null;
+}
+
+const ESTADO_LABEL: Record<string, { label: string; color: string }> = {
+  pendiente: { label: 'Pendiente', color: '#d97706' },
+  parcial:   { label: 'Parcial',   color: '#7c3aed' },
+  pagado:    { label: 'Pagado',    color: '#16a34a' },
+};
+
 export default function EmployeeHome() {
   const { user } = useAuth();
   const [data, setData] = React.useState<{ employee: Employee; documents: Document[]; required_types: DocType[] } | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
+  const [dotacion, setDotacion] = React.useState<DotacionAuth[]>([]);
 
   React.useEffect(() => {
-    apiFetch('/api/employee/me')
-      .then(r => r.ok ? r.json() : Promise.reject('Error al cargar tu perfil'))
-      .then(setData)
+    Promise.all([
+      apiFetch('/api/employee/me').then(r => r.ok ? r.json() : Promise.reject('Error al cargar tu perfil')),
+      apiFetch('/api/employee/dotacion').then(r => r.ok ? r.json() : []),
+    ])
+      .then(([profileData, dotData]) => { setData(profileData); setDotacion(dotData || []); })
       .catch(e => setError(typeof e === 'string' ? e : 'Error de conexión'))
       .finally(() => setLoading(false));
   }, []);
@@ -150,6 +165,39 @@ export default function EmployeeHome() {
           );
         })}
       </div>
+
+      {/* Dotación */}
+      {dotacion.length > 0 && (
+        <div className="rounded-2xl bg-white border border-black/[0.06] overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-black/[0.05]">
+            <Shirt className="h-4 w-4 text-slate-400" />
+            <h2 className="text-[13px] font-bold text-slate-900">Mis Autorizaciones de Dotación</h2>
+          </div>
+          {dotacion.map(d => {
+            const est = ESTADO_LABEL[d.estado] || { label: d.estado, color: '#64748b' };
+            return (
+              <div key={d.id} className="flex items-center gap-3 px-4 py-3.5 border-b border-black/[0.04] last:border-none">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-semibold text-slate-900 truncate">{d.descripcion}</p>
+                  <p className="text-[10.5px] text-slate-400 mt-0.5">
+                    {d.cantidad} camisa{d.cantidad !== 1 ? 's' : ''} · ${Number(d.monto_total).toFixed(2)} · {d.cuotas} cuota{d.cuotas !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap"
+                      style={{ color: est.color, background: `${est.color}18` }}>
+                  {est.label}
+                </span>
+                {d.pdf_url && (
+                  <a href={d.pdf_url} target="_blank" rel="noreferrer"
+                     className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors" title="Descargar autorización">
+                    <Download className="h-4 w-4" />
+                  </a>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Upload CTA */}
       <Link

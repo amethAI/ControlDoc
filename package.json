@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "node dist/server.js",
-    "build": "vite build && npx esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express --external:vite --external:cors --external:dotenv --external:multer --external:cookie-parser --external:archiver --external:bcryptjs --external:jsonwebtoken --external:node-cron --external:nodemailer --external:resend --external:@supabase/supabase-js --external:papaparse --external:date-fns --external:pptxgenjs --external:@google/genai --external:web-push --external:exceljs --external:xlsx",
+    "build": "vite build && npx esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express --external:vite --external:cors --external:dotenv --external:multer --external:cookie-parser --external:archiver --external:bcryptjs --external:jsonwebtoken --external:node-cron --external:nodemailer --external:resend --external:@supabase/supabase-js --external:papaparse --external:date-fns --external:pptxgenjs --external:@google/genai --external:web-push --external:exceljs --external:xlsx --external:pdfkit",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
@@ -26,6 +26,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^7.0.11",
     "@types/papaparse": "^5.5.2",
+    "@types/pdfkit": "^0.17.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@types/web-push": "^3.6.4",
@@ -52,6 +53,7 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.1",
     "papaparse": "^5.5.3",
+    "pdfkit": "^0.20.2",
     "pptxgenjs": "^4.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
