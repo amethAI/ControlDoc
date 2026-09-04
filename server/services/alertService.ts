@@ -245,8 +245,7 @@ export async function sendExpirationAlerts(isTest = false) {
         transportConfig.port = port;
         transportConfig.secure = port === 465;
         transportConfig.tls = {
-          ciphers: 'SSLv3',
-          rejectUnauthorized: false
+          rejectUnauthorized: true
         };
         transportConfig.family = 4;
       }
@@ -730,7 +729,7 @@ export async function sendLoginAlert(
       const isGmail = host.includes('gmail.com');
       const cfg: any = { auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }, connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 20000, family: 4 };
       if (isGmail) { cfg.service = 'gmail'; cfg.host = 'smtp.gmail.com'; cfg.port = 465; cfg.secure = true; }
-      else { const port = parseInt(process.env.EMAIL_PORT || '587'); cfg.host = host; cfg.port = port; cfg.secure = port === 465; cfg.tls = { ciphers: 'SSLv3', rejectUnauthorized: false }; }
+      else { const port = parseInt(process.env.EMAIL_PORT || '587'); cfg.host = host; cfg.port = port; cfg.secure = port === 465; cfg.tls = { rejectUnauthorized: true }; }
       const transporter = nodemailer.createTransport(cfg);
       await transporter.sendMail({ from: process.env.EMAIL_FROM || `"ControlDoc PSMT" <${process.env.EMAIL_USER}>`, to: toEmails.join(', '), subject, html });
     }

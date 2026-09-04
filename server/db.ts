@@ -75,6 +75,9 @@ export const getSupabase = (): SupabaseClient => {
     if (supabaseUrl) console.log('URL starts with:', supabaseUrl.substring(0, 15));
     
     if (!supabaseUrl || !supabaseKey) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('FATAL: SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY son obligatorias en producción. La aplicación no puede iniciar.');
+      }
       console.warn('⚠️ Supabase URL o Key faltante. Verificá las variables SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en el servidor.');
       supabaseInstance = createMockClient();
     } else {

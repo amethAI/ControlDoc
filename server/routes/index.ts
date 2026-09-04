@@ -27,20 +27,21 @@ function buildPDFBuffer(fn: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> 
   });
 }
 
-function fmtDate(iso: string) {
+function fmtDate(iso: string, timezone = 'America/Panama', locale = 'es-PA') {
   const d = new Date(iso);
-  return d.toLocaleDateString('es-PA', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Panama' });
+  return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: timezone });
 }
 
-function fmtDateTime(iso: string) {
+function fmtDateTime(iso: string, timezone = 'America/Panama', locale = 'es-PA') {
   const d = new Date(iso);
-  return d.toLocaleString('es-PA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Panama' });
+  return d.toLocaleString(locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: timezone });
 }
 
 async function buildAuthPDF(data: {
   full_name: string; cedula: string; club_name: string;
   descripcion: string; fecha: string; precio_por_camisa: number;
   cantidad: number; cuotas: number; monto_total: number; accepted_at: string;
+  timezone?: string; locale?: string;
 }): Promise<Buffer> {
   return buildPDFBuffer(doc => {
     const RED = '#c01818';
@@ -60,7 +61,7 @@ async function buildAuthPDF(data: {
     // Meta row
     doc.fillColor(GRAY).fontSize(9).font('Helvetica');
     doc.text(`Club: ${data.club_name}`, 50, y);
-    doc.text(`Fecha: ${fmtDate(data.fecha)}`, 350, y);
+    doc.text(`Fecha: ${fmtDate(data.fecha, data.timezone, data.locale)}`, 350, y);
     y += 16;
     doc.text(`Tanda: ${data.descripcion}`, 50, y);
     y += 28;
@@ -111,7 +112,7 @@ async function buildAuthPDF(data: {
       .text(`El/la empleado/a declara haber recibido la dotación indicada y autoriza expresamente el descuento de $${data.monto_total.toFixed(2)} de su planilla en ${cuotaText}.`, 50, y, { width: W });
     y += 40;
     doc.fillColor(GRAY).text('Aceptado digitalmente el:', 50, y, { continued: true });
-    doc.fillColor(DARK).font('Helvetica-Bold').text(`  ${fmtDateTime(data.accepted_at)}`);
+    doc.fillColor(DARK).font('Helvetica-Bold').text(`  ${fmtDateTime(data.accepted_at, data.timezone, data.locale)}`);
     y += 20;
     doc.fillColor(GRAY).font('Helvetica').fontSize(8)
       .text('Este documento digital tiene la misma validez que la firma física de autorización y reemplaza el formulario de papel.', 50, y, { width: W });
@@ -120,12 +121,12 @@ async function buildAuthPDF(data: {
     const footerY = 780;
     doc.moveTo(50, footerY).lineTo(545, footerY).lineWidth(0.5).strokeColor(LINE).stroke();
     doc.fillColor(GRAY).fontSize(8).font('Helvetica')
-      .text(`Generado por ControlDoc · Redvolution Management · ${fmtDateTime(new Date().toISOString())}`, 50, footerY + 8, { width: W, align: 'center' });
+      .text(`Generado por ControlDoc · Redvolution Management · ${fmtDateTime(new Date().toISOString(), data.timezone, data.locale)}`, 50, footerY + 8, { width: W, align: 'center' });
   });
 }
 
 async function buildReportePDF(data: {
-  tanda: { descripcion: string; fecha: string; precio_por_camisa: number; total_compra: number | null; club_name: string };
+  tanda: { descripcion: string; fecha: string; precio_por_camisa: number; total_compra: number | null; club_name: string; timezone?: string; locale?: string };
   resumen: { total_asignado: number; total_recuperado: number; total_pendiente: number };
   asignaciones: Array<{ full_name: string; cedula: string; cantidad: number; cuotas: number; monto_total: number; estado: string; accepted_at: string | null }>;
 }): Promise<Buffer> {
@@ -146,7 +147,7 @@ async function buildReportePDF(data: {
     doc.fillColor(GRAY).fontSize(9).font('Helvetica');
     doc.text(`Tanda: ${data.tanda.descripcion}`, 50, y);
     y += 14;
-    doc.text(`Club: ${data.tanda.club_name}  ·  Fecha: ${fmtDate(data.tanda.fecha)}  ·  Precio por camisa: $${data.tanda.precio_por_camisa.toFixed(2)}`, 50, y);
+    doc.text(`Club: ${data.tanda.club_name}  ·  Fecha: ${fmtDate(data.tanda.fecha, data.tanda.timezone, data.tanda.locale)}  ·  Precio por camisa: $${data.tanda.precio_por_camisa.toFixed(2)}`, 50, y);
     if (data.tanda.total_compra) { y += 14; doc.text(`Total de compra: $${Number(data.tanda.total_compra).toFixed(2)}`, 50, y); }
     y += 24;
 
@@ -200,7 +201,7 @@ async function buildReportePDF(data: {
     const footerY = 780;
     doc.moveTo(50, footerY).lineTo(545, footerY).lineWidth(0.5).strokeColor(LINE).stroke();
     doc.fillColor(GRAY).fontSize(8).font('Helvetica')
-      .text(`Generado el ${fmtDateTime(new Date().toISOString())} · ControlDoc · Redvolution Management`, 50, footerY + 8, { width: W, align: 'center' });
+      .text(`Generado el ${fmtDateTime(new Date().toISOString(), data.tanda.timezone, data.tanda.locale)} · ControlDoc · Redvolution Management`, 50, footerY + 8, { width: W, align: 'center' });
   });
 }
 
@@ -276,7 +277,10 @@ const uploadExcel = multer({
 });
 
 if (!process.env.JWT_SECRET) {
-  console.warn('⚠️  JWT_SECRET no está en .env — usando valor por defecto. Configuralo para producción.');
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('FATAL: JWT_SECRET no está configurado. La aplicación no puede iniciar en producción.');
+  }
+  console.warn('⚠️  JWT_SECRET no está en .env — usando valor inseguro. Configuralo antes de ir a producción.');
 }
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 
@@ -851,7 +855,7 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
     try {
       const { data: tandaInfo } = await supabase
         .from('dotacion_tandas')
-        .select('descripcion, fecha, precio_por_camisa, clubs(name)')
+        .select('descripcion, fecha, precio_por_camisa, clubs(name, timezone, locale)')
         .eq('id', tanda.id)
         .single();
 
@@ -866,6 +870,8 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
         cuotas: Number(cuotas),
         monto_total,
         accepted_at,
+        timezone: (tandaInfo?.clubs as any)?.timezone || 'America/Panama',
+        locale: (tandaInfo?.clubs as any)?.locale || 'es-PA',
       });
 
       const pdfPath = `${tanda.id}/${employee.id}.pdf`;
@@ -1383,18 +1389,28 @@ router.post('/documents', canModifyData, (req, res, next) => {
     }
     next();
   });
-}, async (req, res) => {
+}, async (req: any, res) => {
   const { employee_id, document_type_id, expiry_date, status } = req.body;
   const file = req.file;
-  
+
   if (!file) {
     return res.status(400).json({ error: 'No se ha proporcionado ningún archivo' });
   }
 
   const file_name = file.originalname;
   const file_size_kb = Math.round(file.size / 1024);
-  
+
   try {
+    // Verify the requesting user has access to this employee's club
+    const { data: targetEmp } = await supabase
+      .from('employees')
+      .select('club_id, clubs(country)')
+      .eq('id', employee_id)
+      .single();
+    if (!targetEmp || !canAccessResource(req.user, targetEmp.club_id, (targetEmp.clubs as any)?.country ?? null)) {
+      return res.status(403).json({ error: 'Acceso denegado al empleado indicado' });
+    }
+
     const id = crypto.randomUUID();
     
     // Upload to Supabase Storage
@@ -1496,17 +1512,34 @@ router.post('/documents', canModifyData, (req, res, next) => {
 });
 
 // Update document (e.g., expiry date)
-router.patch('/documents/:id', canModifyData, async (req, res) => {
+router.patch('/documents/:id', canModifyData, async (req: any, res) => {
   const { expiry_date } = req.body;
-  
+
   try {
+    // Verify ownership: fetch document → employee → club
+    const { data: doc } = await supabase
+      .from('employee_documents')
+      .select('employee_id')
+      .eq('id', req.params.id)
+      .single();
+    if (!doc) return res.status(404).json({ error: 'Documento no encontrado' });
+
+    const { data: emp } = await supabase
+      .from('employees')
+      .select('club_id, clubs(country)')
+      .eq('id', doc.employee_id)
+      .single();
+    if (!emp || !canAccessResource(req.user, emp.club_id, (emp.clubs as any)?.country ?? null)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+
     const { data: updatedDoc, error } = await supabase
       .from('employee_documents')
       .update({ expiry_date })
       .eq('id', req.params.id)
       .select()
       .single();
-      
+
     if (error) throw error;
     res.json(updatedDoc);
   } catch (error) {
@@ -1594,10 +1627,20 @@ router.get('/documents/:docId/download', isAuthenticated, async (req: any, res: 
 });
 
 // Delete document
-router.delete('/employees/:employeeId/documents/:typeId', canModifyData, async (req, res) => {
+router.delete('/employees/:employeeId/documents/:typeId', canModifyData, async (req: any, res) => {
   const { employeeId, typeId } = req.params;
-  
+
   try {
+    // Verify ownership before deleting
+    const { data: emp } = await supabase
+      .from('employees')
+      .select('club_id, clubs(country)')
+      .eq('id', employeeId)
+      .single();
+    if (!emp || !canAccessResource(req.user, emp.club_id, (emp.clubs as any)?.country ?? null)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+
     let typeIdsToDelete = [typeId];
     if (typeId === 'doc-personal-combined') {
       typeIdsToDelete = await getPersonalCombinedIds();
@@ -1781,13 +1824,23 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
 });
 
 // Update employee checklist data
-router.patch('/employees/:id/checklist', canModifyData, async (req, res) => {
+router.patch('/employees/:id/checklist', canModifyData, async (req: any, res) => {
   const { id } = req.params;
   const { full_name, cedula, contract_type, contract_start, contract_end, carta_ingreso, carnet_verde, carnet_blanco, aviso_css, contrato_sellado,
     cr_ccss_date, cr_ins_date, cr_carne_vencimiento, cr_titulo_fecha,
     cr_carta_ingreso, cr_carta_induccion } = req.body;
 
   try {
+    // Verify the user has access to this employee's club
+    const { data: targetEmp } = await supabase
+      .from('employees')
+      .select('club_id, clubs(country)')
+      .eq('id', id)
+      .single();
+    if (!targetEmp || !canAccessResource(req.user, targetEmp.club_id, (targetEmp.clubs as any)?.country ?? null)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+
     // 1. Update employee basic info
     const updateData: any = { updated_at: new Date().toISOString() };
     if (full_name !== undefined) updateData.full_name = full_name;
@@ -4144,12 +4197,18 @@ router.get('/backup/database', (req, res) => {
   res.status(400).json({ error: 'El respaldo de base de datos ya no está disponible con Supabase. Use el panel de Supabase para respaldos.' });
 });
 
-router.get('/backup/employees-csv', async (req, res) => {
+router.get('/backup/employees-csv', async (req: any, res) => {
   try {
-    const { data: employees, error } = await supabase
+    const user = req.user;
+    const { applyFilter } = await resolveClubScope(user);
+
+    let query = supabase
       .from('employees')
-      .select('full_name, cedula, position, status, contract_type, contract_start, clubs(name)')
+      .select('full_name, cedula, position, status, contract_type, contract_start, club_id, clubs(name)')
       .order('full_name', { ascending: true });
+    query = applyFilter(query);
+
+    const { data: employees, error } = await query;
 
     if (error) throw error;
 
@@ -4158,7 +4217,7 @@ router.get('/backup/employees-csv', async (req, res) => {
     }
 
     const headers = ['Nombre Completo', 'Cedula', 'Cargo', 'Estado', 'Club', 'Tipo Contrato', 'Fecha Ingreso'];
-    const rows = employees.map(e => [
+    const rows = employees.map((e: any) => [
       `"${e.full_name}"`,
       `"${e.cedula}"`,
       `"${e.position}"`,
@@ -4168,8 +4227,10 @@ router.get('/backup/employees-csv', async (req, res) => {
       `"${e.contract_start}"`
     ]);
 
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    
+    const csvContent = [headers.join(','), ...rows.map((r: string[]) => r.join(','))].join('\n');
+
+    await logAudit(req, 'Exportación CSV', `Exportación de ${employees.length} empleados a CSV`, 'Empleado', null, null, null);
+
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename=Empleados_PSMT_${new Date().toISOString().split('T')[0]}.csv`);
     res.send(csvContent);
@@ -5148,6 +5209,9 @@ router.get('/dotacion/tandas/:id', isAuthenticated, async (req: any, res: any) =
       .single();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Tanda no encontrada' });
+    if (!canAccessResource(req.user, data.club_id, (data.clubs as any)?.country ?? null)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: 'Error al obtener tanda' });
@@ -5163,8 +5227,11 @@ router.patch('/dotacion/tandas/:id/toggle', isAuthenticated, async (req: any, re
     }
     const { id } = req.params;
     const { data: tanda, error: fetchErr } = await supabase
-      .from('dotacion_tandas').select('activa').eq('id', id).single();
+      .from('dotacion_tandas').select('activa, club_id, clubs(country)').eq('id', id).single();
     if (fetchErr || !tanda) return res.status(404).json({ error: 'Tanda no encontrada' });
+    if (!canAccessResource(user, tanda.club_id, (tanda.clubs as any)?.country ?? null)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
     const { data, error } = await supabase
       .from('dotacion_tandas').update({ activa: !tanda.activa }).eq('id', id).select().single();
     if (error) throw error;
@@ -5180,10 +5247,14 @@ router.get('/dotacion/asignaciones/:id/pdf', isAuthenticated, async (req: any, r
     const { id } = req.params;
     const { data: asig, error } = await supabase
       .from('dotacion_asignaciones')
-      .select('id, pdf_path, employee_id')
+      .select('id, pdf_path, employee_id, employees(club_id, clubs(country))')
       .eq('id', id)
       .single();
     if (error || !asig) return res.status(404).json({ error: 'Autorización no encontrada' });
+    const empData = (asig as any).employees;
+    if (!canAccessResource(req.user, empData?.club_id ?? null, (empData?.clubs as any)?.country ?? null)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
     if (!asig.pdf_path) return res.status(404).json({ error: 'PDF aún no generado' });
 
     const { data: signed } = await supabase.storage
@@ -5204,8 +5275,8 @@ router.get('/dotacion/tandas/:id/reporte-pdf', isAuthenticated, async (req: any,
     const { data: tanda, error } = await supabase
       .from('dotacion_tandas')
       .select(`
-        descripcion, fecha, precio_por_camisa, total_compra,
-        clubs(name),
+        club_id, descripcion, fecha, precio_por_camisa, total_compra,
+        clubs(name, country, timezone, locale),
         dotacion_asignaciones(
           full_name:employees(full_name), cedula:employees(cedula),
           cantidad, cuotas, monto_total, estado, accepted_at,
@@ -5215,18 +5286,24 @@ router.get('/dotacion/tandas/:id/reporte-pdf', isAuthenticated, async (req: any,
       .eq('id', id)
       .single();
     if (error || !tanda) return res.status(404).json({ error: 'Tanda no encontrada' });
+    if (!canAccessResource(req.user, tanda.club_id, (tanda.clubs as any)?.country ?? null)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
 
     const asigs = (tanda.dotacion_asignaciones as any[]) || [];
     const totalAsignado = asigs.reduce((s: number, a: any) => s + Number(a.monto_total), 0);
     const totalRecuperado = asigs.filter((a: any) => a.estado === 'pagado').reduce((s: number, a: any) => s + Number(a.monto_total), 0);
 
+    const clubData = tanda.clubs as any;
     const pdfBuffer = await buildReportePDF({
       tanda: {
         descripcion: tanda.descripcion,
         fecha: tanda.fecha,
         precio_por_camisa: tanda.precio_por_camisa,
         total_compra: tanda.total_compra,
-        club_name: (tanda.clubs as any)?.name || '',
+        club_name: clubData?.name || '',
+        timezone: clubData?.timezone || 'America/Panama',
+        locale: clubData?.locale || 'es-PA',
       },
       resumen: {
         total_asignado: parseFloat(totalAsignado.toFixed(2)),
@@ -5264,10 +5341,14 @@ router.post('/dotacion/asignaciones/:id/pago', isAuthenticated, async (req: any,
 
     const { data: asig, error: asigErr } = await supabase
       .from('dotacion_asignaciones')
-      .select('id, cuotas, monto_total, estado')
+      .select('id, cuotas, monto_total, estado, employees(club_id, clubs(country))')
       .eq('id', id)
       .single();
     if (asigErr || !asig) return res.status(404).json({ error: 'Asignación no encontrada' });
+    const asigEmp = (asig as any).employees;
+    if (!canAccessResource(user, asigEmp?.club_id ?? null, (asigEmp?.clubs as any)?.country ?? null)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
     if (asig.estado === 'pagado') return res.status(400).json({ error: 'Ya está completamente pagado' });
 
     // Count existing pagos
@@ -5312,8 +5393,8 @@ router.get('/dotacion/tandas/:id/reporte', isAuthenticated, async (req: any, res
     const { data: tanda, error } = await supabase
       .from('dotacion_tandas')
       .select(`
-        id, descripcion, fecha, precio_por_camisa, total_compra,
-        clubs(name),
+        id, club_id, descripcion, fecha, precio_por_camisa, total_compra,
+        clubs(name, country),
         dotacion_asignaciones(
           id, cantidad, cuotas, monto_total, estado, accepted_at,
           employees(full_name, cedula)
@@ -5322,6 +5403,9 @@ router.get('/dotacion/tandas/:id/reporte', isAuthenticated, async (req: any, res
       .eq('id', id)
       .single();
     if (error || !tanda) return res.status(404).json({ error: 'Tanda no encontrada' });
+    if (!canAccessResource(req.user, tanda.club_id, (tanda.clubs as any)?.country ?? null)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
 
     const asigs = (tanda.dotacion_asignaciones as any[]) || [];
     const totalAsignado = asigs.reduce((s: number, a: any) => s + Number(a.monto_total), 0);
