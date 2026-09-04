@@ -407,7 +407,7 @@ function canAccessResource(user: any, targetClubId: string | null, targetCountry
 // - Supervisor Interno / Coordinadora → single club_id from user profile
 // - Administrador → all clubs in user.country (country-scoped list)
 // - Super Administrador / others → no forced filter (use queryClubId if passed)
-async function resolveClubScope(user: any, queryClubId?: string) {
+async function resolveClubScope(user: any, queryClubId?: string, queryCountry?: string) {
   let club_id: string | undefined = undefined;
   let allowedClubIds: string[] | null = null;
   let allowedEmployeeIds: string[] | null = null;
@@ -442,8 +442,21 @@ async function resolveClubScope(user: any, queryClubId?: string) {
       }
     }
   } else {
-    // Super Administrador — no restriction, pass-through any explicit club filter
-    club_id = queryClubId;
+    // Super Administrador — support explicit club or country filter
+    if (queryClubId) {
+      club_id = queryClubId;
+    } else if (queryCountry) {
+      const { data: countryClubs } = await supabase
+        .from('clubs').select('id').eq('country', queryCountry).neq('id', 'global').neq('id', 'hr');
+      allowedClubIds = (countryClubs || []).map((c: any) => c.id);
+      if (allowedClubIds.length > 0) {
+        const { data: scopedEmps } = await supabase
+          .from('employees').select('id').in('club_id', allowedClubIds);
+        allowedEmployeeIds = (scopedEmps || []).map((e: any) => e.id);
+      } else {
+        allowedEmployeeIds = [];
+      }
+    }
   }
 
   // Apply filter to a query on a direct club_id column
@@ -3551,14 +3564,14 @@ const DASHBOARD_CACHE_TTL = 5 * 60 * 1000;
 
 // Get dashboard stats
 router.get('/dashboard', canViewData, async (req, res) => {
-  const { club_id: queryClubId } = req.query;
+  const { club_id: queryClubId, country: queryCountry } = req.query;
   const user = (req as any).user;
 
   const { club_id, allowedClubIds, applyFilter, applyDocFilter } =
-    await resolveClubScope(user, queryClubId as string | undefined);
+    await resolveClubScope(user, queryClubId as string | undefined, queryCountry as string | undefined);
 
   // Cache key: scoped by country + club filter (never mixes data between scopes)
-  const cacheKey = `${user.country || 'global'}_${club_id || 'all'}`;
+  const cacheKey = `${user.country || 'global'}_${queryCountry || ''}_${club_id || 'all'}`;
   const cached = dashboardCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < DASHBOARD_CACHE_TTL) {
     return res.json(cached.data);
@@ -3790,9 +3803,9 @@ router.get('/dashboard', canViewData, async (req, res) => {
 
 // GET /api/analytics/projections — contract expirations bucketed by month for next 12 months
 router.get('/analytics/projections', canViewData, async (req, res) => {
-  const { club_id: queryClubId } = req.query;
+  const { club_id: queryClubId, country: queryCountry } = req.query;
   const user = (req as any).user;
-  const { applyFilter } = await resolveClubScope(user, queryClubId as string | undefined);
+  const { applyFilter } = await resolveClubScope(user, queryClubId as string | undefined, queryCountry as string | undefined);
 
   try {
     const today = new Date();
@@ -3844,10 +3857,10 @@ router.get('/analytics/projections', canViewData, async (req, res) => {
 
 // GET /api/analytics/compliance — document compliance rate per club
 router.get('/analytics/compliance', canViewData, async (req, res) => {
-  const { club_id: queryClubId } = req.query;
+  const { club_id: queryClubId, country: queryCountry } = req.query;
   const user = (req as any).user;
   const { club_id, allowedClubIds, applyFilter, applyDocFilter } =
-    await resolveClubScope(user, queryClubId as string | undefined);
+    await resolveClubScope(user, queryClubId as string | undefined, queryCountry as string | undefined);
 
   try {
     const today = new Date().toISOString().split('T')[0];

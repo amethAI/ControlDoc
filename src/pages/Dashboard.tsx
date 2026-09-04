@@ -91,11 +91,16 @@ export default function Dashboard() {
   });
   const [renewing, setRenewing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const isSuperAdmin = user?.role === 'Super Administrador';
 
-  const fetchStats = async () => {
+  const fetchStats = async (country?: string | null) => {
     try {
       const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
-      const params = isRestricted ? `?club_id=${user?.club_id}` : '';
+      let params = isRestricted ? `?club_id=${user?.club_id}` : '';
+      if (!isRestricted && isSuperAdmin && country) {
+        params = `?country=${encodeURIComponent(country)}`;
+      }
       const [dashRes, projRes, compRes] = await Promise.all([
         apiFetch(`/api/dashboard${params}`),
         apiFetch(`/api/analytics/projections${params}`),
@@ -134,7 +139,7 @@ export default function Dashboard() {
     }
   };
 
-  useEffect(() => { fetchStats(); }, [user]);
+  useEffect(() => { fetchStats(selectedCountry); }, [user, selectedCountry]);
 
   const kpis = [
     {
@@ -251,7 +256,7 @@ export default function Dashboard() {
             <button
               onClick={async () => {
                 setRefreshing(true);
-                await fetchStats();
+                await fetchStats(selectedCountry);
                 setRefreshing(false);
               }}
               disabled={refreshing}
@@ -264,6 +269,35 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ── Country filter tabs (Super Admin only) ── */}
+      {isSuperAdmin && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {[
+            { label: 'Todos', value: null, flag: '🌎' },
+            { label: 'Panamá', value: 'Panama', flag: '🇵🇦' },
+            { label: 'Costa Rica', value: 'Costa Rica', flag: '🇨🇷' },
+            { label: 'Guatemala', value: 'Guatemala', flag: '🇬🇹' },
+          ].map(tab => {
+            const active = selectedCountry === tab.value;
+            return (
+              <button
+                key={tab.label}
+                onClick={() => setSelectedCountry(tab.value)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12px] font-semibold transition-all"
+                style={{
+                  background: active ? 'rgba(59,130,246,.2)' : 'rgba(255,255,255,.04)',
+                  border: active ? '1px solid rgba(59,130,246,.4)' : '1px solid rgba(255,255,255,.07)',
+                  color: active ? '#60A5FA' : 'rgba(255,255,255,.45)',
+                }}
+              >
+                <span>{tab.flag}</span>
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── KPI cards ── */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
