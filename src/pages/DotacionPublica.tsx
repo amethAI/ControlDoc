@@ -101,7 +101,7 @@ export default function DotacionPublica() {
   const canConfirm = cantidad && cuotas && accepted;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-start pt-8 pb-16 p-4 overflow-y-auto">
       <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-lg border border-slate-100">
 
         {/* Header con marca */}
@@ -153,7 +153,7 @@ export default function DotacionPublica() {
                 value={cedula}
                 onChange={e => { setCedula(e.target.value); setCedulaError(''); }}
                 onKeyDown={e => e.key === 'Enter' && handleCedula()}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
               />
               {cedulaError && <p className="text-xs text-red-500 mt-1.5">{cedulaError}</p>}
 
