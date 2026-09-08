@@ -147,7 +147,10 @@
 /* Badge tweaks — keep colours but soften bg */
 .app-content .bg-emerald-100   { background-color: rgba(34,197,94,.15) !important; }
 .app-content .bg-red-100       { background-color: rgba(239,68,68,.15) !important; }
+.app-content .bg-amber-50      { background-color: rgba(251,191,36,.10) !important; }
 .app-content .bg-amber-100     { background-color: rgba(251,191,36,.15) !important; }
+.app-content .bg-amber-200     { background-color: rgba(251,191,36,.28) !important; }
+.app-content .hover\:bg-amber-100:hover { background-color: rgba(251,191,36,.18) !important; }
 .app-content .bg-blue-100      { background-color: rgba(59,130,246,.15) !important; }
 .app-content .bg-purple-100    { background-color: rgba(139,92,246,.15) !important; }
 .app-content .bg-orange-100    { background-color: rgba(249,115,22,.15) !important; }
