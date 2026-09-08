@@ -1263,6 +1263,7 @@ router.get('/employees/birthdays', canViewData, async (req, res) => {
     .from('employees')
     .select('id, full_name, birth_date, club_id')
     .not('birth_date', 'is', null)
+    .eq('status', 'activo')
     .order('birth_date', { ascending: true });
 
   query = applyFilter(query);
