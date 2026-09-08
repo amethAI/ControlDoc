@@ -3474,7 +3474,7 @@ router.get('/reports/missing-document', canViewData, async (req, res) => {
     // Get all active employees
     let empQuery = supabase
       .from('employees')
-      .select('id, full_name, cedula, position, club_id, clubs(name)')
+      .select('id, full_name, cedula, position, club_id, clubs(name, country)')
       .eq('status', 'activo')
       .order('full_name', { ascending: true });
 
@@ -3503,8 +3503,12 @@ router.get('/reports/missing-document', canViewData, async (req, res) => {
 
     const hasDocSet = new Set((hasDocs || []).map((d: any) => d.employee_id));
 
+    // "Contrato sellado" is Panama-only — exclude employees from other countries
+    const isPanamaDoc = (doc_type as string).toLowerCase().includes('contrato sellado');
+
     const missing = (employees || [])
       .filter(e => !hasDocSet.has(e.id))
+      .filter(e => !isPanamaDoc || (e.clubs as any)?.country === 'Panama')
       .map(e => ({ ...e, club_name: (e.clubs as any)?.name || '' }));
 
     res.json(missing);
