@@ -68,6 +68,15 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const DotacionRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return <PageLoader />;
+  if (!user) return <Navigate to="/login" />;
+  const canAccess = user.role === 'Super Administrador' || user.role === 'Gerente Panama';
+  if (!canAccess) return <Navigate to="/" replace />;
+  return <>{children}</>;
+};
+
 const HomeRoute = () => {
   const { user } = useAuth();
   if (user?.role === 'Asistente RRHH') return <Navigate to="/empleados" replace />;
@@ -116,7 +125,7 @@ function AppRoutes() {
           <Route path="configuracion/accesos" element={<AdminRoute><PageErrorBoundary pageName="Accesos"><AccessLogs /></PageErrorBoundary></AdminRoute>} />
           <Route path="roles" element={<AdminRoute><PageErrorBoundary pageName="Roles y Permisos"><RolesInfo /></PageErrorBoundary></AdminRoute>} />
           <Route path="cumpleanos" element={<PageErrorBoundary pageName="Cumpleaños"><Cumpleanos /></PageErrorBoundary>} />
-          <Route path="dotacion" element={<AdminRoute><PageErrorBoundary pageName="Dotación"><Dotacion /></PageErrorBoundary></AdminRoute>} />
+          <Route path="dotacion" element={<DotacionRoute><PageErrorBoundary pageName="Dotación"><Dotacion /></PageErrorBoundary></DotacionRoute>} />
         </Route>
       </Routes>
     </Suspense>

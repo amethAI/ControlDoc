@@ -324,7 +324,7 @@ const isAdmin = (req: any, res: any, next: any) => {
 
 // Middleware to check if user can view data (Employees, Attendance, Dashboard)
 const canViewData = (req: any, res: any, next: any) => {
-  const allowedRoles = ['Super Administrador', 'Administrador', 'Supervisor Interno', 'Supervisora', 'Supervisora Redvolution', 'KAM Redvolution', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos', 'Asistente RRHH'];
+  const allowedRoles = ['Super Administrador', 'Administrador', 'Gerente Panama', 'Supervisor Interno', 'Supervisora', 'Supervisora Redvolution', 'KAM Redvolution', 'Coordinadora', 'Supervisor Cliente', 'Recursos Humanos', 'Asistente RRHH'];
   const user = (req as any).user;
   
   if (!user || !allowedRoles.includes(user.role)) {
@@ -341,7 +341,7 @@ const canViewData = (req: any, res: any, next: any) => {
 
 // Middleware to check if user can modify data
 const canModifyData = (req: any, res: any, next: any) => {
-  const allowedRoles = ['Super Administrador', 'Administrador', 'Supervisor Interno', 'Supervisora', 'Supervisora Redvolution'];
+  const allowedRoles = ['Super Administrador', 'Administrador', 'Gerente Panama', 'Supervisor Interno', 'Supervisora', 'Supervisora Redvolution'];
   const user = (req as any).user;
 
   if (!user || !allowedRoles.includes(user.role)) {
@@ -389,7 +389,7 @@ const isApiKey = (req: any, res: any, next: any) => {
 function canAccessResource(user: any, targetClubId: string | null, targetCountry?: string | null): boolean {
   const role = user.role;
   if (role === 'Super Administrador') return true;
-  if (role === 'Administrador') {
+  if (role === 'Administrador' || role === 'Gerente Panama') {
     // Must match by country — both user and club must have a country set
     if (!user.country || !targetCountry) return false;
     return targetCountry === user.country;
@@ -417,7 +417,7 @@ async function resolveClubScope(user: any, queryClubId?: string, queryCountry?: 
   let allowedEmployeeIds: string[] | null = null;
 
   const CLUB_SCOPED_ROLES  = ['Supervisor Interno', 'Coordinadora', 'Supervisora'];
-  const COUNTRY_SCOPED_ROLES = ['Administrador', 'Recursos Humanos', 'Asistente RRHH', 'Supervisor Cliente', 'Supervisora Redvolution'];
+  const COUNTRY_SCOPED_ROLES = ['Administrador', 'Gerente Panama', 'Recursos Humanos', 'Asistente RRHH', 'Supervisor Cliente', 'Supervisora Redvolution'];
 
   if (CLUB_SCOPED_ROLES.includes(user.role)) {
     // Scoped to their assigned club only
@@ -1680,15 +1680,18 @@ router.post('/import-document-dates', canModifyData, async (req, res) => {
   }
 
   try {
+    const user = (req as any).user;
     let successCount = 0;
     let errorCount = 0;
     const errors = [];
 
-    // Get all active employees to match by name
-    const { data: employees, error: empError } = await supabase
+    const { applyFilter } = await resolveClubScope(user);
+    let empQuery = supabase
       .from('employees')
       .select('id, full_name, contract_start')
       .eq('status', 'activo');
+    empQuery = applyFilter(empQuery);
+    const { data: employees, error: empError } = await empQuery;
 
     if (empError) throw empError;
     
@@ -4197,7 +4200,7 @@ router.get('/backup/database', (req, res) => {
   res.status(400).json({ error: 'El respaldo de base de datos ya no está disponible con Supabase. Use el panel de Supabase para respaldos.' });
 });
 
-router.get('/backup/employees-csv', async (req: any, res) => {
+router.get('/backup/employees-csv', canViewData, async (req: any, res) => {
   try {
     const user = req.user;
     const { applyFilter } = await resolveClubScope(user);
@@ -4264,30 +4267,61 @@ router.post('/ai/chat', isAuthenticated, async (req, res) => {
         const today = new Date().toISOString().split('T')[0];
         const thirtyDays = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-        const { data: clubs } = await supabase.from('clubs').select('id, name').neq('id', 'global');
-        const { data: employees } = await supabase.from('employees').select('id, full_name, club_id').eq('status', 'activo');
-        const { data: expired } = await supabase
-          .from('employee_documents')
-          .select('expiry_date, document_types(name), employees(full_name, club_id)')
-          .eq('is_current', 1)
-          .lt('expiry_date', today)
-          .limit(50);
-        const { data: expiring } = await supabase
-          .from('employee_documents')
-          .select('expiry_date, document_types(name), employees(full_name, club_id)')
-          .eq('is_current', 1)
-          .gte('expiry_date', today)
-          .lte('expiry_date', thirtyDays)
-          .limit(50);
+        // Scope all queries — never send cross-scope data to Gemini
+        const { allowedClubIds, applyFilter } = await resolveClubScope(user);
+
+        // Clubs scoped at query level
+        let clubsQuery = supabase.from('clubs').select('id, name').neq('id', 'global');
+        if (allowedClubIds !== null) {
+          clubsQuery = clubsQuery.in('id', allowedClubIds);
+        }
+        const { data: clubs } = await clubsQuery;
+
+        // Employees scoped at query level
+        let empQuery = supabase.from('employees').select('id, full_name, club_id').eq('status', 'activo');
+        empQuery = applyFilter(empQuery);
+        const { data: employees } = await empQuery;
+
+        // Use scoped employee IDs for document queries — query-level filter, not in-memory
+        const scopedEmployeeIds = (employees || []).map(e => e.id);
+
+        let expired: any[] = [];
+        if (allowedClubIds === null || scopedEmployeeIds.length > 0) {
+          let expiredQuery = supabase
+            .from('employee_documents')
+            .select('expiry_date, document_types(name), employees(full_name, club_id)')
+            .eq('is_current', 1)
+            .lt('expiry_date', today);
+          if (allowedClubIds !== null) {
+            expiredQuery = expiredQuery.in('employee_id', scopedEmployeeIds);
+          }
+          const { data: expiredData } = await expiredQuery.limit(50);
+          expired = expiredData || [];
+        }
+
+        let expiring: any[] = [];
+        if (allowedClubIds === null || scopedEmployeeIds.length > 0) {
+          let expiringQuery = supabase
+            .from('employee_documents')
+            .select('expiry_date, document_types(name), employees(full_name, club_id)')
+            .eq('is_current', 1)
+            .gte('expiry_date', today)
+            .lte('expiry_date', thirtyDays);
+          if (allowedClubIds !== null) {
+            expiringQuery = expiringQuery.in('employee_id', scopedEmployeeIds);
+          }
+          const { data: expiringData } = await expiringQuery.limit(50);
+          expiring = expiringData || [];
+        }
 
         const clubLines = clubs?.map(club => {
-          const empCount = employees?.filter(e => e.club_id === club.id).length || 0;
-          const expCount = expired?.filter(d => (d.employees as any)?.club_id === club.id).length || 0;
-          const proxCount = expiring?.filter(d => (d.employees as any)?.club_id === club.id).length || 0;
+          const empCount = (employees || []).filter(e => e.club_id === club.id).length;
+          const expCount = expired.filter(d => (d.employees as any)?.club_id === club.id).length;
+          const proxCount = expiring.filter(d => (d.employees as any)?.club_id === club.id).length;
           return `- ${club.name}: ${empCount} empleados, ${expCount} docs vencidos, ${proxCount} próximos a vencer`;
         }).join('\n') || 'Sin datos de clubs';
 
-        const expiredLines = expired?.slice(0, 20).map(d =>
+        const expiredLines = expired.slice(0, 20).map(d =>
           `  • ${(d.employees as any)?.full_name || 'Desconocido'} — ${(d.document_types as any)?.name || 'Documento'} (venció ${d.expiry_date})`
         ).join('\n') || 'Ninguno';
 
@@ -4299,7 +4333,7 @@ ${clubLines}
 Documentos vencidos:
 ${expiredLines}
 
-Totales: ${employees?.length || 0} empleados activos, ${expired?.length || 0} docs vencidos, ${expiring?.length || 0} próximos a vencer (30 días).`;
+Totales: ${(employees || []).length} empleados activos, ${expired.length} docs vencidos, ${expiring.length} próximos a vencer (30 días).`;
       } catch (dbErr) {
         console.error('AI chat DB error:', dbErr);
         contextBlock = '\n(No se pudo cargar el contexto de la base de datos en este momento.)';
@@ -5042,6 +5076,7 @@ router.get('/dotacion/periodos', isAuthenticated, async (req: any, res: any) => 
   try {
     const user = req.user;
     const isSuperAdmin = user.role === 'Super Administrador';
+    const isGerentePA = user.role === 'Gerente Panama';
 
     const { data: periodos, error } = await supabase
       .from('dotacion_periodos')
@@ -5061,8 +5096,8 @@ router.get('/dotacion/periodos', isAuthenticated, async (req: any, res: any) => 
 
     if (error) throw error;
 
-    // For non-super-admin, filter tandas to only their club
-    if (!isSuperAdmin && user.club_id) {
+    // For non-super-admin, filter tandas by scope
+    if (!isSuperAdmin && !isGerentePA && user.club_id) {
       const filtered = (periodos || []).map((p: any) => ({
         ...p,
         dotacion_grupos: (p.dotacion_grupos || []).map((g: any) => ({
@@ -5071,6 +5106,20 @@ router.get('/dotacion/periodos', isAuthenticated, async (req: any, res: any) => 
         })).filter((g: any) => g.dotacion_tandas.length > 0),
       })).filter((p: any) => p.dotacion_grupos.length > 0);
       return res.json(filtered);
+    }
+
+    if (isGerentePA && user.country) {
+      const { allowedClubIds } = await resolveClubScope(user);
+      if (allowedClubIds !== null) {
+        const filtered = (periodos || []).map((p: any) => ({
+          ...p,
+          dotacion_grupos: (p.dotacion_grupos || []).map((g: any) => ({
+            ...g,
+            dotacion_tandas: (g.dotacion_tandas || []).filter((t: any) => allowedClubIds.includes(t.club_id)),
+          })).filter((g: any) => g.dotacion_tandas.length > 0),
+        })).filter((p: any) => p.dotacion_grupos.length > 0);
+        return res.json(filtered);
+      }
     }
 
     res.json(periodos || []);
@@ -5082,9 +5131,46 @@ router.get('/dotacion/periodos', isAuthenticated, async (req: any, res: any) => 
 // POST /dotacion/periodos — create period with groups and tandas
 router.post('/dotacion/periodos', isAuthenticated, async (req: any, res: any) => {
   try {
+    const user = req.user;
+
+    if (!['Super Administrador', 'Administrador', 'Gerente Panama'].includes(user.role)) {
+      return res.status(403).json({ error: 'Solo administradores pueden crear períodos de dotación' });
+    }
+
     const { mes, precio_por_camisa, grupos } = req.body;
-    if (!mes || !precio_por_camisa || !grupos?.length) {
-      return res.status(400).json({ error: 'Faltan campos requeridos' });
+
+    if (!mes || typeof mes !== 'string' || !/^\d{4}-\d{2}$/.test(mes)) {
+      return res.status(400).json({ error: 'Campo "mes" requerido en formato YYYY-MM' });
+    }
+    if (!precio_por_camisa || isNaN(parseFloat(String(precio_por_camisa)))) {
+      return res.status(400).json({ error: 'Campo "precio_por_camisa" requerido y debe ser numérico' });
+    }
+    if (!Array.isArray(grupos) || grupos.length === 0) {
+      return res.status(400).json({ error: 'Campo "grupos" requerido como array no vacío' });
+    }
+    for (const grupo of grupos) {
+      if (!grupo.nombre || typeof grupo.nombre !== 'string') {
+        return res.status(400).json({ error: 'Cada grupo debe tener un campo "nombre"' });
+      }
+      if (!Array.isArray(grupo.clubes) || grupo.clubes.length === 0) {
+        return res.status(400).json({ error: `El grupo "${grupo.nombre}" debe tener al menos un club en "clubes"` });
+      }
+      for (const club of grupo.clubes) {
+        if (!club.club_id || typeof club.club_id !== 'string') {
+          return res.status(400).json({ error: `club_id inválido o faltante en grupo "${grupo.nombre}"` });
+        }
+      }
+    }
+
+    const { allowedClubIds } = await resolveClubScope(user);
+    const allClubIds: string[] = grupos.flatMap((g: any) =>
+      (g.clubes as any[]).map((c: any) => c.club_id)
+    );
+    if (allowedClubIds !== null) {
+      const unauthorized = allClubIds.filter(id => !allowedClubIds.includes(id));
+      if (unauthorized.length > 0) {
+        return res.status(403).json({ error: 'No tiene acceso a uno o más clubs indicados' });
+      }
     }
 
     // Build description from mes: "2026-09" → "Dotación Septiembre 2026"
@@ -5153,11 +5239,14 @@ router.get('/dotacion/tandas', isAuthenticated, async (req: any, res: any) => {
       `)
       .order('created_at', { ascending: false });
 
-    if (user.role !== 'Super Administrador') {
+    if (user.role === 'Super Administrador') {
+      if (club_id) query = query.eq('club_id', club_id as string);
+    } else if (user.role === 'Gerente Panama') {
+      const { allowedClubIds } = await resolveClubScope(user, club_id as string | undefined);
+      if (allowedClubIds !== null && allowedClubIds.length > 0) query = query.in('club_id', allowedClubIds);
+    } else {
       if (!user.club_id) return res.status(403).json({ error: 'Sin club asignado' });
       query = query.eq('club_id', user.club_id);
-    } else if (club_id) {
-      query = query.eq('club_id', club_id as string);
     }
 
     const { data, error } = await query;
@@ -5172,12 +5261,16 @@ router.get('/dotacion/tandas', isAuthenticated, async (req: any, res: any) => {
 router.post('/dotacion/tandas', isAuthenticated, async (req: any, res: any) => {
   try {
     const user = req.user;
-    if (!['Super Administrador', 'Administrador'].includes(user.role)) {
+    if (!['Super Administrador', 'Administrador', 'Gerente Panama'].includes(user.role)) {
       return res.status(403).json({ error: 'Sin permiso' });
     }
     const { club_id, descripcion, fecha, precio_por_camisa, total_compra, cantidad_total } = req.body;
     if (!club_id || !descripcion || !fecha || !precio_por_camisa) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
+    }
+    const { allowedClubIds } = await resolveClubScope(user);
+    if (allowedClubIds !== null && !allowedClubIds.includes(club_id)) {
+      return res.status(403).json({ error: 'No tiene acceso al club indicado' });
     }
     const { data, error } = await supabase
       .from('dotacion_tandas')
@@ -5222,7 +5315,7 @@ router.get('/dotacion/tandas/:id', isAuthenticated, async (req: any, res: any) =
 router.patch('/dotacion/tandas/:id/toggle', isAuthenticated, async (req: any, res: any) => {
   try {
     const user = req.user;
-    if (!['Super Administrador', 'Administrador'].includes(user.role)) {
+    if (!['Super Administrador', 'Administrador', 'Gerente Panama'].includes(user.role)) {
       return res.status(403).json({ error: 'Sin permiso' });
     }
     const { id } = req.params;
@@ -5334,7 +5427,7 @@ router.get('/dotacion/tandas/:id/reporte-pdf', isAuthenticated, async (req: any,
 router.post('/dotacion/asignaciones/:id/pago', isAuthenticated, async (req: any, res: any) => {
   try {
     const user = req.user;
-    if (!['Super Administrador', 'Administrador'].includes(user.role)) {
+    if (!['Super Administrador', 'Administrador', 'Gerente Panama'].includes(user.role)) {
       return res.status(403).json({ error: 'Sin permiso' });
     }
     const { id } = req.params;
