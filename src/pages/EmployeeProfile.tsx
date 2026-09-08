@@ -235,11 +235,21 @@ export default function EmployeeProfile() {
 
   const getStatusColor = (status: string | undefined) => {
     switch (status) {
-      case 'vigente': return 'bg-slate-50 border-slate-200 text-slate-700';
-      case 'proximo_vencer': return 'bg-amber-50 border-amber-200 text-amber-700';
-      case 'vencido': return 'bg-red-50 border-red-200 text-red-700';
-      case 'sin_fecha': return 'bg-slate-50 border-slate-200 text-slate-700';
-      default: return 'bg-orange-50 border-orange-200 text-orange-700'; // Sin documento
+      case 'vigente': return 'bg-slate-50 border-slate-200';
+      case 'proximo_vencer': return 'bg-amber-50 border-amber-200';
+      case 'vencido': return 'bg-red-50 border-red-200';
+      case 'sin_fecha': return 'bg-slate-50 border-slate-200';
+      default: return 'bg-orange-50 border-orange-200'; // Sin documento
+    }
+  };
+
+  const getStatusTextColor = (status: string | undefined) => {
+    switch (status) {
+      case 'vigente': return 'text-slate-600';
+      case 'proximo_vencer': return 'text-amber-700';
+      case 'vencido': return 'text-red-700';
+      case 'sin_fecha': return 'text-slate-600';
+      default: return 'text-orange-700'; // Sin documento
     }
   };
 
@@ -437,8 +447,8 @@ export default function EmployeeProfile() {
                   <div className="flex items-center gap-3">
                     {getStatusIcon(status)}
                     <div>
-                      <h4 className="font-semibold">{type.name}</h4>
-                      <p className="text-xs opacity-80 mt-0.5">{getStatusText(status)}</p>
+                      <h4 className="font-semibold text-slate-800">{type.name}</h4>
+                      <p className={`text-xs mt-0.5 font-medium ${getStatusTextColor(status)}`}>{getStatusText(status)}</p>
                     </div>
                   </div>
                   {((user?.role === 'Administrador' || user?.role === 'Super Administrador') || (user?.role === 'Supervisor Interno' && user.club_id === employee.club_id)) && (
