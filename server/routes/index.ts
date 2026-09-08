@@ -161,45 +161,61 @@ async function buildAuthPDF(data: {
       { t: ': El proceso se efectuará a partir de la siguiente quincena posterior a la adquisición.', underline: true },
     ], y);
 
-    // Date line
+    // Date line (no mention of physical signature)
     y = para([
-      { t: 'Para constancia firman como muestra de su consentimiento, hoy ' },
+      { t: 'Para constancia de lo acordado, en la ciudad de Panamá, hoy ' },
       { t: String(day), bold: true },
       { t: ' de ' },
       { t: month, bold: true },
-      { t: ` ${year}` },
+      { t: ` de ${year}.` },
     ], y);
 
-    // Digital acceptance note
-    doc.fillColor(GRAY).fontSize(8).font('Helvetica')
-      .text(`Aceptado digitalmente: ${fmtDateTime(data.accepted_at, data.timezone, data.locale)}`, 50, doc.y + 2, { width: W });
-    y = doc.y + 28;
+    // Digital acceptance box
+    const boxX = 50; const boxW = W; const boxPad = 12;
+    const boxContentY = y + boxPad;
 
-    // Signature section — two columns
-    const LEFT = 50;
+    const acceptanceId = 'CD-' + Math.abs(new Date(data.accepted_at).getTime()).toString(36).toUpperCase().slice(-8);
+
+    doc.fillColor(DARK).fontSize(9).font('Helvetica-Bold')
+      .text('CONSTANCIA DE ACEPTACIÓN DIGITAL', boxX + boxPad, boxContentY, { width: boxW - boxPad * 2 });
+    let by = doc.y + 8;
+
+    doc.fillColor(GRAY).font('Helvetica').fontSize(8.5)
+      .text('El presente documento fue puesto a disposición del trabajador y aceptado electrónicamente a través del sistema ControlDoc, dejando constancia del proceso de aceptación realizado por el usuario.', boxX + boxPad, by, { width: boxW - boxPad * 2 });
+    by = doc.y + 6;
+
+    doc.text('La presente aceptación electrónica constituye un registro asociado al documento y forma parte de la evidencia de la manifestación de conformidad del trabajador respecto de su contenido.', boxX + boxPad, by, { width: boxW - boxPad * 2 });
+    by = doc.y + 6;
+
+    doc.text('De conformidad con la Ley 51 de 22 de julio de 2008 de la República de Panamá, los documentos electrónicos y las actuaciones realizadas mediante medios electrónicos pueden producir efectos jurídicos y ser utilizados como medios de prueba, de acuerdo con las condiciones establecidas en dicha Ley y sus reglamentos.', boxX + boxPad, by, { width: boxW - boxPad * 2 });
+    by = doc.y + 10;
+
+    const fields = [
+      ['Trabajador', data.full_name],
+      ['CIP / Pasaporte', data.cedula],
+      ['Fecha y hora de aceptación', fmtDateTime(data.accepted_at, data.timezone, data.locale)],
+      ['ID de aceptación', acceptanceId],
+      ['Documento aceptado', 'Autorización de Descuento en Planilla'],
+    ];
+    fields.forEach(([label, val]) => {
+      doc.fillColor(GRAY).font('Helvetica').fontSize(8.5).text(`${label}: `, boxX + boxPad, by, { continued: true });
+      doc.fillColor(DARK).font('Helvetica-Bold').text(val);
+      by = doc.y + 3;
+    });
+    by += 4;
+
+    // Draw the box around everything
+    doc.rect(boxX, y, boxW, by - y).lineWidth(0.5).strokeColor('#b0b8c4').stroke();
+    y = by + 20;
+
+    // Authorized by — right-aligned block
     const RIGHT = 320;
-
-    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text('EL TRABAJADOR', LEFT, y);
-    doc.font('Helvetica-Bold').text('AUTORIZADO POR:', RIGHT, y);
-    y += 30;
-
-    // Signature lines
-    doc.moveTo(LEFT, y).lineTo(LEFT + 210, y).lineWidth(0.5).strokeColor(LINE).stroke();
     doc.moveTo(RIGHT, y).lineTo(RIGHT + 185, y).lineWidth(0.5).strokeColor(LINE).stroke();
     y += 8;
-
-    doc.fillColor(DARK).fontSize(9).font('Helvetica');
-    doc.text(`FIRMA: `, LEFT, y, { continued: true }).font('Helvetica').text('');
-    y += 14;
-    doc.text(`NOMBRE: ${data.full_name}`, LEFT, y);
-    y += 14;
-    doc.text(`CIP/Pasaporte: ${data.cedula}`, LEFT, y);
-
-    // Right column — authorized by
-    const sigRightY = y - 28;
-    doc.fillColor(DARK).font('Helvetica-Bold').text('Jorge Vargas', RIGHT, sigRightY);
-    doc.font('Helvetica').text('AV100746', RIGHT, sigRightY + 14);
-    doc.text('Representante Legal', RIGHT, sigRightY + 28);
+    doc.fillColor(DARK).fontSize(9).font('Helvetica-Bold').text('Jorge Vargas', RIGHT, y);
+    doc.font('Helvetica').text('AV100746', RIGHT, doc.y + 2);
+    doc.text('Representante Legal', RIGHT, doc.y + 2);
+    y = doc.y;
 
     // Footer
     const footerY = 790;
