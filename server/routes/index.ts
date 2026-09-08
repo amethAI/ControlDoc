@@ -37,6 +37,29 @@ function fmtDateTime(iso: string, timezone = 'America/Panama', locale = 'es-PA')
   return d.toLocaleString(locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: timezone });
 }
 
+function montoEnPalabras(n: number): string {
+  const ones = ['', 'UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE',
+    'DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
+  const tens = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
+  const hundreds = ['', 'CIEN', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS',
+    'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+  const integer = Math.floor(n);
+  const cents = Math.round((n - integer) * 100);
+  let words = '';
+  if (integer === 0) words = 'CERO';
+  else if (integer < 20) words = ones[integer];
+  else if (integer < 100) {
+    words = tens[Math.floor(integer / 10)] + (integer % 10 ? ' Y ' + ones[integer % 10] : '');
+  } else if (integer < 1000) {
+    const hun = Math.floor(integer / 100); const rest = integer % 100;
+    words = (hun === 1 && rest) ? 'CIENTO' : hundreds[hun];
+    if (rest) words += rest < 20 ? ' ' + ones[rest] : ' ' + tens[Math.floor(rest / 10)] + (rest % 10 ? ' Y ' + ones[rest % 10] : '');
+  } else {
+    words = String(integer);
+  }
+  return `${words} BALBOAS CON ${String(cents).padStart(2, '0')}/100 (B/.${n.toFixed(2)})`;
+}
+
 async function buildAuthPDF(data: {
   full_name: string; cedula: string; club_name: string;
   descripcion: string; fecha: string; precio_por_camisa: number;
@@ -44,84 +67,145 @@ async function buildAuthPDF(data: {
   timezone?: string; locale?: string;
 }): Promise<Buffer> {
   return buildPDFBuffer(doc => {
-    const RED = '#c01818';
     const DARK = '#1a1a1a';
-    const GRAY = '#64748b';
-    const LINE = '#e2e8f0';
-    const W = 495; // usable width
+    const GRAY = '#5a6a7a';
+    const LINE = '#d0d7de';
+    const W = 495;
 
-    // Header bar
-    doc.rect(50, 50, W, 60).fill(DARK);
-    doc.fillColor('#e02020').fontSize(22).font('Helvetica-Bold').text('RED', 65, 68, { continued: true });
+    const acceptedDate = new Date(data.accepted_at);
+    const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const day = acceptedDate.getDate();
+    const month = MONTHS[acceptedDate.getMonth()];
+    const year = acceptedDate.getFullYear();
+    const cuotaMonto = (data.monto_total / data.cuotas).toFixed(2);
+    const totalPalabras = montoEnPalabras(data.monto_total);
+
+    // Compact branding strip
+    doc.rect(50, 40, W, 30).fill(DARK);
+    doc.fillColor('#e02020').fontSize(14).font('Helvetica-Bold').text('RED', 65, 50, { continued: true });
     doc.fillColor('#9a9a9a').font('Helvetica').text('VOLUTION', { continued: false });
-    doc.fillColor('white').fontSize(9).text('Autorización de Descuento en Planilla', 65, 93);
+    doc.fillColor('white').fontSize(7.5).font('Helvetica').text('Autorización de Descuento en Planilla', 300, 53);
 
-    let y = 130;
+    let y = 90;
 
-    // Meta row
-    doc.fillColor(GRAY).fontSize(9).font('Helvetica');
-    doc.text(`Club: ${data.club_name}`, 50, y);
-    doc.text(`Fecha: ${fmtDate(data.fecha, data.timezone, data.locale)}`, 350, y);
-    y += 16;
-    doc.text(`Tanda: ${data.descripcion}`, 50, y);
-    y += 28;
+    // Title
+    doc.fillColor(DARK).fontSize(11).font('Helvetica-Bold')
+      .text('DOCUMENTO DE DESCUENTO POR PRESTAMOS O ADELANTO DE SALARIOS', 50, y, { width: W, align: 'center' });
+    y = doc.y + 22;
 
-    // Divider
-    doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor(LINE).stroke();
-    y += 18;
+    // Helper: render a paragraph with mixed bold segments, returns new y
+    type Seg = { t: string; bold?: boolean; underline?: boolean };
+    const para = (segs: Seg[], startY: number) => {
+      doc.fontSize(10);
+      segs.forEach((seg, i) => {
+        doc.fillColor(DARK).font(seg.bold ? 'Helvetica-Bold' : 'Helvetica');
+        const opts: any = { continued: i < segs.length - 1, width: W, underline: !!seg.underline };
+        if (i === 0) doc.text(seg.t, 50, startY, opts);
+        else doc.text(seg.t, opts);
+      });
+      return doc.y + 12;
+    };
 
-    // Employee section
-    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text('DATOS DEL EMPLEADO', 50, y);
-    y += 18;
-    doc.fillColor(GRAY).fontSize(9).font('Helvetica');
-    doc.text('Nombre:', 50, y);  doc.fillColor(DARK).font('Helvetica-Bold').text(data.full_name, 130, y);
-    y += 15;
-    doc.fillColor(GRAY).font('Helvetica').text('Cédula:', 50, y);  doc.fillColor(DARK).font('Helvetica-Bold').text(data.cedula, 130, y);
-    y += 28;
+    // Intro
+    y = para([
+      { t: 'Por este medio, Yo ' },
+      { t: data.full_name, bold: true },
+      { t: ', con número de CIP/PASAPORTE. ' },
+      { t: data.cedula, bold: true },
+      { t: ', en adelante conocido como ' },
+      { t: 'EL TRABAJADOR', bold: true },
+      { t: ' autorizo a ' },
+      { t: 'REDVOLUTION INTERNATIONAL S.A.', bold: true },
+      { t: ' En su condición de EMPLEADOR a descontar en concepto de ' },
+      { t: 'COMPRA DE POLO', bold: true, underline: true },
+      { t: ' conforme las siguientes condiciones.' },
+    ], y);
 
-    doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor(LINE).stroke();
-    y += 18;
+    // PRIMERO
+    y = para([
+      { t: 'PRIMERO:', bold: true },
+      { t: ' Reconoce ' },
+      { t: 'EL TRABAJADOR', bold: true },
+      { t: ' que ha recibido de EL EMPLEADOR polo(s) con un costo de ' },
+      { t: totalPalabras, bold: true, underline: true },
+      { t: ', en concepto de ' },
+      { t: 'compra de polo(s)', bold: true, underline: true },
+      { t: '.' },
+    ], y);
 
-    // Detail section
-    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text('DETALLE DE LA DOTACIÓN', 50, y);
-    y += 18;
+    // SEGUNDO
+    y = para([
+      { t: 'SEGUNDO:', bold: true },
+      { t: ' ' },
+      { t: 'EL TRABAJADOR', bold: true },
+      { t: ', se obliga a pagar ' },
+      { t: `$${data.monto_total.toFixed(2)}`, bold: true, underline: true },
+      { t: ' la suma correspondiente en concepto de compra de polo(s), mediante ' },
+      { t: `${data.cuotas === 1 ? '1 (un)' : '2 (dos)'} pagos de $${cuotaMonto} (quincenales)`, bold: true, underline: true },
+      { t: '.' },
+    ], y);
 
-    const rows = [
-      ['Cantidad de camisas', String(data.cantidad)],
-      ['Precio por camisa', `$${data.precio_por_camisa.toFixed(2)}`],
-      ['Total a descontar', `$${data.monto_total.toFixed(2)}`],
-      ['Forma de pago', data.cuotas === 1 ? '1 cuota (pago único)' : `2 cuotas ($${(data.monto_total / 2).toFixed(2)} c/u)`],
-    ];
-    rows.forEach(([label, val]) => {
-      doc.fillColor(GRAY).fontSize(9).font('Helvetica').text(label, 50, y);
-      doc.fillColor(DARK).font('Helvetica-Bold').text(val, 300, y);
-      y += 16;
-    });
-    y += 12;
+    // TERCERO
+    y = para([
+      { t: 'TERCERO:', bold: true },
+      { t: ' Acepta ' },
+      { t: 'EL TRABAJADOR', bold: true },
+      { t: ', que estos pagos se deducirán directamente de su salario por parte de ' },
+      { t: 'REDVOLUTION INTERNATIONAL, S. A', bold: true, underline: true },
+      { t: '. inmediatamente o hasta la cancelación de la suma descrita en la cláusula Primera de este documento.' },
+    ], y);
 
-    doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor(LINE).stroke();
-    y += 18;
+    // CUARTO
+    y = para([
+      { t: 'CUARTO', bold: true },
+      { t: ': El proceso se efectuará a partir de la siguiente quincena posterior a la adquisición.', underline: true },
+    ], y);
 
-    // Acceptance declaration
-    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text('DECLARACIÓN DE ACEPTACIÓN', 50, y);
-    y += 16;
-    const cuotaText = data.cuotas === 1
-      ? '1 cuota (pago único en planilla)'
-      : `2 cuotas de $${(data.monto_total / 2).toFixed(2)} cada una en planilla`;
-    doc.fillColor('#334155').fontSize(9).font('Helvetica')
-      .text(`El/la empleado/a declara haber recibido la dotación indicada y autoriza expresamente el descuento de $${data.monto_total.toFixed(2)} de su planilla en ${cuotaText}.`, 50, y, { width: W });
-    y += 40;
-    doc.fillColor(GRAY).text('Aceptado digitalmente el:', 50, y, { continued: true });
-    doc.fillColor(DARK).font('Helvetica-Bold').text(`  ${fmtDateTime(data.accepted_at, data.timezone, data.locale)}`);
-    y += 20;
-    doc.fillColor(GRAY).font('Helvetica').fontSize(8)
-      .text('Este documento digital tiene la misma validez que la firma física de autorización y reemplaza el formulario de papel.', 50, y, { width: W });
+    // Date line
+    y = para([
+      { t: 'Para constancia firman como muestra de su consentimiento, hoy ' },
+      { t: String(day), bold: true },
+      { t: ' de ' },
+      { t: month, bold: true },
+      { t: ` ${year}` },
+    ], y);
+
+    // Digital acceptance note
+    doc.fillColor(GRAY).fontSize(8).font('Helvetica')
+      .text(`Aceptado digitalmente: ${fmtDateTime(data.accepted_at, data.timezone, data.locale)}`, 50, doc.y + 2, { width: W });
+    y = doc.y + 28;
+
+    // Signature section — two columns
+    const LEFT = 50;
+    const RIGHT = 320;
+
+    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text('EL TRABAJADOR', LEFT, y);
+    doc.font('Helvetica-Bold').text('AUTORIZADO POR:', RIGHT, y);
+    y += 30;
+
+    // Signature lines
+    doc.moveTo(LEFT, y).lineTo(LEFT + 210, y).lineWidth(0.5).strokeColor(LINE).stroke();
+    doc.moveTo(RIGHT, y).lineTo(RIGHT + 185, y).lineWidth(0.5).strokeColor(LINE).stroke();
+    y += 8;
+
+    doc.fillColor(DARK).fontSize(9).font('Helvetica');
+    doc.text(`FIRMA: `, LEFT, y, { continued: true }).font('Helvetica').text('');
+    y += 14;
+    doc.text(`NOMBRE: ${data.full_name}`, LEFT, y);
+    y += 14;
+    doc.text(`CIP/Pasaporte: ${data.cedula}`, LEFT, y);
+
+    // Right column — authorized by
+    const sigRightY = y - 28;
+    doc.fillColor(DARK).font('Helvetica-Bold').text('Jorge Vargas', RIGHT, sigRightY);
+    doc.font('Helvetica').text('AV100746', RIGHT, sigRightY + 14);
+    doc.text('Representante Legal', RIGHT, sigRightY + 28);
 
     // Footer
-    const footerY = 780;
+    const footerY = 790;
     doc.moveTo(50, footerY).lineTo(545, footerY).lineWidth(0.5).strokeColor(LINE).stroke();
     doc.fillColor(GRAY).fontSize(8).font('Helvetica')
-      .text(`Generado por ControlDoc · Redvolution Management · ${fmtDateTime(new Date().toISOString(), data.timezone, data.locale)}`, 50, footerY + 8, { width: W, align: 'center' });
+      .text('Ciudad de Panamá, Vía Ricardo J. Alfaro, PH Century Tower piso 4 oficina 416  ·  Teléfonos: 373-5278', 50, footerY + 8, { width: W, align: 'center' });
   });
 }
 
