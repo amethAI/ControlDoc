@@ -64,7 +64,7 @@ async function buildAuthPDF(data: {
   full_name: string; cedula: string; club_name: string;
   descripcion: string; fecha: string; precio_por_camisa: number;
   cantidad: number; cuotas: number; monto_total: number; accepted_at: string;
-  timezone?: string; locale?: string;
+  firma_base64?: string; timezone?: string; locale?: string;
 }): Promise<Buffer> {
   return buildPDFBuffer(doc => {
     const DARK = '#1a1a1a';
@@ -202,6 +202,16 @@ async function buildAuthPDF(data: {
       doc.fillColor(DARK).font('Helvetica-Bold').text(val);
       by = doc.y + 3;
     });
+
+    if (data.firma_base64) {
+      by += 6;
+      doc.fillColor(GRAY).font('Helvetica').fontSize(8.5).text('Firma del trabajador:', boxX + boxPad, by);
+      by = doc.y + 4;
+      const imgData = data.firma_base64.replace(/^data:image\/[a-z]+;base64,/, '');
+      doc.image(Buffer.from(imgData, 'base64'), boxX + boxPad, by, { width: 160, height: 56 });
+      by += 62;
+    }
+
     by += 4;
 
     // Draw the box around everything
@@ -895,7 +905,7 @@ router.post('/dotacion/public/:token/validate', async (req: any, res: any) => {
 router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
   try {
     const { token } = req.params;
-    const { cedula, cantidad, cuotas } = req.body;
+    const { cedula, cantidad, cuotas, firma_base64 } = req.body;
 
     if (!cedula || !cantidad || !cuotas) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
@@ -970,6 +980,7 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
         cuotas: Number(cuotas),
         monto_total,
         accepted_at,
+        firma_base64: typeof firma_base64 === 'string' && firma_base64.startsWith('data:image/') ? firma_base64 : undefined,
         timezone: (tandaInfo?.clubs as any)?.timezone || 'America/Panama',
         locale: (tandaInfo?.clubs as any)?.locale || 'es-PA',
       });

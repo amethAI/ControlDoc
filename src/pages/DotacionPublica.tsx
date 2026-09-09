@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -28,6 +28,64 @@ export default function DotacionPublica() {
   const [cuotas, setCuotas] = useState<1 | 2 | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Signature pad
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isDrawingRef = useRef(false);
+  const [hasFirma, setHasFirma] = useState(false);
+
+  useEffect(() => {
+    if (step !== 'seleccion') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  }, [step]);
+
+  const getCanvasPos = (e: MouseEvent | TouchEvent, canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if ('touches' in e) {
+      return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY };
+    }
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+  };
+
+  const handleCanvasStart = (e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    e.preventDefault();
+    isDrawingRef.current = true;
+    const ctx = canvas.getContext('2d')!;
+    const pos = getCanvasPos(e.nativeEvent as any, canvas);
+    ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
+  };
+
+  const handleCanvasDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDrawingRef.current) return;
+    const canvas = canvasRef.current; if (!canvas) return;
+    e.preventDefault();
+    const ctx = canvas.getContext('2d')!;
+    const pos = getCanvasPos(e.nativeEvent as any, canvas);
+    ctx.lineTo(pos.x, pos.y); ctx.stroke();
+    if (!hasFirma) setHasFirma(true);
+  };
+
+  const handleCanvasStop = () => { isDrawingRef.current = false; };
+
+  const clearFirma = () => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height);
+    setHasFirma(false);
+  };
+
+  const getFirmaBase64 = () => {
+    const canvas = canvasRef.current;
+    return (canvas && hasFirma) ? canvas.toDataURL('image/png') : null;
+  };
 
   // Result
   const [result, setResult] = useState<{ full_name: string; cantidad: number; cuotas: number; monto_total: number } | null>(null);
@@ -70,13 +128,13 @@ export default function DotacionPublica() {
   };
 
   const handleSubmit = async () => {
-    if (!cantidad || !cuotas || !accepted) return;
+    if (!cantidad || !cuotas || !accepted || !hasFirma) return;
     setSubmitting(true);
     try {
       const res = await fetch(`/api/dotacion/public/${token}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cedula: cedula.trim(), cantidad, cuotas }),
+        body: JSON.stringify({ cedula: cedula.trim(), cantidad, cuotas, firma_base64: getFirmaBase64() }),
       });
       if (res.status === 409) { setStep('ya_respondido'); return; }
       if (!res.ok) {
@@ -98,7 +156,7 @@ export default function DotacionPublica() {
   const precio = tanda?.precio_por_camisa ?? 0;
   const montoTotal = cantidad ? parseFloat((cantidad * precio).toFixed(2)) : 0;
   const montoCuota = cuotas ? parseFloat((montoTotal / cuotas).toFixed(2)) : 0;
-  const canConfirm = cantidad && cuotas && accepted;
+  const canConfirm = cantidad && cuotas && accepted && hasFirma;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-start pt-8 pb-16 p-4 overflow-y-auto">
@@ -256,6 +314,43 @@ export default function DotacionPublica() {
                 </div>
               )}
 
+              {cantidad && cuotas && accepted && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-medium text-slate-500">Firma del trabajador</span>
+                    {hasFirma && (
+                      <button onClick={clearFirma} className="text-xs text-red-400 hover:text-red-600 transition-colors">
+                        Borrar
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative border-2 border-dashed border-slate-200 rounded-lg overflow-hidden bg-white"
+                       style={{ height: 110 }}>
+                    {!hasFirma && (
+                      <p className="absolute inset-0 flex items-center justify-center text-xs text-slate-300 pointer-events-none select-none">
+                        Firmá aquí con el dedo o el mouse
+                      </p>
+                    )}
+                    <canvas
+                      ref={canvasRef}
+                      width={560}
+                      height={220}
+                      className="w-full h-full touch-none cursor-crosshair"
+                      onMouseDown={handleCanvasStart}
+                      onMouseMove={handleCanvasDraw}
+                      onMouseUp={handleCanvasStop}
+                      onMouseLeave={handleCanvasStop}
+                      onTouchStart={handleCanvasStart}
+                      onTouchMove={handleCanvasDraw}
+                      onTouchEnd={handleCanvasStop}
+                    />
+                  </div>
+                  {!hasFirma && (
+                    <p className="text-xs text-red-400 mt-1">La firma es obligatoria para confirmar</p>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={handleSubmit}
                 disabled={!canConfirm || submitting}
@@ -297,7 +392,7 @@ export default function DotacionPublica() {
               </div>
 
               <p className="text-xs text-slate-300 mt-4">
-                Este registro reemplaza la firma física de autorización.
+                Tu firma digital quedó registrada en el documento de autorización.
               </p>
             </div>
           )}
