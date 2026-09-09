@@ -301,9 +301,10 @@ export async function sendExpirationAlerts(isTest = false) {
         .select('email')
         .eq('club_id', countryVirtualId);
 
+      // global recipients are excluded from per-club emails to avoid cross-country noise;
+      // they receive the monthly report and HR summary instead.
       const allRecipients = [
         ...(clubRecipients || []),
-        ...(globalRecipients || []),
         ...(countryRecipients || []),
       ];
 
