@@ -35,7 +35,6 @@ export default function DotacionPublica() {
   const [hasFirma, setHasFirma] = useState(false);
 
   useEffect(() => {
-    if (step !== 'seleccion') return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
@@ -43,7 +42,7 @@ export default function DotacionPublica() {
     ctx.lineWidth = 2.2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-  }, [step]);
+  }, [cantidad, cuotas]);
 
   const getCanvasPos = (e: MouseEvent | TouchEvent, canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect();
@@ -298,23 +297,6 @@ export default function DotacionPublica() {
               )}
 
               {cantidad && cuotas && (
-                <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 mb-4">
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={accepted}
-                      onChange={e => setAccepted(e.target.checked)}
-                      className="mt-0.5 accent-[#e02020]"
-                    />
-                    <span className="text-xs text-amber-800 leading-relaxed">
-                      Acepto que se descuente <strong>${montoTotal.toFixed(2)}</strong> de mi planilla
-                      en <strong>{cuotas} cuota{cuotas > 1 ? 's' : ''}</strong> por la dotación de camisas — {tanda.descripcion}.
-                    </span>
-                  </label>
-                </div>
-              )}
-
-              {cantidad && cuotas && accepted && (
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-medium text-slate-500">Firma del trabajador</span>
@@ -348,6 +330,23 @@ export default function DotacionPublica() {
                   {!hasFirma && (
                     <p className="text-xs text-red-400 mt-1">La firma es obligatoria para confirmar</p>
                   )}
+                </div>
+              )}
+
+              {cantidad && cuotas && (
+                <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 mb-4">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={accepted}
+                      onChange={e => setAccepted(e.target.checked)}
+                      className="mt-0.5 accent-[#e02020]"
+                    />
+                    <span className="text-xs text-amber-800 leading-relaxed">
+                      Acepto que se descuente <strong>${montoTotal.toFixed(2)}</strong> de mi planilla
+                      en <strong>{cuotas} cuota{cuotas > 1 ? 's' : ''}</strong> por la dotación de camisas — {tanda.descripcion}.
+                    </span>
+                  </label>
                 </div>
               )}
 
