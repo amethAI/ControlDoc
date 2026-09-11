@@ -97,9 +97,16 @@ async function startServer() {
     next();
   });
 
-  // Health check
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok' });
+  // Health check — verifica conectividad con la DB
+  app.get('/api/health', async (_req, res) => {
+    try {
+      const { getSupabase } = await import('./server/db.ts');
+      const { error } = await getSupabase().from('employees').select('id').limit(1);
+      if (error) throw error;
+      res.json({ status: 'ok', db: 'ok' });
+    } catch {
+      res.status(503).json({ status: 'error', db: 'unreachable' });
+    }
   });
 
   // Generate and download PowerPoint presentation
@@ -475,17 +482,37 @@ async function startServer() {
   cron.schedule('0 7 1 * *', async () => {
     console.log('[CRON] Generando reporte mensual...');
     try {
-      await sendMonthlyReport();
+      await Promise.race([
+        sendMonthlyReport(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout: reporte mensual tardó más de 120s')), 120_000)
+        )
+      ]);
       console.log('[CRON] Reporte mensual enviado');
     } catch (err) {
       console.error('[CRON] Error al enviar reporte mensual:', err);
     }
   });
 
+  // Global Express error handler — evita que errores no capturados en rutas devuelvan HTML
+  app.use((err: any, _req: any, res: any, _next: any) => {
+    console.error('[EXPRESS ERROR]', err);
+    res.status(err.status || 500).json({ error: 'Error interno del servidor' });
+  });
+
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] unhandledRejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] uncaughtException:', err);
+  process.exit(1);
+});
 
 startServer().catch(err => {
   console.error('CRITICAL: Failed to start server:', err);
