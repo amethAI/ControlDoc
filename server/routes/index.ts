@@ -1586,6 +1586,7 @@ router.post('/documents', canModifyData, (req, res, next) => {
         'Documento', id, file_name, null
       );
       
+      dashboardCache.clear();
       return res.status(201).json(newDocs[0]); // Return one of them to satisfy the frontend
     }
 
@@ -1615,7 +1616,8 @@ router.post('/documents', canModifyData, (req, res, next) => {
       `Documento subido: ${file_name}`,
       'Documento', id, file_name, null
     );
-    
+
+    dashboardCache.clear();
     res.status(201).json(newDoc);
   } catch (error: any) {
     console.error('Error creating document:', error);
@@ -1653,6 +1655,7 @@ router.patch('/documents/:id', canModifyData, async (req: any, res) => {
       .single();
 
     if (error) throw error;
+    dashboardCache.clear();
     res.json(updatedDoc);
   } catch (error) {
     res.status(500).json({ error: 'Error al actualizar documento' });
@@ -3736,7 +3739,7 @@ const DASHBOARD_CACHE_TTL = 5 * 60 * 1000;
 
 // Get dashboard stats
 router.get('/dashboard', canViewData, async (req, res) => {
-  const { club_id: queryClubId, country: queryCountry } = req.query;
+  const { club_id: queryClubId, country: queryCountry, force } = req.query;
   const user = (req as any).user;
 
   const { club_id, allowedClubIds, applyFilter, applyDocFilter } =
@@ -3745,7 +3748,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
   // Cache key: scoped by country + club filter (never mixes data between scopes)
   const cacheKey = `${user.country || 'global'}_${queryCountry || ''}_${club_id || 'all'}`;
   const cached = dashboardCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < DASHBOARD_CACHE_TTL) {
+  if (cached && Date.now() - cached.ts < DASHBOARD_CACHE_TTL && !force) {
     return res.json(cached.data);
   }
 

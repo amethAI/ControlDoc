@@ -94,12 +94,15 @@ export default function Dashboard() {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const isSuperAdmin = user?.role === 'Super Administrador';
 
-  const fetchStats = async (country?: string | null) => {
+  const fetchStats = async (country?: string | null, forceRefresh = false) => {
     try {
       const isRestricted = user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno';
       let params = isRestricted ? `?club_id=${user?.club_id}` : '';
       if (!isRestricted && isSuperAdmin && country) {
         params = `?country=${encodeURIComponent(country)}`;
+      }
+      if (forceRefresh) {
+        params += (params ? '&' : '?') + 'force=true';
       }
       const [dashRes, projRes, compRes] = await Promise.all([
         apiFetch(`/api/dashboard${params}`),
@@ -256,7 +259,7 @@ export default function Dashboard() {
             <button
               onClick={async () => {
                 setRefreshing(true);
-                await fetchStats(selectedCountry);
+                await fetchStats(selectedCountry, true);
                 setRefreshing(false);
               }}
               disabled={refreshing}
