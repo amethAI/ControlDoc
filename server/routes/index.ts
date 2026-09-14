@@ -1257,6 +1257,7 @@ router.post('/employees', canModifyData, async (req, res) => {
       'Empleado', id, full_name, club_id
     );
 
+    dashboardCache.clear();
     res.status(201).json(newEmployee);
   } catch (error: any) {
     res.status(500).json({ error: 'Error al crear empleado' });
@@ -2127,6 +2128,7 @@ router.patch('/employees/:id/terminate', canModifyData, async (req, res) => {
       'Empleado', req.params.id, null, updatedEmployee.club_id
     );
 
+    dashboardCache.clear();
     res.json(updatedEmployee);
   } catch (error) {
     console.error('Error terminating employee:', error);
