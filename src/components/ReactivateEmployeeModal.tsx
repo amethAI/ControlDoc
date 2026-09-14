@@ -20,6 +20,7 @@ export default function ReactivateEmployeeModal({
 }: ReactivateEmployeeModalProps) {
   const { user } = useAuth();
   const [newStartDate, setNewStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newEndDate, setNewEndDate] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +41,8 @@ export default function ReactivateEmployeeModal({
           'x-user-name': user?.name || ''
         },
         body: JSON.stringify({
-          contract_start: newStartDate
+          contract_start: newStartDate,
+          ...(newEndDate && { contract_end: newEndDate })
         })
       });
 
@@ -100,6 +102,18 @@ export default function ReactivateEmployeeModal({
                   onChange={e => setNewStartDate(e.target.value)}
                   className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 sm:text-sm"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">
+                  Fecha de Vencimiento de Contrato <span className="text-slate-400 font-normal">(opcional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={newEndDate}
+                  onChange={e => setNewEndDate(e.target.value)}
+                  className="mt-1 block w-full rounded-lg border border-slate-300 py-2 px-3 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 sm:text-sm"
+                />
+                <p className="mt-1 text-xs text-slate-400">Si se ingresa, actualiza el documento "Contrato firmado" automáticamente</p>
               </div>
 
               <div className="mt-6 flex gap-3">

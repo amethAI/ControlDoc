@@ -1980,6 +1980,22 @@ router.patch('/employees/:id/checklist', canModifyData, async (req: any, res) =>
 
     if (empError) throw empError;
 
+    // Sync contract document expiry dates when contract_end changes
+    if (contract_end) {
+      const { data: allDocTypes } = await supabase.from('document_types').select('id, name');
+      const contractDocTypeIds = (allDocTypes || [])
+        .filter((dt: any) => ['Contrato firmado', 'Solicitud de entrada al club']
+          .some(n => dt.name?.toLowerCase().includes(n.toLowerCase())))
+        .map((dt: any) => dt.id);
+      if (contractDocTypeIds.length > 0) {
+        await supabase.from('employee_documents')
+          .update({ expiry_date: contract_end })
+          .eq('employee_id', id)
+          .in('document_type_id', contractDocTypeIds)
+          .eq('is_current', 1);
+      }
+    }
+
     // 2. Update documents if provided
     const docUpdates = [
       { name: 'Carta de ingreso', value: carta_ingreso, isBoolean: true },
@@ -2068,6 +2084,7 @@ router.patch('/employees/:id/checklist', canModifyData, async (req: any, res) =>
       }
     }
 
+    dashboardCache.clear();
     res.json({ success: true });
   } catch (error: any) {
     console.error('Error updating checklist:', error);
@@ -2119,7 +2136,7 @@ router.patch('/employees/:id/terminate', canModifyData, async (req, res) => {
 
 // Reactivate employee
 router.patch('/employees/:id/reactivate', canModifyData, async (req, res) => {
-  const { contract_start } = req.body;
+  const { contract_start, contract_end } = req.body;
   const user = (req as any).user;
 
   try {
@@ -2130,21 +2147,40 @@ router.patch('/employees/:id/reactivate', canModifyData, async (req, res) => {
       }
     }
 
+    const reactivateData: any = {
+      status: 'activo',
+      termination_reason: null,
+      termination_date: null,
+      contract_start,
+      updated_at: new Date().toISOString()
+    };
+    if (contract_end !== undefined) reactivateData.contract_end = contract_end || null;
+
     const { data: updatedEmployee, error } = await supabase
       .from('employees')
-      .update({ 
-        status: 'activo', 
-        termination_reason: null, 
-        termination_date: null,
-        contract_start,
-        updated_at: new Date().toISOString()
-      })
+      .update(reactivateData)
       .eq('id', req.params.id)
       .select()
       .single();
-      
+
     if (error) throw error;
-    
+
+    // Sync contract document expiry dates when contract_end changes
+    if (contract_end) {
+      const { data: allDocTypes } = await supabase.from('document_types').select('id, name');
+      const contractDocTypeIds = (allDocTypes || [])
+        .filter((dt: any) => ['Contrato firmado', 'Solicitud de entrada al club']
+          .some(n => dt.name?.toLowerCase().includes(n.toLowerCase())))
+        .map((dt: any) => dt.id);
+      if (contractDocTypeIds.length > 0) {
+        await supabase.from('employee_documents')
+          .update({ expiry_date: contract_end })
+          .eq('employee_id', req.params.id)
+          .in('document_type_id', contractDocTypeIds)
+          .eq('is_current', 1);
+      }
+    }
+
     // Log audit
     await logAudit(
       req,
@@ -2153,6 +2189,7 @@ router.patch('/employees/:id/reactivate', canModifyData, async (req, res) => {
       'Empleado', req.params.id, null, updatedEmployee.club_id
     );
 
+    dashboardCache.clear();
     res.json(updatedEmployee);
   } catch (error) {
     console.error('Error reactivating employee:', error);
