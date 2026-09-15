@@ -1077,7 +1077,11 @@ router.get('/audit-logs', isAdmin, async (req, res) => {
 router.get('/clubs', isAuthenticated, async (req, res) => {
   try {
     const user = (req as any).user;
-    let query = supabase.from('clubs').select('*').neq('id', 'global');
+    const { include_virtual } = req.query;
+    let query = supabase.from('clubs').select('*');
+    if (!include_virtual) {
+      query = query.not('country', 'is', null);
+    }
 
     if (['Supervisor Interno', 'Coordinadora', 'Supervisora'].includes(user.role)) {
       // Club-scoped: only their assigned club

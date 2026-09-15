@@ -13,7 +13,7 @@ export default function DestinatariosAlertas() {
   const fetchData = async () => {
     try {
       const [clubsRes, recipientsRes] = await Promise.all([
-        apiFetch('/api/clubs'),
+        apiFetch('/api/clubs?include_virtual=1'),
         apiFetch('/api/alert-recipients')
       ]);
       const clubsData = await clubsRes.json();
