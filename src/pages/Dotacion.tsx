@@ -99,8 +99,6 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<TandaDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [applyingId, setApplyingId] = useState<string | null>(null);
-  const [markingAll, setMarkingAll] = useState(false);
   const [downloadingReport, setDownloadingReport] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
 
@@ -152,31 +150,6 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
       window.open(url, '_blank');
     } catch { toast.error('Error al obtener PDF'); }
     finally { setDownloadingPdf(null); }
-  };
-
-  const handlePago = async (asignacionId: string) => {
-    setApplyingId(asignacionId);
-    try {
-      const res = await apiFetch(`/api/dotacion/asignaciones/${asignacionId}/pago`, { method: 'POST' });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
-      toast.success('Descuento registrado');
-      await loadDetail();
-      onRefresh();
-    } catch (err: any) { toast.error(err.message || 'Error al registrar pago'); }
-    finally { setApplyingId(null); }
-  };
-
-  const handlePagoMasivo = async () => {
-    setMarkingAll(true);
-    try {
-      const res = await apiFetch(`/api/dotacion/tandas/${tanda.id}/pago-masivo`, { method: 'POST' });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
-      const { procesadas } = await res.json();
-      toast.success(`${procesadas} cuota${procesadas !== 1 ? 's' : ''} registrada${procesadas !== 1 ? 's' : ''}`);
-      await loadDetail();
-      onRefresh();
-    } catch (err: any) { toast.error(err.message || 'Error al procesar'); }
-    finally { setMarkingAll(false); }
   };
 
   const toggleActiva = async () => {
@@ -271,12 +244,6 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
                         >
                           <Download className="h-3.5 w-3.5" />
                         </button>
-                        <EstadoBadge
-                          estado={a.estado}
-                          cuotas={a.cuotas}
-                          asignacionId={a.id}
-                          onPago={applyingId ? () => {} : handlePago}
-                        />
                       </div>
                     </div>
                   ))}
@@ -288,26 +255,14 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
                   <FileText className="h-3.5 w-3.5" />
                   Copiar link para empleadas
                 </button>
-                <div className="flex items-center gap-3">
-                  {pendientes > 0 && (
-                    <button
-                      onClick={handlePagoMasivo}
-                      disabled={markingAll}
-                      className="inline-flex items-center gap-1.5 text-xs text-violet-600 hover:text-violet-700 font-medium disabled:opacity-50"
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                      {markingAll ? 'Procesando…' : 'Marcar cuota a todos'}
-                    </button>
-                  )}
-                  <button
-                    onClick={downloadReporte}
-                    disabled={downloadingReport}
-                    className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 font-medium disabled:opacity-50"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    {downloadingReport ? 'Generando…' : 'Reporte planilla'}
-                  </button>
-                </div>
+                <button
+                  onClick={downloadReporte}
+                  disabled={downloadingReport}
+                  className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 font-medium disabled:opacity-50"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {downloadingReport ? 'Generando…' : 'Reporte planilla'}
+                </button>
               </div>
             </>
           ) : null}
@@ -651,8 +606,7 @@ export default function Dotacion() {
     (p.dotacion_grupos || []).flatMap(g =>
       (g.dotacion_tandas || []).flatMap(t => t.dotacion_asignaciones || [])));
   const totalCompra = periodos.flatMap(p =>
-    (p.dotacion_grupos || []).flatMap(g =>
-      (g.dotacion_tandas || []).map(t => Number(t.total_compra || 0)))).reduce((s, v) => s + v, 0);
+    (p.dotacion_grupos || []).map(g => Number(g.presupuesto_total || 0))).reduce((s, v) => s + v, 0);
   const totalAsignado = allAsigs.reduce((s, a) => s + Number(a.monto_total), 0);
   const totalPendiente = allAsigs.filter(a => a.estado !== 'pagado').reduce((s, a) => s + Number(a.monto_total), 0);
 
