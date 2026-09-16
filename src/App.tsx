@@ -72,7 +72,7 @@ const DotacionRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   if (loading) return <PageLoader />;
   if (!user) return <Navigate to="/login" />;
-  const canAccess = user.role === 'Super Administrador' || user.role === 'Gerente Panama';
+  const canAccess = user.role === 'Super Administrador' || user.role === 'Gerente Panama' || user.role === 'Recursos Humanos';
   if (!canAccess) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
