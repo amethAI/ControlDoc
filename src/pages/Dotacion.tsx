@@ -99,6 +99,7 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<TandaDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
   const [downloadingReport, setDownloadingReport] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
 
@@ -150,6 +151,18 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
       window.open(url, '_blank');
     } catch { toast.error('Error al obtener PDF'); }
     finally { setDownloadingPdf(null); }
+  };
+
+  const handlePago = async (asignacionId: string) => {
+    setApplyingId(asignacionId);
+    try {
+      const res = await apiFetch(`/api/dotacion/asignaciones/${asignacionId}/pago`, { method: 'POST' });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      toast.success('Descuento registrado');
+      await loadDetail();
+      onRefresh();
+    } catch (err: any) { toast.error(err.message || 'Error al registrar pago'); }
+    finally { setApplyingId(null); }
   };
 
   const toggleActiva = async () => {
@@ -244,6 +257,12 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
                         >
                           <Download className="h-3.5 w-3.5" />
                         </button>
+                        <EstadoBadge
+                          estado={a.estado}
+                          cuotas={a.cuotas}
+                          asignacionId={a.id}
+                          onPago={applyingId ? () => {} : handlePago}
+                        />
                       </div>
                     </div>
                   ))}
