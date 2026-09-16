@@ -947,3 +947,112 @@ export async function sendMonthlyReport() {
     return { success: false, error: 'Error al generar el reporte' };
   }
 }
+
+export async function sendDotacionQuincenaReport(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const today = new Date();
+    const day = today.getDate();
+    const month = today.toLocaleString('es', { month: 'long' });
+    const year = today.getFullYear();
+
+    // Query all pending assignments across all tandas
+    const { data: asigs, error } = await supabase
+      .from('dotacion_asignaciones')
+      .select(`
+        id, cantidad, cuotas, monto_total, estado,
+        employees(full_name, cedula),
+        dotacion_tandas(descripcion, fecha, clubs(name))
+      `)
+      .neq('estado', 'pagado')
+      .order('dotacion_tandas(descripcion)', { ascending: true });
+
+    if (error) throw error;
+    if (!asigs || asigs.length === 0) {
+      console.log('[DOTACION] No hay descuentos pendientes — correo omitido');
+      return { success: true };
+    }
+
+    // Get pagos count per asignacion to determine next cuota
+    const asigIds = asigs.map((a: any) => a.id);
+    const { data: pagos } = await supabase
+      .from('dotacion_pagos')
+      .select('asignacion_id')
+      .in('asignacion_id', asigIds);
+
+    const pagosCount: Record<string, number> = {};
+    (pagos || []).forEach((p: any) => {
+      pagosCount[p.asignacion_id] = (pagosCount[p.asignacion_id] || 0) + 1;
+    });
+
+    // Build HTML rows
+    const rows = asigs.map((a: any) => {
+      const emp = a.employees || {};
+      const tanda = a.dotacion_tandas || {};
+      const club = tanda.clubs?.name || '';
+      const aplicadas = pagosCount[a.id] || 0;
+      const nextCuota = aplicadas + 1;
+      const montoCuota = parseFloat((Number(a.monto_total) / a.cuotas).toFixed(2));
+      return `
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${emp.full_name || ''}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${emp.cedula || ''}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${club}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center;">${a.cantidad}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center;">${nextCuota} de ${a.cuotas}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;">$${montoCuota.toFixed(2)}</td>
+        </tr>`;
+    }).join('');
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;">
+        <div style="background:#1a1a1a;padding:24px 32px;border-radius:8px 8px 0 0;">
+          <span style="color:#e02020;font-weight:bold;font-size:20px;">RED</span><span style="color:#9a9a9a;font-size:20px;">VOLUTION</span>
+          <p style="color:#cbd5e1;margin:4px 0 0;font-size:13px;">Descuentos de Dotación — Quincena del ${day} de ${month} ${year}</p>
+        </div>
+        <div style="background:#f8fafc;padding:24px 32px;border:1px solid #e2e8f0;border-top:none;">
+          <p style="color:#475569;font-size:14px;margin:0 0 16px;">A continuación el listado de colaboradores con descuentos a aplicar en planilla esta quincena:</p>
+          <table style="width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+            <thead>
+              <tr style="background:#1a1a1a;">
+                <th style="padding:10px 12px;text-align:left;color:white;font-size:12px;">NOMBRE</th>
+                <th style="padding:10px 12px;text-align:left;color:white;font-size:12px;">CÉDULA</th>
+                <th style="padding:10px 12px;text-align:left;color:white;font-size:12px;">CLUB</th>
+                <th style="padding:10px 12px;text-align:center;color:white;font-size:12px;">CAMISAS</th>
+                <th style="padding:10px 12px;text-align:center;color:white;font-size:12px;">CUOTA</th>
+                <th style="padding:10px 12px;text-align:right;color:white;font-size:12px;">MONTO</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <p style="color:#94a3b8;font-size:11px;margin:16px 0 0;">Total de colaboradores: ${asigs.length} · Generado automáticamente por ControlDoc</p>
+        </div>
+      </div>`;
+
+    const toEmail = 'rrhhpanama@redvolutionlatam.com';
+    const subject = `Descuentos Dotación — Quincena ${day} de ${month} ${year}`;
+    const sender = { name: 'Sistema PSMT', email: process.env.EMAIL_USER || 'alertaspsmt@gmail.com' };
+
+    if (process.env.BREVO_API_KEY) {
+      await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'accept': 'application/json', 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json' },
+        body: JSON.stringify({ sender, to: [{ email: toEmail }], subject, htmlContent: html }),
+      });
+    } else if (process.env.RESEND_API_KEY) {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({ from: process.env.EMAIL_FROM || 'Sistema PSMT <onboarding@resend.dev>', to: [toEmail], subject, html });
+    } else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail', host: 'smtp.gmail.com', port: 465, secure: true, family: 4,
+        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      } as any);
+      await transporter.sendMail({ from: `"Sistema PSMT" <${process.env.EMAIL_USER}>`, to: toEmail, subject, html });
+    }
+
+    console.log(`[DOTACION] Reporte quincena enviado a: ${toEmail} (${asigs.length} empleados)`);
+    return { success: true };
+  } catch (err) {
+    console.error('[DOTACION] Error al enviar reporte quincena:', err);
+    return { success: false, error: 'Error al generar reporte de dotación' };
+  }
+}

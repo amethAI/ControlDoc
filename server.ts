@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import apiRouter from './server/routes/index.ts';
 import cron from 'node-cron';
-import { sendExpirationAlerts, sendMonthlyReport } from './server/services/alertService.ts';
+import { sendExpirationAlerts, sendMonthlyReport, sendDotacionQuincenaReport } from './server/services/alertService.ts';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -491,6 +491,22 @@ async function startServer() {
       console.log('[CRON] Reporte mensual enviado');
     } catch (err) {
       console.error('[CRON] Error al enviar reporte mensual:', err);
+    }
+  });
+
+  // Reporte dotación quincena — días 15 y 30 de cada mes a las 8:00 AM
+  cron.schedule('0 8 15,30 * *', async () => {
+    console.log('[CRON] Enviando reporte de dotación quincena...');
+    try {
+      await Promise.race([
+        sendDotacionQuincenaReport(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout: reporte dotación tardó más de 60s')), 60_000)
+        )
+      ]);
+      console.log('[CRON] Reporte dotación quincena enviado');
+    } catch (err) {
+      console.error('[CRON] Error al enviar reporte dotación:', err);
     }
   });
 

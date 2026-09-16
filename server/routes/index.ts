@@ -290,8 +290,8 @@ async function buildReportePDF(data: {
     doc.text('CÉDULA', 220, y + 5);
     doc.text('CAM', 310, y + 5);
     doc.text('CUOTAS', 340, y + 5);
-    doc.text('MONTO', 385, y + 5);
-    doc.text('ESTADO', 435, y + 5);
+    doc.text('MONTO/CUOTA', 385, y + 5);
+    doc.text('ESTADO', 455, y + 5);
     y += 20;
 
     const estadoLabel: Record<string, string> = { pendiente: 'Pendiente', parcial: 'Parcial', pagado: 'Pagado' };
@@ -302,8 +302,8 @@ async function buildReportePDF(data: {
       doc.text(a.cedula, 220, y);
       doc.text(String(a.cantidad), 310, y);
       doc.text(String(a.cuotas), 340, y);
-      doc.text(`$${Number(a.monto_total).toFixed(2)}`, 385, y);
-      doc.text(estadoLabel[a.estado] || a.estado, 435, y);
+      doc.text(`$${(Number(a.monto_total) / (a.cuotas || 1)).toFixed(2)}`, 385, y);
+      doc.text(estadoLabel[a.estado] || a.estado, 455, y);
       y += 16;
     });
 
@@ -5638,6 +5638,81 @@ router.post('/dotacion/asignaciones/:id/pago', isAuthenticated, async (req: any,
     res.json({ success: true, estado: nuevoEstado, cuota_aplicada: nextCuota });
   } catch (err: any) {
     res.status(500).json({ error: 'Error al registrar pago' });
+  }
+});
+
+// Batch mark next cuota for all non-pagado assignments in a tanda
+router.post('/dotacion/tandas/:id/pago-masivo', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    if (!['Super Administrador', 'Administrador', 'Gerente Panama', 'Recursos Humanos'].includes(user.role)) {
+      return res.status(403).json({ error: 'Sin permiso' });
+    }
+    const { id: tandaId } = req.params;
+
+    // Load tanda to verify access
+    const { data: tanda, error: tandaErr } = await supabase
+      .from('dotacion_tandas')
+      .select('id, club_id, clubs(country)')
+      .eq('id', tandaId)
+      .single();
+    if (tandaErr || !tanda) return res.status(404).json({ error: 'Tanda no encontrada' });
+    const tandaClub = tanda as any;
+    if (!canAccessResource(user, tandaClub.club_id, tandaClub.clubs?.country ?? null)) {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+
+    // Get all non-pagado assignments for this tanda
+    const { data: asignaciones, error: asigErr } = await supabase
+      .from('dotacion_asignaciones')
+      .select('id, cuotas, monto_total, estado')
+      .eq('tanda_id', tandaId)
+      .neq('estado', 'pagado');
+    if (asigErr) throw asigErr;
+    if (!asignaciones || asignaciones.length === 0) {
+      return res.json({ success: true, procesadas: 0, message: 'No hay asignaciones pendientes' });
+    }
+
+    // Get pagos counts for all these assignments in one query
+    const asigIds = asignaciones.map((a: any) => a.id);
+    const { data: pagos } = await supabase
+      .from('dotacion_pagos')
+      .select('asignacion_id')
+      .in('asignacion_id', asigIds);
+    const pagosCount: Record<string, number> = {};
+    for (const p of (pagos || [])) {
+      pagosCount[(p as any).asignacion_id] = (pagosCount[(p as any).asignacion_id] || 0) + 1;
+    }
+
+    const inserts: any[] = [];
+    const updates: Array<{ id: string; estado: string }> = [];
+
+    for (const asig of asignaciones) {
+      const numPagos = pagosCount[(asig as any).id] || 0;
+      const nextCuota = numPagos + 1;
+      if (nextCuota > (asig as any).cuotas) continue;
+      const montoCuota = parseFloat((Number((asig as any).monto_total) / (asig as any).cuotas).toFixed(2));
+      inserts.push({ asignacion_id: (asig as any).id, monto: montoCuota, numero_cuota: nextCuota });
+      updates.push({
+        id: (asig as any).id,
+        estado: nextCuota === (asig as any).cuotas ? 'pagado' : 'parcial',
+      });
+    }
+
+    if (inserts.length === 0) {
+      return res.json({ success: true, procesadas: 0, message: 'Todas las cuotas ya fueron aplicadas' });
+    }
+
+    await supabase.from('dotacion_pagos').insert(inserts);
+
+    // Update estados one by one (no bulk update with different values in PostgREST)
+    for (const u of updates) {
+      await supabase.from('dotacion_asignaciones').update({ estado: u.estado }).eq('id', u.id);
+    }
+
+    res.json({ success: true, procesadas: inserts.length });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al procesar pago masivo' });
   }
 });
 
