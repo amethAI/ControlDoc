@@ -910,8 +910,8 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
     if (!cedula || !cantidad || !cuotas) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
     }
-    if (![1, 2].includes(Number(cuotas))) {
-      return res.status(400).json({ error: 'Cuotas inválidas' });
+    if (Number(cuotas) < 1 || Number(cuotas) > 5) {
+      return res.status(400).json({ error: 'Cuotas inválidas (1-5)' });
     }
     if (Number(cantidad) < 1 || Number(cantidad) > 10) {
       return res.status(400).json({ error: 'Cantidad inválida' });

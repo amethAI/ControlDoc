@@ -24,8 +24,8 @@ export default function DotacionPublica() {
   const [employeeName, setEmployeeName] = useState('');
 
   // Step seleccion
-  const [cantidad, setCantidad] = useState<1 | 2 | null>(null);
-  const [cuotas, setCuotas] = useState<1 | 2 | null>(null);
+  const [cantidad, setCantidad] = useState<number | null>(null);
+  const [cuotas, setCuotas] = useState<number | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -238,18 +238,18 @@ export default function DotacionPublica() {
               )}
 
               <p className="text-xs font-medium text-slate-500 mb-2">¿Cuántas camisas querés recibir?</p>
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {([1, 2] as const).map(n => (
+              <div className="grid grid-cols-5 gap-1.5 mb-4">
+                {[1, 2, 3, 4, 5].map(n => (
                   <button
                     key={n}
                     onClick={() => setCantidad(n)}
-                    className={`border rounded-lg py-3 text-sm font-medium transition-colors ${
+                    className={`border rounded-lg py-2.5 text-sm font-medium transition-colors ${
                       cantidad === n
                         ? 'border-[#e02020] bg-red-50 text-[#c01818]'
                         : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    {n} camisa{n > 1 ? 's' : ''}
+                    {n}
                     <span className="block text-xs font-normal mt-0.5 opacity-70">
                       ${(n * precio).toFixed(2)}
                     </span>
@@ -258,20 +258,20 @@ export default function DotacionPublica() {
               </div>
 
               <p className="text-xs font-medium text-slate-500 mb-2">Forma de descuento en planilla</p>
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {([1, 2] as const).map(n => (
+              <div className="grid grid-cols-5 gap-1.5 mb-4">
+                {[1, 2, 3, 4, 5].map(n => (
                   <button
                     key={n}
                     onClick={() => setCuotas(n)}
-                    className={`border rounded-lg py-3 text-sm font-medium transition-colors ${
+                    className={`border rounded-lg py-2.5 text-sm font-medium transition-colors ${
                       cuotas === n
                         ? 'border-[#e02020] bg-red-50 text-[#c01818]'
                         : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    {n} cuota{n > 1 ? 's' : ''}
+                    {n}
                     <span className="block text-xs font-normal mt-0.5 opacity-70">
-                      {n === 1 ? 'pago único' : 'split en planilla'}
+                      {n === 1 ? 'única' : `cuotas`}
                     </span>
                   </button>
                 ))}
@@ -285,9 +285,9 @@ export default function DotacionPublica() {
                   <div className="flex justify-between text-slate-500 mb-1">
                     <span>Precio por camisa</span><span>${precio.toFixed(2)}</span>
                   </div>
-                  {cuotas === 2 && (
+                  {cuotas > 1 && (
                     <div className="flex justify-between text-slate-500 mb-1">
-                      <span>Por cuota</span><span>${montoCuota.toFixed(2)}</span>
+                      <span>Por cuota ({cuotas} cuotas)</span><span>${montoCuota.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-semibold text-slate-800 pt-2 border-t border-slate-200 mt-1">
@@ -385,7 +385,7 @@ export default function DotacionPublica() {
                   <span>
                     {result.cuotas === 1
                       ? '1 cuota (pago único)'
-                      : `2 cuotas ($${(result.monto_total / 2).toFixed(2)} c/u)`}
+                      : `${result.cuotas} cuotas ($${(result.monto_total / result.cuotas).toFixed(2)} c/u)`}
                   </span>
                 </div>
               </div>
