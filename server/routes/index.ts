@@ -1221,7 +1221,7 @@ router.post('/employees', canModifyData, async (req, res) => {
 
   const parsed = createEmployeeSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+    return res.status(400).json({ error: Object.values(parsed.error.flatten().fieldErrors).flat().join('. ') });
   }
   const { full_name, cedula, position, contract_type, contract_start, contract_end, birth_date, club_id, banco, cuenta_bancaria } = parsed.data;
 
@@ -1350,7 +1350,7 @@ router.patch('/employees/:id', canModifyData, async (req, res) => {
 
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+    return res.status(400).json({ error: Object.values(parsed.error.flatten().fieldErrors).flat().join('. ') });
   }
 
   try {
@@ -4154,7 +4154,7 @@ router.get('/users', isAdmin, async (req, res) => {
 router.post('/users', isAdmin, async (req, res) => {
   const parsed = createUserSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+    return res.status(400).json({ error: Object.values(parsed.error.flatten().fieldErrors).flat().join('. ') });
   }
   const { email, password, name, role, club_id, country } = parsed.data;
   try {
@@ -4187,7 +4187,7 @@ router.post('/users', isAdmin, async (req, res) => {
 router.patch('/users/:id', isAdmin, async (req, res) => {
   const parsed = updateUserSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+    return res.status(400).json({ error: Object.values(parsed.error.flatten().fieldErrors).flat().join('. ') });
   }
   const { email, password, name, role, club_id, country, is_active } = parsed.data;
   try {
