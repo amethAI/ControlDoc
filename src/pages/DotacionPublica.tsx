@@ -28,6 +28,7 @@ export default function DotacionPublica() {
   const [cuotas, setCuotas] = useState<number | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [isModifying, setIsModifying] = useState(false);
 
   // Signature pad
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -113,11 +114,20 @@ export default function DotacionPublica() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cedula: cedula.trim() }),
       });
-      if (res.status === 409) { setStep('ya_respondido'); return; }
+      if (res.status === 409) { const d = await res.json(); setCedulaError(d.error || 'No podés modificar tu selección.'); return; }
       if (res.status === 404) { setCedulaError('Cédula no encontrada en este club. Verificá el número.'); return; }
       if (!res.ok) { setCedulaError('Error al verificar. Intentá de nuevo.'); return; }
       const data = await res.json();
       if (data.full_name) setEmployeeName(data.full_name);
+      if (data.existing) {
+        setCantidad(data.existing.cantidad);
+        setCuotas(data.existing.cuotas);
+        setIsModifying(true);
+      } else {
+        setCantidad(null);
+        setCuotas(null);
+        setIsModifying(false);
+      }
       setStep('seleccion');
     } catch {
       setCedulaError('Error al verificar. Intentá de nuevo.');
@@ -232,7 +242,7 @@ export default function DotacionPublica() {
                   <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-green-700">{employeeName}</p>
-                    <p className="text-xs text-green-500">Cédula verificada</p>
+                    <p className="text-xs text-green-500">{isModifying ? 'Modificando selección anterior' : 'Cédula verificada'}</p>
                   </div>
                 </div>
               )}
@@ -355,7 +365,7 @@ export default function DotacionPublica() {
                 disabled={!canConfirm || submitting}
                 className="w-full bg-[#e02020] text-white rounded-lg py-2.5 text-sm font-medium hover:bg-[#c01818] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {submitting ? 'Enviando...' : 'Confirmar y aceptar'}
+                {submitting ? 'Enviando...' : isModifying ? 'Guardar cambios' : 'Confirmar y aceptar'}
               </button>
             </>
           )}

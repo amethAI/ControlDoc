@@ -878,25 +878,52 @@ router.post('/dotacion/public/:token/validate', async (req: any, res: any) => {
     if (tandaErr || !tanda) return res.status(404).json({ error: 'Enlace no válido' });
     if (!tanda.activa) return res.status(410).json({ error: 'Enlace inactivo' });
 
-    const { data: employee, error: empErr } = await supabase
+    const cedulaRaw = cedula.trim();
+    const cedulaNorm = cedulaRaw.replace(/[-\s]/g, '');
+
+    let { data: employee, error: empErr } = await supabase
       .from('employees')
-      .select('id, full_name')
-      .eq('cedula', cedula.trim())
+      .select('id, full_name, cedula')
+      .eq('cedula', cedulaRaw)
       .eq('club_id', tanda.club_id)
       .eq('status', 'activo')
       .maybeSingle();
     if (empErr) return res.status(500).json({ error: 'Error al verificar' });
-    if (!employee) return res.status(404).json({ error: 'Cédula no encontrada en este club' });
+
+    if (!employee) {
+      const { data: allEmps } = await supabase
+        .from('employees')
+        .select('id, full_name, cedula')
+        .eq('club_id', tanda.club_id)
+        .eq('status', 'activo');
+      const match = (allEmps || []).find((e: any) => e.cedula.replace(/[-\s]/g, '') === cedulaNorm);
+      if (match) employee = match as any;
+    }
+    if (!employee) return res.status(404).json({ error: 'Cédula no encontrada en este club. Verificá el número.' });
 
     const { data: existing } = await supabase
       .from('dotacion_asignaciones')
-      .select('id')
+      .select('id, cantidad, cuotas, monto_total')
       .eq('tanda_id', tanda.id)
-      .eq('employee_id', employee.id)
+      .eq('employee_id', (employee as any).id)
       .maybeSingle();
-    if (existing) return res.status(409).json({ error: 'Ya respondiste para esta tanda' });
 
-    res.json({ full_name: employee.full_name });
+    if (existing) {
+      const { data: pagos } = await supabase
+        .from('dotacion_pagos')
+        .select('id')
+        .eq('asignacion_id', (existing as any).id)
+        .limit(1);
+      if (pagos && pagos.length > 0) {
+        return res.status(409).json({ error: 'Ya se aplicaron descuentos a tu selección, no podés modificarla.' });
+      }
+      return res.json({
+        full_name: (employee as any).full_name,
+        existing: { cantidad: (existing as any).cantidad, cuotas: (existing as any).cuotas },
+      });
+    }
+
+    res.json({ full_name: (employee as any).full_name });
   } catch (err: any) {
     res.status(500).json({ error: 'Error al validar cédula' });
   }
@@ -925,41 +952,71 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
     if (tandaErr || !tanda) return res.status(404).json({ error: 'Enlace no válido' });
     if (!tanda.activa) return res.status(410).json({ error: 'Este enlace ya no está activo' });
 
-    const { data: employee, error: empErr } = await supabase
+    const cedulaRaw = cedula.trim();
+    const cedulaNorm = cedulaRaw.replace(/[-\s]/g, '');
+
+    let { data: employee, error: empErr } = await supabase
       .from('employees')
-      .select('id, full_name')
-      .eq('cedula', cedula.trim())
+      .select('id, full_name, cedula')
+      .eq('cedula', cedulaRaw)
       .eq('club_id', tanda.club_id)
       .eq('status', 'activo')
       .maybeSingle();
     if (empErr) return res.status(500).json({ error: 'Error al verificar empleado' });
+
+    if (!employee) {
+      const { data: allEmps } = await supabase
+        .from('employees')
+        .select('id, full_name, cedula')
+        .eq('club_id', tanda.club_id)
+        .eq('status', 'activo');
+      const match = (allEmps || []).find((e: any) => e.cedula.replace(/[-\s]/g, '') === cedulaNorm);
+      if (match) employee = match as any;
+    }
     if (!employee) return res.status(404).json({ error: 'Cédula no encontrada en este club' });
 
     const { data: existing } = await supabase
       .from('dotacion_asignaciones')
       .select('id')
       .eq('tanda_id', tanda.id)
-      .eq('employee_id', employee.id)
+      .eq('employee_id', (employee as any).id)
       .maybeSingle();
-    if (existing) return res.status(409).json({ error: 'Ya registraste tu selección para esta tanda' });
 
     const monto_total = parseFloat((Number(cantidad) * Number(tanda.precio_por_camisa)).toFixed(2));
     const accepted_at = new Date().toISOString();
 
-    const { data: asignacion, error: insertErr } = await supabase
-      .from('dotacion_asignaciones')
-      .insert({
-        tanda_id: tanda.id,
-        employee_id: employee.id,
-        cantidad: Number(cantidad),
-        cuotas: Number(cuotas),
-        monto_total,
-        estado: 'pendiente',
-        accepted_at,
-      })
-      .select('id')
-      .single();
-    if (insertErr) throw insertErr;
+    let asignacionId: string;
+
+    if (existing) {
+      const { data: pagos } = await supabase
+        .from('dotacion_pagos')
+        .select('id')
+        .eq('asignacion_id', (existing as any).id)
+        .limit(1);
+      if (pagos && pagos.length > 0) {
+        return res.status(409).json({ error: 'Ya se aplicaron descuentos a tu selección, no podés modificarla.' });
+      }
+      await supabase.from('dotacion_asignaciones')
+        .update({ cantidad: Number(cantidad), cuotas: Number(cuotas), monto_total, accepted_at })
+        .eq('id', (existing as any).id);
+      asignacionId = (existing as any).id;
+    } else {
+      const { data: asignacion, error: insertErr } = await supabase
+        .from('dotacion_asignaciones')
+        .insert({
+          tanda_id: tanda.id,
+          employee_id: (employee as any).id,
+          cantidad: Number(cantidad),
+          cuotas: Number(cuotas),
+          monto_total,
+          estado: 'pendiente',
+          accepted_at,
+        })
+        .select('id')
+        .single();
+      if (insertErr) throw insertErr;
+      asignacionId = (asignacion as any).id;
+    }
 
     // Generate and upload authorization PDF (non-blocking — don't fail submit if PDF fails)
     try {
@@ -990,7 +1047,7 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
         contentType: 'application/pdf',
         upsert: true,
       });
-      await supabase.from('dotacion_asignaciones').update({ pdf_path: pdfPath }).eq('id', asignacion.id);
+      await supabase.from('dotacion_asignaciones').update({ pdf_path: pdfPath }).eq('id', asignacionId);
     } catch (_) { /* PDF generation is best-effort */ }
 
     res.status(201).json({
