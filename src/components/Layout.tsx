@@ -462,7 +462,7 @@ export default function Layout() {
         </header>
 
         {/* Page content */}
-        <main className="app-content flex-1 overflow-auto px-4 pb-4 sm:px-6 sm:pb-6 print:p-2 print:overflow-visible">
+        <main className="app-content flex-1 overflow-auto px-4 pb-4 sm:px-6 sm:pb-6 print:p-2 print:overflow-visible" style={{ background: '#F1F5F9' }}>
           {/* pt-wrapper: provides top spacing for all pages while letting Employees.tsx's sticky toolbar cancel it via -mt-4/sm:-mt-6 */}
           <div className="pt-4 sm:pt-6">
             <Outlet />
