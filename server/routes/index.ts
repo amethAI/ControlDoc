@@ -141,7 +141,7 @@ async function buildAuthPDF(data: {
       { t: ', se obliga a pagar ' },
       { t: `$${data.monto_total.toFixed(2)}`, bold: true, underline: true },
       { t: ' la suma correspondiente en concepto de compra de polo(s), mediante ' },
-      { t: `${data.cuotas === 1 ? '1 (un)' : '2 (dos)'} pagos de $${cuotaMonto} (quincenales)`, bold: true, underline: true },
+      { t: `${(['', 'un', 'dos', 'tres', 'cuatro', 'cinco'][data.cuotas] ? `${data.cuotas} (${['', 'un', 'dos', 'tres', 'cuatro', 'cinco'][data.cuotas]})` : String(data.cuotas))} pago${data.cuotas === 1 ? '' : 's'} de $${cuotaMonto} (quincenales)`, bold: true, underline: true },
       { t: '.' },
     ], y);
 
@@ -5803,6 +5803,16 @@ router.get('/dotacion/tandas/:id/reporte', isAuthenticated, async (req: any, res
       .filter((a: any) => a.estado !== 'pagado')
       .reduce((s: number, a: any) => s + Number(a.monto_total), 0);
 
+    // Count pagos per asignacion to know current cuota number
+    const asigIds = asigs.map((a: any) => a.id);
+    const { data: pagosData } = asigIds.length > 0
+      ? await supabase.from('dotacion_pagos').select('asignacion_id').in('asignacion_id', asigIds)
+      : { data: [] as any[] };
+    const pagosCountMap: Record<string, number> = {};
+    for (const p of (pagosData || [])) {
+      pagosCountMap[(p as any).asignacion_id] = (pagosCountMap[(p as any).asignacion_id] || 0) + 1;
+    }
+
     res.json({
       tanda: {
         descripcion: tanda.descripcion,
@@ -5825,6 +5835,7 @@ router.get('/dotacion/tandas/:id/reporte', isAuthenticated, async (req: any, res
         monto_total: a.monto_total,
         estado: a.estado,
         accepted_at: a.accepted_at,
+        pagos_count: pagosCountMap[a.id] || 0,
       })),
     });
   } catch (err: any) {

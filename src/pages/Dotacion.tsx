@@ -45,6 +45,7 @@ interface Asignacion {
   monto_total: number;
   estado: 'pendiente' | 'parcial' | 'pagado';
   accepted_at: string;
+  pagos_count: number;
 }
 
 interface TandaDetail {
@@ -67,15 +68,18 @@ const ESTADO_CONFIG = {
   pagado:    { label: 'Pagado',    color: 'bg-green-100 text-green-700', icon: Check },
 };
 
-function EstadoBadge({ estado, cuotas, asignacionId, onPago }: {
+function EstadoBadge({ estado, cuotas, pagosCount, asignacionId, onPago }: {
   estado: 'pendiente' | 'parcial' | 'pagado';
   cuotas: number;
+  pagosCount: number;
   asignacionId: string;
   onPago: (id: string) => void;
 }) {
   const cfg = ESTADO_CONFIG[estado];
   const Icon = cfg.icon;
-  const cuotaLabel = estado === 'parcial' ? 'Cuota 1 de 2' : estado === 'pendiente' && cuotas === 2 ? 'Cuota 1 de 2' : cfg.label;
+  const nextCuota = pagosCount + 1;
+  const cuotaLabel = estado === 'pagado' || cuotas <= 1 ? cfg.label : `Cuota ${nextCuota} de ${cuotas}`;
+  const buttonLabel = cuotas <= 1 ? 'Marcar descontado' : `Marcar cuota ${nextCuota}`;
 
   return (
     <div className="flex items-center gap-2">
@@ -88,7 +92,7 @@ function EstadoBadge({ estado, cuotas, asignacionId, onPago }: {
           onClick={() => onPago(asignacionId)}
           className="text-xs px-2 py-0.5 rounded border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors"
         >
-          {estado === 'parcial' ? 'Marcar cuota 2' : 'Marcar descontado'}
+          {buttonLabel}
         </button>
       )}
     </div>
@@ -274,6 +278,7 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
                         <EstadoBadge
                           estado={a.estado}
                           cuotas={a.cuotas}
+                          pagosCount={a.pagos_count ?? 0}
                           asignacionId={a.id}
                           onPago={applyingId ? () => {} : handlePago}
                         />
