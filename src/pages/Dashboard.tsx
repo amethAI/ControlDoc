@@ -13,8 +13,8 @@ const PIE_COLORS = ['#3B82F6', '#22C55E', '#FBBF24', '#EF4444', '#8B5CF6', '#EC4
 
 /* ── design tokens ── */
 const card = {
-  background: '#FFFFFF',
-  border: '1px solid rgba(0,0,0,.08)',
+  background: '#0D1528',
+  border: '1px solid rgba(255,255,255,.07)',
   borderRadius: 20,
 };
 
@@ -30,12 +30,12 @@ function Card({ children, className = '', style = {} }: {
 
 function CardHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="px-5 py-4" style={{ borderBottom: '1px solid rgba(0,0,0,.07)' }}>
-      <h3 className="text-[13px] font-semibold" style={{ color: '#111827', fontFamily: "'Outfit', sans-serif" }}>
+    <div className="px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,.06)' }}>
+      <h3 className="text-[13px] font-semibold" style={{ color: 'rgba(255,255,255,.9)', fontFamily: "'Outfit', sans-serif" }}>
         {title}
       </h3>
       {subtitle && (
-        <p className="mt-0.5 text-[11px]" style={{ color: '#6B7280' }}>{subtitle}</p>
+        <p className="mt-0.5 text-[11px]" style={{ color: 'rgba(255,255,255,.3)' }}>{subtitle}</p>
       )}
     </div>
   );
@@ -48,16 +48,16 @@ function ProjectionBar({ label, count, max }: { label: string; count: number; ma
   const barColor = isHigh ? '#EF4444' : pct > 35 ? '#FBBF24' : '#3B82F6';
   return (
     <div className="flex items-center gap-3 py-1.5">
-      <span className="w-8 text-right text-[10px] font-semibold shrink-0" style={{ color: '#9CA3AF' }}>
+      <span className="w-8 text-right text-[10px] font-semibold shrink-0" style={{ color: 'rgba(255,255,255,.3)' }}>
         {label}
       </span>
-      <div className="relative flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,.07)' }}>
+      <div className="relative flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,.06)' }}>
         <div
           className="h-full rounded-full transition-all duration-700"
           style={{ width: `${pct}%`, background: barColor }}
         />
       </div>
-      <span className="w-6 text-right text-[11px] font-bold shrink-0" style={{ color: '#374151' }}>
+      <span className="w-6 text-right text-[11px] font-bold shrink-0" style={{ color: 'rgba(255,255,255,.7)' }}>
         {count}
       </span>
     </div>
@@ -149,33 +149,33 @@ export default function Dashboard() {
       label: 'Documentos Vencidos',
       value: stats.expiredDocuments,
       icon: AlertTriangle,
-      from: '#FEF2F2', to: '#FEE2E2',
+      from: '#3D0A0A', to: '#1A0505',
       accent: '#EF4444',
-      glow: 'rgba(239,68,68,.12)',
+      glow: 'rgba(239,68,68,.25)',
     },
     {
       label: 'Próximos a Vencer',
       value: stats.expiringSoonDocuments,
       icon: FileWarning,
-      from: '#FFFBEB', to: '#FEF3C7',
-      accent: '#D97706',
-      glow: 'rgba(217,119,6,.1)',
+      from: '#3D2A00', to: '#1A1000',
+      accent: '#FBBF24',
+      glow: 'rgba(251,191,36,.2)',
     },
     {
       label: 'Doc. Incompleta',
       value: stats.incompleteEmployees,
       icon: FileWarning,
-      from: '#FFF7ED', to: '#FFEDD5',
-      accent: '#EA580C',
-      glow: 'rgba(234,88,12,.1)',
+      from: '#3D1400', to: '#1A0800',
+      accent: '#F97316',
+      glow: 'rgba(249,115,22,.2)',
     },
     {
       label: 'Subidos Hoy',
       value: stats.documentsUploadedToday,
       icon: UploadCloud,
-      from: '#F0FDF4', to: '#DCFCE7',
-      accent: '#16A34A',
-      glow: 'rgba(22,163,74,.1)',
+      from: '#002A1A', to: '#001008',
+      accent: '#22C55E',
+      glow: 'rgba(34,197,94,.2)',
     },
   ];
 
@@ -289,9 +289,9 @@ export default function Dashboard() {
                 onClick={() => setSelectedCountry(tab.value)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12px] font-semibold transition-all"
                 style={{
-                  background: active ? 'rgba(59,130,246,.1)' : 'rgba(0,0,0,.04)',
-                  border: active ? '1px solid rgba(59,130,246,.35)' : '1px solid rgba(0,0,0,.08)',
-                  color: active ? '#2563EB' : 'rgba(0,0,0,.5)',
+                  background: active ? 'rgba(59,130,246,.2)' : 'rgba(255,255,255,.04)',
+                  border: active ? '1px solid rgba(59,130,246,.4)' : '1px solid rgba(255,255,255,.07)',
+                  color: active ? '#60A5FA' : 'rgba(255,255,255,.45)',
                 }}
               >
                 <span>{tab.flag}</span>
@@ -310,23 +310,23 @@ export default function Dashboard() {
             className="relative overflow-hidden rounded-[20px] p-5 transition-transform duration-200 hover:-translate-y-0.5"
             style={{
               background: `linear-gradient(135deg, ${kpi.from} 0%, ${kpi.to} 100%)`,
-              border: `1px solid ${kpi.accent}20`,
-              boxShadow: `0 0 20px ${kpi.glow}`,
+              border: '1px solid rgba(255,255,255,.07)',
+              boxShadow: `0 0 30px ${kpi.glow}`,
             }}
           >
             <div
               className="mb-4 flex h-9 w-9 items-center justify-center rounded-xl"
-              style={{ background: `${kpi.accent}18`, border: `1px solid ${kpi.accent}35` }}
+              style={{ background: `${kpi.accent}22`, border: `1px solid ${kpi.accent}40` }}
             >
               <kpi.icon className="h-4 w-4" style={{ color: kpi.accent }} />
             </div>
             <p
               className="text-[36px] font-black leading-none"
-              style={{ fontFamily: "'Outfit', sans-serif", color: kpi.accent }}
+              style={{ fontFamily: "'Outfit', sans-serif", color: '#fff' }}
             >
               {kpi.value}
             </p>
-            <p className="mt-1.5 text-[11px] font-medium" style={{ color: 'rgba(0,0,0,.45)' }}>
+            <p className="mt-1.5 text-[11px] font-medium" style={{ color: 'rgba(255,255,255,.4)' }}>
               {kpi.label}
             </p>
           </div>
@@ -343,7 +343,7 @@ export default function Dashboard() {
           />
           <div className="p-5">
             {projections.length === 0 ? (
-              <p className="text-center py-8 text-[12px]" style={{ color: 'rgba(0,0,0,.3)' }}>
+              <p className="text-center py-8 text-[12px]" style={{ color: 'rgba(255,255,255,.25)' }}>
                 Sin proyecciones disponibles
               </p>
             ) : (
@@ -359,11 +359,11 @@ export default function Dashboard() {
         {/* Alertas */}
         <Card>
           <CardHeader title="Alertas Recientes" subtitle={`${alerts.length} documentos requieren atención`} />
-          <div className="divide-y" style={{ borderColor: 'rgba(0,0,0,.07)' }}>
+          <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,.05)' }}>
             {alerts.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-10">
                 <ShieldCheck className="h-8 w-8" style={{ color: '#22C55E' }} />
-                <p className="text-[12px]" style={{ color: 'rgba(0,0,0,.3)' }}>Sin alertas activas</p>
+                <p className="text-[12px]" style={{ color: 'rgba(255,255,255,.3)' }}>Sin alertas activas</p>
               </div>
             ) : (
               alerts.map(a => (
@@ -373,10 +373,10 @@ export default function Dashboard() {
                     style={{ background: a.severity === 'expired' ? '#EF4444' : '#FBBF24', marginTop: 6 }}
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[11.5px] font-medium" style={{ color: '#111827' }}>
+                    <p className="truncate text-[11.5px] font-medium" style={{ color: 'rgba(255,255,255,.8)' }}>
                       {a.employee_name}
                     </p>
-                    <p className="text-[10px]" style={{ color: '#6B7280' }}>
+                    <p className="text-[10px]" style={{ color: 'rgba(255,255,255,.35)' }}>
                       {a.type} · {a.date ? new Date(a.date).toLocaleDateString(locale, { day: '2-digit', month: 'short' }) : '—'}
                     </p>
                   </div>
@@ -403,7 +403,7 @@ export default function Dashboard() {
           <CardHeader title="Distribución por Club" />
           {stats.clubDistribution.length === 0 ? (
             <div className="flex items-center justify-center py-10">
-              <Building2 className="h-8 w-8" style={{ color: 'rgba(0,0,0,.2)' }} />
+              <Building2 className="h-8 w-8" style={{ color: 'rgba(255,255,255,.15)' }} />
             </div>
           ) : (
             <>
@@ -425,11 +425,11 @@ export default function Dashboard() {
                     </Pie>
                     <Tooltip
                       contentStyle={{
-                        background: '#FFFFFF',
-                        border: '1px solid rgba(0,0,0,.1)',
+                        background: '#111E38',
+                        border: '1px solid rgba(255,255,255,.1)',
                         borderRadius: 10,
                         fontSize: 11,
-                        color: '#111827',
+                        color: '#fff',
                       }}
                     />
                   </PieChart>
@@ -440,9 +440,9 @@ export default function Dashboard() {
                   <div key={c.name} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="h-2 w-2 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                      <span className="text-[11px] truncate max-w-[120px]" style={{ color: '#374151' }}>{c.name}</span>
+                      <span className="text-[11px] truncate max-w-[120px]" style={{ color: 'rgba(255,255,255,.55)' }}>{c.name}</span>
                     </div>
-                    <span className="text-[11px] font-semibold" style={{ color: '#111827' }}>{c.value}</span>
+                    <span className="text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,.7)' }}>{c.value}</span>
                   </div>
                 ))}
               </div>
@@ -453,10 +453,10 @@ export default function Dashboard() {
         {/* Compliance */}
         <Card className="lg:col-span-2">
           <CardHeader title="Compliance por Club" subtitle="% de empleados sin documentos vencidos" />
-          <div className="divide-y" style={{ borderColor: 'rgba(0,0,0,.06)' }}>
+          <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,.05)' }}>
             {compliance.length === 0 ? (
               <div className="flex items-center justify-center py-10">
-                <p className="text-[12px]" style={{ color: 'rgba(0,0,0,.3)' }}>Sin datos de compliance</p>
+                <p className="text-[12px]" style={{ color: 'rgba(255,255,255,.25)' }}>Sin datos de compliance</p>
               </div>
             ) : (
               compliance.slice(0, 7).map(c => {
@@ -464,11 +464,11 @@ export default function Dashboard() {
                 const barColor = pct >= 90 ? '#22C55E' : pct >= 70 ? '#FBBF24' : '#EF4444';
                 return (
                   <div key={c.name} className="flex items-center gap-4 px-5 py-3">
-                    <span className="w-32 truncate text-[12px] font-medium shrink-0" style={{ color: '#374151' }}>
+                    <span className="w-32 truncate text-[12px] font-medium shrink-0" style={{ color: 'rgba(255,255,255,.7)' }}>
                       {c.name}
                     </span>
                     <div className="flex-1">
-                      <div className="relative h-1.5 overflow-hidden rounded-full" style={{ background: 'rgba(0,0,0,.08)' }}>
+                      <div className="relative h-1.5 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,.07)' }}>
                         <div
                           className="h-full rounded-full transition-all duration-700"
                           style={{ width: `${pct}%`, background: barColor }}
@@ -478,7 +478,7 @@ export default function Dashboard() {
                     <span className="w-10 text-right text-[12px] font-bold shrink-0" style={{ color: barColor }}>
                       {pct}%
                     </span>
-                    <span className="w-16 text-right text-[10px] shrink-0" style={{ color: '#9CA3AF' }}>
+                    <span className="w-16 text-right text-[10px] shrink-0" style={{ color: 'rgba(255,255,255,.3)' }}>
                       {c.total - c.withExpired}/{c.total}
                     </span>
                   </div>
@@ -494,24 +494,24 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.7)', backdropFilter: 'blur(8px)' }}>
           <div
             className="w-full max-w-sm rounded-2xl p-6"
-            style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,.1)' }}
+            style={{ background: '#0D1528', border: '1px solid rgba(255,255,255,.1)' }}
           >
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-[15px] font-bold" style={{ fontFamily: "'Outfit', sans-serif", color: '#111827' }}>
+              <h3 className="text-[15px] font-bold text-white" style={{ fontFamily: "'Outfit', sans-serif" }}>
                 Renovar Contrato
               </h3>
               <button
                 onClick={() => setRenewModal({ show: false, employeeId: '', employeeName: '', newDate: '' })}
                 className="flex h-7 w-7 items-center justify-center rounded-lg"
-                style={{ color: 'rgba(0,0,0,.4)', background: 'rgba(0,0,0,.05)' }}
+                style={{ color: 'rgba(255,255,255,.3)', background: 'rgba(255,255,255,.05)' }}
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <p className="mb-4 text-[12px]" style={{ color: '#6B7280' }}>
-              Empleado: <span className="font-semibold" style={{ color: '#111827' }}>{renewModal.employeeName}</span>
+            <p className="mb-4 text-[12px]" style={{ color: 'rgba(255,255,255,.5)' }}>
+              Empleado: <span className="font-semibold text-white">{renewModal.employeeName}</span>
             </p>
-            <label className="block mb-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#374151' }}>
+            <label className="block mb-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,.4)' }}>
               Nueva fecha de vencimiento
             </label>
             <input
@@ -520,16 +520,16 @@ export default function Dashboard() {
               onChange={e => setRenewModal(m => ({ ...m, newDate: e.target.value }))}
               className="w-full rounded-xl px-4 py-2.5 text-[13px] font-medium outline-none"
               style={{
-                background: '#F9FAFB',
-                border: '1px solid rgba(0,0,0,.15)',
-                color: '#111827',
+                background: 'rgba(255,255,255,.05)',
+                border: '1px solid rgba(255,255,255,.1)',
+                color: '#fff',
               }}
             />
             <div className="mt-5 flex gap-2">
               <button
                 onClick={() => setRenewModal({ show: false, employeeId: '', employeeName: '', newDate: '' })}
                 className="flex-1 rounded-xl py-2.5 text-[12px] font-semibold"
-                style={{ background: 'rgba(0,0,0,.05)', color: '#6B7280' }}
+                style={{ background: 'rgba(255,255,255,.06)', color: 'rgba(255,255,255,.5)' }}
               >
                 Cancelar
               </button>
