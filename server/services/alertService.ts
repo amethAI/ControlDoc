@@ -934,8 +934,10 @@ export async function sendMonthlyReport() {
       .eq('status', 'activo');
     const { data: allExpiredDocs } = await supabase
       .from('employee_documents')
-      .select('employee_id, employees!inner(club_id, status)')
+      .select('employee_id, document_types!inner(has_expiry), employees!inner(club_id, status)')
       .eq('is_current', 1)
+      .eq('document_types.has_expiry', 1)
+      .not('expiry_date', 'is', null)
       .lt('expiry_date', today.toISOString().split('T')[0])
       .eq('employees.status', 'activo');
 
