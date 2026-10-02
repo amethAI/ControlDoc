@@ -281,6 +281,7 @@ export default function Dashboard() {
             { label: 'Panamá', value: 'Panama', flag: '🇵🇦' },
             { label: 'Costa Rica', value: 'Costa Rica', flag: '🇨🇷' },
             { label: 'Guatemala', value: 'Guatemala', flag: '🇬🇹' },
+            { label: 'Rep. Dominicana', value: 'República Dominicana', flag: '🇩🇴' },
           ].map(tab => {
             const active = selectedCountry === tab.value;
             return (
