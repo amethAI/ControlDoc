@@ -1,5 +1,6 @@
 import { supabase } from '../db.ts';
 import { getClubConfig } from '../lib/clubConfig.ts';
+import { recipientIdsForCountry } from '../lib/integrityChecks.ts';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import dns from 'dns';
@@ -652,8 +653,7 @@ export async function sendLoginAlert(
   }
 ) {
   try {
-    const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'auxcontablepanama@redvolutionlatam.com';
-    const toEmails = [SUPER_ADMIN_EMAIL];
+    const toEmails = [superAdminEmail()];
 
     let clubName: string | null = null;
     let timezone = process.env.APP_DEFAULT_TIMEZONE || 'America/Panama';
@@ -705,45 +705,46 @@ export async function sendLoginAlert(
       </div>
     `;
 
-    if (process.env.BREVO_API_KEY) {
-      const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: { 'accept': 'application/json', 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          sender: { name: 'ControlDoc PSMT', email: process.env.EMAIL_USER || 'alertaspsmt@gmail.com' },
-          to: toEmails.map(e => ({ email: e })),
-          subject,
-          htmlContent: html
-        })
-      });
-      if (!brevoRes.ok) {
-        const errBody = await brevoRes.text().catch(() => '');
-        console.error(`[LOGIN ALERT] Brevo error ${brevoRes.status}:`, errBody);
-      } else {
-        console.log(`[LOGIN ALERT] Enviado a ${toEmails.join(', ')} (${type})`);
-      }
-    } else if (process.env.RESEND_API_KEY) {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      await resend.emails.send({ from: process.env.EMAIL_FROM || 'ControlDoc PSMT <onboarding@resend.dev>', to: toEmails, subject, html });
-    } else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-      const host = process.env.EMAIL_HOST || 'smtp.office365.com';
-      const isGmail = host.includes('gmail.com');
-      const cfg: any = { auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }, connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 20000, family: 4 };
-      if (isGmail) { cfg.service = 'gmail'; cfg.host = 'smtp.gmail.com'; cfg.port = 465; cfg.secure = true; }
-      else { const port = parseInt(process.env.EMAIL_PORT || '587'); cfg.host = host; cfg.port = port; cfg.secure = port === 465; cfg.tls = { rejectUnauthorized: true }; }
-      const transporter = nodemailer.createTransport(cfg);
-      await transporter.sendMail({ from: process.env.EMAIL_FROM || `"ControlDoc PSMT" <${process.env.EMAIL_USER}>`, to: toEmails.join(', '), subject, html });
-    }
+    await sendSimpleEmail(toEmails, subject, html, 'LOGIN ALERT');
   } catch (err) {
     console.error('[LOGIN ALERT] Error al enviar alerta de login:', err);
   }
 }
 
-function countryToSlug(country: string): string {
-  return country.toLowerCase()
-    .replace(/[áà]/g, 'a').replace(/[éè]/g, 'e').replace(/[íì]/g, 'i')
-    .replace(/[óò]/g, 'o').replace(/[úùü]/g, 'u')
-    .replace(/\s+/g, '-');
+export function superAdminEmail(): string {
+  return process.env.SUPER_ADMIN_EMAIL || 'auxcontablepanama@redvolutionlatam.com';
+}
+
+export async function sendSimpleEmail(toEmails: string[], subject: string, html: string, logTag = 'EMAIL') {
+  if (process.env.BREVO_API_KEY) {
+    const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'accept': 'application/json', 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sender: { name: 'ControlDoc PSMT', email: process.env.EMAIL_USER || 'alertaspsmt@gmail.com' },
+        to: toEmails.map(e => ({ email: e })),
+        subject,
+        htmlContent: html
+      })
+    });
+    if (!brevoRes.ok) {
+      const errBody = await brevoRes.text().catch(() => '');
+      console.error(`[${logTag}] Brevo error ${brevoRes.status}:`, errBody);
+    } else {
+      console.log(`[${logTag}] Enviado a ${toEmails.join(', ')}`);
+    }
+  } else if (process.env.RESEND_API_KEY) {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({ from: process.env.EMAIL_FROM || 'ControlDoc PSMT <onboarding@resend.dev>', to: toEmails, subject, html });
+  } else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    const host = process.env.EMAIL_HOST || 'smtp.office365.com';
+    const isGmail = host.includes('gmail.com');
+    const cfg: any = { auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }, connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 20000, family: 4 };
+    if (isGmail) { cfg.service = 'gmail'; cfg.host = 'smtp.gmail.com'; cfg.port = 465; cfg.secure = true; }
+    else { const port = parseInt(process.env.EMAIL_PORT || '587'); cfg.host = host; cfg.port = port; cfg.secure = port === 465; cfg.tls = { rejectUnauthorized: true }; }
+    const transporter = nodemailer.createTransport(cfg);
+    await transporter.sendMail({ from: process.env.EMAIL_FROM || `"ControlDoc PSMT" <${process.env.EMAIL_USER}>`, to: toEmails.join(', '), subject, html });
+  }
 }
 
 async function sendMonthlyReportForCountry(
@@ -889,8 +890,7 @@ async function sendMonthlyReportForCountry(
   `;
 
   // Recipients: country slug + global/hr for Panama only
-  const slug = countryToSlug(country);
-  const recipientIds = country === 'Panama' ? [slug, 'global', 'hr'] : [slug];
+  const recipientIds = recipientIdsForCountry(country);
   const { data: recipients } = await supabase.from('alert_recipients').select('email').in('club_id', recipientIds);
   if (!recipients?.length) {
     console.log(`[MONTHLY] Sin destinatarios para ${country}, omitiendo.`);

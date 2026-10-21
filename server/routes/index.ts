@@ -5677,11 +5677,15 @@ router.post('/dotacion/asignaciones/:id/pago', isAuthenticated, async (req: any,
 
     const montoCuota = parseFloat((Number(asig.monto_total) / asig.cuotas).toFixed(2));
 
-    await supabase.from('dotacion_pagos').insert({
+    const { error: insErr } = await supabase.from('dotacion_pagos').insert({
       asignacion_id: id,
       monto: montoCuota,
       numero_cuota: nextCuota,
     });
+    if (insErr) {
+      if (insErr.code === '23505') return res.status(409).json({ error: 'Esta cuota ya fue registrada. Recargá la página.' });
+      throw insErr;
+    }
 
     const nuevoEstado = nextCuota === asig.cuotas ? 'pagado' : 'parcial';
     const { data: updated, error: updErr } = await supabase
@@ -5760,11 +5764,22 @@ router.post('/dotacion/tandas/:id/pago-masivo', isAuthenticated, async (req: any
       return res.json({ success: true, procesadas: 0, message: 'Todas las cuotas ya fueron aplicadas' });
     }
 
-    await supabase.from('dotacion_pagos').insert(inserts);
+    // Un solo INSERT es atómico: si falla no quedó ningún pago y no se tocan estados
+    const { error: insErr } = await supabase.from('dotacion_pagos').insert(inserts);
+    if (insErr) {
+      if (insErr.code === '23505') return res.status(409).json({ error: 'Otro usuario ya aplicó estas cuotas. Recargá la página.' });
+      throw insErr;
+    }
 
     // Update estados one by one (no bulk update with different values in PostgREST)
+    const fallidas: string[] = [];
     for (const u of updates) {
-      await supabase.from('dotacion_asignaciones').update({ estado: u.estado }).eq('id', u.id);
+      const { error: updErr } = await supabase.from('dotacion_asignaciones').update({ estado: u.estado }).eq('id', u.id);
+      if (updErr) fallidas.push(u.id);
+    }
+    if (fallidas.length > 0) {
+      console.error('[DOTACION] pago-masivo: pagos insertados pero estado sin actualizar en', fallidas);
+      return res.status(500).json({ error: `Se registraron los pagos pero ${fallidas.length} estado(s) no se actualizaron. Avisá a soporte.` });
     }
 
     res.json({ success: true, procesadas: inserts.length });

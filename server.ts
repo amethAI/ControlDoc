@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import apiRouter from './server/routes/index.ts';
 import cron from 'node-cron';
 import { sendExpirationAlerts, sendMonthlyReport, sendDotacionQuincenaReport } from './server/services/alertService.ts';
+import { runCronJob, runIntegrityCheck } from './server/services/opsMonitor.ts';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -453,20 +454,13 @@ async function startServer() {
 
   // Configurar tarea programada (Cron Job)
   // Se ejecuta todos los días a las 8:00 AM
-  cron.schedule('0 8 * * *', async () => {
-    console.log('[CRON] Ejecutando alertas de vencimiento...');
-    try {
-      await Promise.race([
-        sendExpirationAlerts(false),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout: alertas tardaron más de 60s')), 60_000)
-        )
-      ]);
-      console.log('[CRON] Alertas enviadas correctamente');
-    } catch (err) {
-      console.error('[CRON] Error al enviar alertas:', err);
-    }
-  });
+  cron.schedule('0 8 * * *', () =>
+    runCronJob('Alertas de vencimiento', () => sendExpirationAlerts(false), 60_000, ['No hay alertas pendientes hoy.'])
+  );
+
+  cron.schedule('30 7 * * *', () =>
+    runCronJob('Chequeo de integridad', runIntegrityCheck, 60_000)
+  );
 
   // Self-ping cada 10 minutos para evitar cold starts en Render
   if (process.env.RENDER_EXTERNAL_URL) {
@@ -479,36 +473,14 @@ async function startServer() {
   }
 
   // Reporte ejecutivo mensual — 1° de cada mes a las 7:00 AM
-  cron.schedule('0 7 1 * *', async () => {
-    console.log('[CRON] Generando reporte mensual...');
-    try {
-      await Promise.race([
-        sendMonthlyReport(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout: reporte mensual tardó más de 120s')), 120_000)
-        )
-      ]);
-      console.log('[CRON] Reporte mensual enviado');
-    } catch (err) {
-      console.error('[CRON] Error al enviar reporte mensual:', err);
-    }
-  });
+  cron.schedule('0 7 1 * *', () =>
+    runCronJob('Reporte mensual', sendMonthlyReport, 120_000)
+  );
 
   // Reporte dotación quincena — días 15 y 30 de cada mes a las 8:00 AM
-  cron.schedule('0 8 15,30 * *', async () => {
-    console.log('[CRON] Enviando reporte de dotación quincena...');
-    try {
-      await Promise.race([
-        sendDotacionQuincenaReport(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout: reporte dotación tardó más de 60s')), 60_000)
-        )
-      ]);
-      console.log('[CRON] Reporte dotación quincena enviado');
-    } catch (err) {
-      console.error('[CRON] Error al enviar reporte dotación:', err);
-    }
-  });
+  cron.schedule('0 8 15,30 * *', () =>
+    runCronJob('Reporte dotación quincena', sendDotacionQuincenaReport, 60_000)
+  );
 
   // Global Express error handler — evita que errores no capturados en rutas devuelvan HTML
   app.use((err: any, _req: any, res: any, _next: any) => {
