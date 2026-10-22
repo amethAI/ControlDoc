@@ -1,6 +1,7 @@
 import { supabase } from '../db.ts';
 import { getClubConfig } from '../lib/clubConfig.ts';
 import { recipientIdsForCountry } from '../lib/integrityChecks.ts';
+import { isCarneAlertDue, countryRecipientId } from '../lib/expiryRules.ts';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import dns from 'dns';
@@ -103,7 +104,7 @@ export async function sendExpirationAlerts(isTest = false) {
     // Fetch active employees to check contract and probationary periods
     const { data: activeEmployees, error: empError } = await supabase
       .from('employees')
-      .select('id, full_name, club_id, contract_start, contract_end, contract_type')
+      .select('id, full_name, club_id, contract_start, contract_end, contract_type, cr_carne_vencimiento')
       .eq('status', 'activo');
 
     if (empError) throw empError;
@@ -172,6 +173,10 @@ export async function sendExpirationAlerts(isTest = false) {
           if (probatorioEnd >= fifteenDaysAgo && probatorioEnd <= targetThreshold) {
             addAlert(clubId, clubName, emp.id, emp.full_name, 'Terminación de Periodo Probatorio', probatorioEnd.toISOString().split('T')[0]);
           }
+        }
+
+        if (isCarneAlertDue(emp.cr_carne_vencimiento, targetThreshold.toISOString().split('T')[0])) {
+          addAlert(clubId, clubName, emp.id, emp.full_name, 'Vencimiento de Carné', emp.cr_carne_vencimiento.slice(0, 10));
         }
       }
     }
@@ -295,12 +300,10 @@ export async function sendExpirationAlerts(isTest = false) {
         .select('email')
         .eq('club_id', 'global');
 
-      const clubCountry = clubCountryMap.get(clubId);
-      const countryVirtualId = clubCountry === 'Costa Rica' ? 'costa-rica' : 'panama';
-      const { data: countryRecipients } = await supabase
-        .from('alert_recipients')
-        .select('email')
-        .eq('club_id', countryVirtualId);
+      const countryVirtualId = countryRecipientId(clubCountryMap.get(clubId));
+      const { data: countryRecipients } = countryVirtualId
+        ? await supabase.from('alert_recipients').select('email').eq('club_id', countryVirtualId)
+        : { data: [] };
 
       // global recipients are excluded from per-club emails to avoid cross-country noise;
       // they receive the monthly report and HR summary instead.
