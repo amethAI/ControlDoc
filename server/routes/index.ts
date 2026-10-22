@@ -5,6 +5,7 @@ import { getClubConfig, invalidateClubConfig } from '../lib/clubConfig.ts';
 import { getPersonalCombinedIds, getDocTypeIdBySlug } from '../lib/docTypes.ts';
 import { probationEnd, probationMonths } from '../../src/lib/checklistRules.ts';
 import { normalizeCedula } from '../lib/cedula.ts';
+import { carneStatus } from '../lib/expiryRules.ts';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -3855,7 +3856,26 @@ router.get('/dashboard', canViewData, async (req, res) => {
 
     // 2. Expired Documents
     const todayStr = new Date().toISOString().split('T')[0];
-    
+
+    // Carné / título INA de Costa Rica: vive en employees, no en employee_documents
+    const carneThreshold = new Date();
+    carneThreshold.setDate(carneThreshold.getDate() + 30);
+    const carneThresholdStr = carneThreshold.toISOString().split('T')[0];
+    let carneQuery = supabase
+      .from('employees')
+      .select('id, full_name, cr_carne_vencimiento')
+      .eq('status', 'activo')
+      .not('cr_carne_vencimiento', 'is', null)
+      .lte('cr_carne_vencimiento', carneThresholdStr);
+    carneQuery = applyFilter(carneQuery);
+    const { data: carneData } = await carneQuery;
+    const carneItems = (carneData || []).flatMap(e => {
+      const status = carneStatus(e.cr_carne_vencimiento, todayStr, carneThresholdStr);
+      return status
+        ? [{ id: `carne-${e.id}`, employee_id: e.id, employee_name: e.full_name, type: 'Carné / Título INA', date: e.cr_carne_vencimiento, status }]
+        : [];
+    });
+
     // Fetch expired employee documents
     let expiredDocsQuery = supabase
       .from('employee_documents')
@@ -3919,7 +3939,8 @@ router.get('/dashboard', canViewData, async (req, res) => {
         type: 'Contrato',
         date: e.contract_end,
         status: 'expired'
-      }))
+      })),
+      ...carneItems.filter(i => i.status === 'expired'),
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
     const expiredDocuments = expiredList.length;
@@ -3991,7 +4012,8 @@ router.get('/dashboard', canViewData, async (req, res) => {
         type: 'Contrato',
         date: e.contract_end,
         status: 'expiring'
-      }))
+      })),
+      ...carneItems.filter(i => i.status === 'expiring'),
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
     const expiringSoonDocuments = expiringList.length;

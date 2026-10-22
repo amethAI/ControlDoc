@@ -378,7 +378,7 @@ export default function Dashboard() {
                       {a.employee_name}
                     </p>
                     <p className="text-[10px]" style={{ color: 'rgba(255,255,255,.35)' }}>
-                      {a.type} · {a.date ? new Date(a.date).toLocaleDateString(locale, { day: '2-digit', month: 'short' }) : '—'}
+                      {a.type} · {a.date ? new Date(`${a.date.slice(0, 10)}T12:00:00`).toLocaleDateString(locale, { day: '2-digit', month: 'short' }) : '—'}
                     </p>
                   </div>
                   {a.severity === 'expired' && a.type?.toLowerCase().includes('contrato') && (
