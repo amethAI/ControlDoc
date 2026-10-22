@@ -6,6 +6,7 @@ import { getPersonalCombinedIds, getDocTypeIdBySlug } from '../lib/docTypes.ts';
 import { probationEnd, probationMonths } from '../../src/lib/checklistRules.ts';
 import { normalizeCedula } from '../lib/cedula.ts';
 import { carneStatus } from '../lib/expiryRules.ts';
+import { findIncompleteEmployees } from '../lib/compliance.ts';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -4018,10 +4019,38 @@ router.get('/dashboard', canViewData, async (req, res) => {
     
     const expiringSoonDocuments = expiringList.length;
 
-    // 4. Incomplete Employees (Simplified for Supabase without complex SQL)
-    // For now, we'll just return 0 to avoid complex RPC calls, 
-    // in a real app you'd create a Postgres function for this
-    const incompleteEmployees = 0;
+    // 4. Incomplete Employees: activos a los que les falta algún tipo obligatorio de su país
+    let scopedEmpQuery = supabase.from('employees').select('id, clubs(country_code)').eq('status', 'activo');
+    scopedEmpQuery = applyFilter(scopedEmpQuery);
+    const [{ data: scopedEmps, error: scopedErr }, { data: reqTypes, error: reqErr }] = await Promise.all([
+      scopedEmpQuery,
+      supabase.from('document_types').select('id, country_code').eq('is_active', 1).eq('is_required', 1).eq('is_hidden', 0),
+    ]);
+    if (scopedErr) throw scopedErr;
+    if (reqErr) throw reqErr;
+
+    const empIdSet = new Set((scopedEmps || []).map((e: any) => e.id));
+    const currentDocs: { employee_id: string; document_type_id: string }[] = [];
+    const requiredIds = (reqTypes || []).map(t => t.id);
+    // PostgREST corta en 1000 filas: sin paginar, faltarían documentos y saldrían incompletos falsos
+    for (let from = 0; requiredIds.length > 0 && empIdSet.size > 0; from += 1000) {
+      const { data: page, error: pageErr } = await supabase
+        .from('employee_documents')
+        .select('employee_id, document_type_id')
+        .eq('is_current', 1)
+        .in('document_type_id', requiredIds)
+        .order('id')
+        .range(from, from + 999);
+      if (pageErr) throw pageErr;
+      currentDocs.push(...(page || []).filter(d => empIdSet.has(d.employee_id)));
+      if (!page || page.length < 1000) break;
+    }
+
+    const incompleteEmployees = findIncompleteEmployees(
+      (scopedEmps || []).map((e: any) => ({ id: e.id, country_code: e.clubs?.country_code ?? null })),
+      reqTypes || [],
+      currentDocs,
+    ).length;
 
     // 5. Uploaded Today
     const needsFilter = !!club_id || allowedClubIds !== null;
