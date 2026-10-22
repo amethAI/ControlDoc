@@ -5,6 +5,17 @@ import { useAuth, useLocale } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { probationEnd, probationStatus, contractTerm, type ProbationStatus } from '../lib/checklistRules';
+
+const PROBATION_CLASS: Record<ProbationStatus, string> = {
+  'cumplido': 'bg-slate-100 text-slate-500',
+  'por-terminar': 'bg-amber-100 text-amber-800 font-medium',
+  'en-curso': 'bg-emerald-100 text-emerald-800 font-medium',
+};
+const PROBATION_PDF: Record<ProbationStatus, string> = { 'cumplido': '', 'por-terminar': 'yellow', 'en-curso': 'green' };
+
+const isCREmployee = (emp?: { country_code?: string; club_country?: string | null }) =>
+  emp?.country_code === 'CR' || emp?.club_country === 'Costa Rica';
 
 interface ChecklistEmployee {
   id: string;
@@ -338,7 +349,52 @@ export default function Expirations() {
         </tr>`;
       }).join('');
 
-    const sections = groups.map(([clubName, emps], idx) => `
+    const crTableRows = (emps: ChecklistEmployee[]) =>
+      emps.map((emp, i) => {
+        const prob   = probationEnd(getVal(emp, 'contract_start'));
+        const status = probationStatus(prob);
+        const term   = contractTerm(getVal(emp, 'contract_end'), getVal(emp, 'contract_type'));
+        const carne  = getVal(emp, 'cr_carne_vencimiento');
+        const titulo = getVal(emp, 'cr_titulo_fecha');
+        return `<tr>
+          <td class="num">${i + 1}</td>
+          <td class="name">${getVal(emp, 'full_name')}</td>
+          <td>${getVal(emp, 'cedula')}</td>
+          <td class="center">${getVal(emp, 'cr_carta_ingreso')}</td>
+          <td class="center">${getVal(emp, 'cr_carta_induccion')}</td>
+          <td class="center">${formatDate(getVal(emp, 'contract_start'))}</td>
+          <td class="center ${status ? PROBATION_PDF[status] : ''}">${formatDate(prob)}</td>
+          <td class="center ${term === 'Indefinido' ? '' : getPDFColorClass(term)}">${term === 'Indefinido' ? term : formatDate(term)}</td>
+          <td class="center">${formatDate(getVal(emp, 'cr_ccss_date'))}</td>
+          <td class="center">${formatDate(getVal(emp, 'cr_ins_date'))}</td>
+          <td class="center ${getPDFColorClass(carne)}">${formatDate(carne)}</td>
+          <td class="center ${getPDFColorClass(titulo)}">${formatDate(titulo)}</td>
+        </tr>`;
+      }).join('');
+
+    const PA_HEAD = `
+            <th>CARTA DE<br>INGRESO</th>
+            <th>CARNET<br>VERDE</th>
+            <th>CARNET<br>BLANCO</th>
+            <th>FECHA<br>AVISO CSS</th>
+            <th>INICIO<br>CONTRATO</th>
+            <th>FIN PERÍODO<br>PROBATORIO</th>
+            <th>FIN<br>CONTRATO</th>
+            <th>TIPO<br>CONTRATO</th>`;
+    const CR_HEAD = `
+            <th>CARTA DE<br>INGRESO</th>
+            <th>CARTA DE<br>INDUCCIÓN</th>
+            <th>INICIO<br>CONTRATO</th>
+            <th>FIN PERÍODO<br>DE PRUEBA</th>
+            <th>TÉRMINO<br>CONTRATO</th>
+            <th>FECHA<br>CCSS</th>
+            <th>FECHA<br>INS</th>
+            <th>VENC.<br>CARNÉ</th>
+            <th>TÍTULO<br>/ INA</th>`;
+
+    const sections = groups.map(([clubName, emps], idx) => {
+      const isCR = isCREmployee(emps[0]);
+      return `
       ${idx > 0 ? '<div class="page-break"></div>' : ''}
       <div class="logo-bar">
         <span class="logo-red">RED</span><span class="logo-gray">VOLUTION</span>
@@ -351,20 +407,14 @@ export default function Expirations() {
             <th style="width:28px">No.</th>
             <th style="text-align:left;min-width:130px">NOMBRE</th>
             <th style="min-width:80px">CÉDULA</th>
-            <th>CARTA DE<br>INGRESO</th>
-            <th>CARNET<br>VERDE</th>
-            <th>CARNET<br>BLANCO</th>
-            <th>FECHA<br>AVISO CSS</th>
-            <th>INICIO<br>CONTRATO</th>
-            <th>FIN PERÍODO<br>PROBATORIO</th>
-            <th>FIN<br>CONTRATO</th>
-            <th>TIPO<br>CONTRATO</th>
+            ${isCR ? CR_HEAD : PA_HEAD}
           </tr>
         </thead>
-        <tbody>${tableRows(emps)}</tbody>
+        <tbody>${isCR ? crTableRows(emps) : tableRows(emps)}</tbody>
       </table>
       <p class="footer">ControlDoc — REDVOLUTION · ${emps.length} empleado(s) · ${clubName}</p>
-    `).join('');
+    `;
+    }).join('');
 
     const html = `<!DOCTYPE html><html lang="es"><head>
       <meta charset="UTF-8">
@@ -407,8 +457,10 @@ export default function Expirations() {
 
   const exportToExcel = () => {
     const allData = [...filteredEmployees, ...manualRows];
-    
-    const dataToExport = allData.map((emp, index) => ({
+    const crData = allData.filter(e => isCREmployee(e));
+    const paData = allData.filter(e => !isCREmployee(e));
+
+    const paRows = paData.map((emp, index) => ({
       'No.': index + 1,
       'NOMBRE': getVal(emp, 'full_name'),
       'CÉDULA': getVal(emp, 'cedula'),
@@ -423,9 +475,29 @@ export default function Expirations() {
       'TIPO DE CONTRATOS': getVal(emp, 'contract_type')
     }));
 
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const crRows = crData.map((emp, index) => {
+      const term = contractTerm(getVal(emp, 'contract_end'), getVal(emp, 'contract_type'));
+      return {
+        'No.': index + 1,
+        'NOMBRE': getVal(emp, 'full_name'),
+        'CÉDULA': getVal(emp, 'cedula'),
+        'CLUB': emp.club_name,
+        'CARTA DE INGRESO': getVal(emp, 'cr_carta_ingreso'),
+        'CARTA DE INDUCCIÓN': getVal(emp, 'cr_carta_induccion'),
+        'FECHA DE INICIO DE CONTRATO': formatDate(getVal(emp, 'contract_start')),
+        'FIN PERÍODO DE PRUEBA': formatDate(probationEnd(getVal(emp, 'contract_start'))),
+        'TÉRMINO DE CONTRATO': term === 'Indefinido' ? term : formatDate(term),
+        'FECHA CCSS': formatDate(getVal(emp, 'cr_ccss_date')),
+        'FECHA INS': formatDate(getVal(emp, 'cr_ins_date')),
+        'VENC. CARNÉ': formatDate(getVal(emp, 'cr_carne_vencimiento')),
+        'TÍTULO / INA': formatDate(getVal(emp, 'cr_titulo_fecha')),
+      };
+    });
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Checklist');
+    if (paRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(paRows), 'Checklist');
+    if (crRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(crRows), paRows.length ? 'Costa Rica' : 'Checklist');
+    if (!paRows.length && !crRows.length) { toast.error('No hay datos para exportar'); return; }
     
     const clubName = clubFilter === 'all' ? 'Todos' : clubs.find(c => c.id === clubFilter)?.name || '';
     XLSX.writeFile(wb, `Checklist_${clubName}_${new Date().toISOString().split('T')[0]}.xlsx`);
@@ -536,8 +608,8 @@ export default function Expirations() {
               </tbody>
             ) : (
               Object.entries(groupedEmployees).map(([clubName, employeesInClub]) => {
-                const isCRClub = employeesInClub[0]?.country_code === 'CR' || employeesInClub[0]?.club_country === 'Costa Rica';
-                const colCount = isCRClub ? 9 : 11;
+                const isCRClub = isCREmployee(employeesInClub[0]);
+                const colCount = isCRClub ? 12 : 11;
                 const dateCell = (emp: ChecklistEmployee, field: string) => (
                   <input
                     disabled={!canEdit}
@@ -574,6 +646,9 @@ export default function Expirations() {
                           <>
                             <th className="px-4 py-3 border-r border-slate-300">CARTA DE<br/>INGRESO</th>
                             <th className="px-4 py-3 border-r border-slate-300">CARTA DE<br/>INDUCCIÓN</th>
+                            <th className="px-4 py-3 border-r border-slate-300">INICIO DE<br/>CONTRATO</th>
+                            <th className="px-4 py-3 border-r border-slate-300">FIN PERÍODO<br/>DE PRUEBA</th>
+                            <th className="px-4 py-3 border-r border-slate-300">TÉRMINO DE<br/>CONTRATO</th>
                             <th className="px-4 py-3 border-r border-slate-300">FECHA<br/>CCSS</th>
                             <th className="px-4 py-3 border-r border-slate-300">FECHA<br/>INS</th>
                             <th className="px-4 py-3 border-r border-slate-300">VENC.<br/>CARNÉ</th>
@@ -608,15 +683,30 @@ export default function Expirations() {
                             <input disabled={!canEdit} type="text" value={getVal(emp, 'cedula')}
                               onChange={e => handleEdit(emp.id, 'cedula', e.target.value)}
                               onBlur={e => handleSave(emp.id, 'cedula', e.target.value)}
-                              className="w-20 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Cédula..."
+                              className="w-28 bg-transparent border-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 text-xs disabled:opacity-75 disabled:cursor-not-allowed" placeholder="Cédula..."
                             />
                           </td>
                           {isCRClub ? (
                             <>
                               <td className="px-2 py-2 border-r border-slate-200">{siNoCell(emp, 'cr_carta_ingreso')}</td>
                               <td className="px-2 py-2 border-r border-slate-200">{siNoCell(emp, 'cr_carta_induccion')}</td>
-                              <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'cr_ccss_date'))}`}>{dateCell(emp, 'cr_ccss_date')}</td>
-                              <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'cr_ins_date'))}`}>{dateCell(emp, 'cr_ins_date')}</td>
+                              <td className="px-2 py-2 border-r border-slate-200">{dateCell(emp, 'contract_start')}</td>
+                              {(() => {
+                                const end = probationEnd(getVal(emp, 'contract_start'));
+                                const status = probationStatus(end);
+                                return (
+                                  <td className={`px-4 py-3 border-r border-slate-200 ${status ? PROBATION_CLASS[status] : ''}`}>
+                                    {formatDate(end)}
+                                  </td>
+                                );
+                              })()}
+                              {contractTerm(getVal(emp, 'contract_end'), getVal(emp, 'contract_type')) === 'Indefinido' ? (
+                                <td className="px-4 py-3 border-r border-slate-200 bg-slate-100 text-slate-600 font-medium">Indefinido</td>
+                              ) : (
+                                <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'contract_end'))}`}>{dateCell(emp, 'contract_end')}</td>
+                              )}
+                              <td className="px-2 py-2 border-r border-slate-200 text-slate-500">{dateCell(emp, 'cr_ccss_date')}</td>
+                              <td className="px-2 py-2 border-r border-slate-200 text-slate-500">{dateCell(emp, 'cr_ins_date')}</td>
                               <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'cr_carne_vencimiento'))}`}>{dateCell(emp, 'cr_carne_vencimiento')}</td>
                               <td className={`px-2 py-2 border-r border-slate-200 ${getCellColorClass(getVal(emp, 'cr_titulo_fecha'))}`}>{dateCell(emp, 'cr_titulo_fecha')}</td>
                             </>

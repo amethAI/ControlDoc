@@ -3,6 +3,13 @@ import { apiFetch } from '../lib/api';
 import { useAuth, useLocale } from '../context/AuthContext';
 import { Download, Search, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { probationEnd, probationStatus, contractTerm, type ProbationStatus } from '../lib/checklistRules';
+
+const PROBATION_CLASS: Record<ProbationStatus, string> = {
+  'cumplido': 'bg-slate-100 text-slate-500',
+  'por-terminar': 'bg-yellow-100 text-yellow-700 font-semibold',
+  'en-curso': 'bg-green-100 text-green-700 font-semibold',
+};
 
 interface EmployeeChecklist {
   id: string;
@@ -190,6 +197,12 @@ export default function ChecklistContratos() {
           'CÉDULA': getVal(emp, 'cedula'),
           'CARTA DE INGRESO': getVal(emp, 'cr_carta_ingreso'),
           'CARTA DE INDUCCIÓN': getVal(emp, 'cr_carta_induccion'),
+          'FECHA DE INICIO DE CONTRATO': formatDateDisplay(getVal(emp, 'contract_start')),
+          'FIN PERÍODO DE PRUEBA': formatDateDisplay(probationEnd(getVal(emp, 'contract_start'))),
+          'TÉRMINO DE CONTRATO': (() => {
+            const term = contractTerm(getVal(emp, 'contract_end'), getVal(emp, 'contract_type'));
+            return term === 'Indefinido' ? term : formatDateDisplay(term);
+          })(),
           'FECHA CCSS': formatDateDisplay(getVal(emp, 'cr_ccss_date')),
           'FECHA INS': formatDateDisplay(getVal(emp, 'cr_ins_date')),
           'VENC. CARNÉ': formatDateDisplay(getVal(emp, 'cr_carne_vencimiento')),
@@ -314,6 +327,9 @@ export default function ChecklistContratos() {
                   <>
                     <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">CARTA DE<br/>INGRESO</th>
                     <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">CARTA DE<br/>INDUCCIÓN</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">INICIO DE<br/>CONTRATO</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">FIN PERÍODO<br/>DE PRUEBA</th>
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">TÉRMINO DE<br/>CONTRATO</th>
                     <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">FECHA<br/>CCSS</th>
                     <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">FECHA<br/>INS</th>
                     <th className="px-3 py-3 text-center font-bold uppercase tracking-wider border-r border-blue-900 whitespace-nowrap">VENC.<br/>CARNÉ</th>
@@ -336,7 +352,7 @@ export default function ChecklistContratos() {
             <tbody className="bg-white divide-y divide-slate-100">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={isCR ? 9 : 11} className="px-6 py-10 text-center text-slate-400">
+                  <td colSpan={isCR ? 12 : 11} className="px-6 py-10 text-center text-slate-400">
                     {selectedClubId
                       ? `No hay empleados activos en este club.`
                       : 'No hay empleados activos.'}
@@ -364,10 +380,10 @@ export default function ChecklistContratos() {
                         <input
                           readOnly={!canEdit}
                           type="text"
-                          value={getVal(emp, 'cedula').replace(/-/g, ' ')}
+                          value={getVal(emp, 'cedula')}
                           onChange={e => handleEdit(emp.id, 'cedula', e.target.value)}
                           onBlur={e => handleSave(emp.id, 'cedula', e.target.value)}
-                          className="w-24 bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
+                          className="w-28 bg-transparent border-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 text-xs"
                         />
                       </td>
                       {isCR ? (
@@ -394,6 +410,21 @@ export default function ChecklistContratos() {
                               <option value="NO">NO</option>
                             </select>
                           </td>
+                          <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'contract_start')}</td>
+                          {(() => {
+                            const end = probationEnd(contractStartStr);
+                            const status = probationStatus(end);
+                            return (
+                              <td className={`px-3 py-2 text-center whitespace-nowrap border-r border-slate-100 ${status ? PROBATION_CLASS[status] : ''}`}>
+                                {formatDateDisplay(end)}
+                              </td>
+                            );
+                          })()}
+                          {contractTerm(getVal(emp, 'contract_end'), getVal(emp, 'contract_type')) === 'Indefinido' ? (
+                            <td className="px-3 py-2 text-center border-r border-slate-100 bg-slate-100 text-slate-600 font-medium">Indefinido</td>
+                          ) : (
+                            <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'contract_end')}</td>
+                          )}
                           <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'cr_ccss_date')}</td>
                           <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'cr_ins_date')}</td>
                           <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'cr_carne_vencimiento')}</td>
