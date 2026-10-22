@@ -3,10 +3,15 @@ const ymd = (s: string | null | undefined) => {
   return m ? { y: +m[1], mo: +m[2], d: +m[3] } : null;
 };
 
-export function probationEnd(contractStart: string | null | undefined): string {
+// En Costa Rica el período de prueba es de 2 meses; al cumplirlos el contrato queda indefinido
+export function probationMonths(country: string | null | undefined): number {
+  return country === 'CR' || country === 'Costa Rica' ? 2 : 3;
+}
+
+export function probationEnd(contractStart: string | null | undefined, months = 3): string {
   const p = ymd(contractStart);
   if (!p) return '';
-  return new Date(Date.UTC(p.y, p.mo - 1 + 3, p.d)).toISOString().slice(0, 10);
+  return new Date(Date.UTC(p.y, p.mo - 1 + months, p.d)).toISOString().slice(0, 10);
 }
 
 export type ProbationStatus = 'cumplido' | 'por-terminar' | 'en-curso';

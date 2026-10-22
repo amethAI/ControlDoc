@@ -2,6 +2,7 @@ import { supabase } from '../db.ts';
 import { getClubConfig } from '../lib/clubConfig.ts';
 import { recipientIdsForCountry } from '../lib/integrityChecks.ts';
 import { isCarneAlertDue, countryRecipientId } from '../lib/expiryRules.ts';
+import { probationEnd, probationMonths } from '../../src/lib/checklistRules.ts';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import dns from 'dns';
@@ -164,19 +165,20 @@ export async function sendExpirationAlerts(isTest = false) {
           }
         }
 
-        // Probationary period: contract_start + 3 months, within window [today - 15d, threshold]
+        // Probationary period within window [today - 15d, threshold]
         if (emp.contract_start) {
-          const probatorioEnd = new Date(emp.contract_start + 'T12:00:00');
-          probatorioEnd.setMonth(probatorioEnd.getMonth() + 3);
+          const endStr = probationEnd(emp.contract_start, probationMonths(clubCountryMap.get(clubId)));
+          const probatorioEnd = new Date(endStr + 'T12:00:00');
           const fifteenDaysAgo = new Date(today);
           fifteenDaysAgo.setDate(today.getDate() - 15);
           if (probatorioEnd >= fifteenDaysAgo && probatorioEnd <= targetThreshold) {
-            addAlert(clubId, clubName, emp.id, emp.full_name, 'Terminación de Periodo Probatorio', probatorioEnd.toISOString().split('T')[0]);
+            addAlert(clubId, clubName, emp.id, emp.full_name, 'Terminación de Periodo Probatorio', endStr);
           }
         }
 
+        // En CR el título INA vence junto con el carné: una sola alerta
         if (isCarneAlertDue(emp.cr_carne_vencimiento, targetThreshold.toISOString().split('T')[0])) {
-          addAlert(clubId, clubName, emp.id, emp.full_name, 'Vencimiento de Carné', emp.cr_carne_vencimiento.slice(0, 10));
+          addAlert(clubId, clubName, emp.id, emp.full_name, 'Vencimiento de Carné / Título INA', emp.cr_carne_vencimiento.slice(0, 10));
         }
       }
     }

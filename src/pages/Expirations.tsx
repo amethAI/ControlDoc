@@ -5,7 +5,9 @@ import { useAuth, useLocale } from '../context/AuthContext';
 import { apiFetch } from '../lib/api';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
-import { probationEnd, probationStatus, contractTerm, type ProbationStatus } from '../lib/checklistRules';
+import { probationEnd, probationStatus, contractTerm, probationMonths, type ProbationStatus } from '../lib/checklistRules';
+
+const CR_PROBATION_MONTHS = probationMonths('CR');
 
 const PROBATION_CLASS: Record<ProbationStatus, string> = {
   'cumplido': 'bg-slate-100 text-slate-500',
@@ -351,7 +353,7 @@ export default function Expirations() {
 
     const crTableRows = (emps: ChecklistEmployee[]) =>
       emps.map((emp, i) => {
-        const prob   = probationEnd(getVal(emp, 'contract_start'));
+        const prob   = probationEnd(getVal(emp, 'contract_start'), CR_PROBATION_MONTHS);
         const status = probationStatus(prob);
         const term   = contractTerm(getVal(emp, 'contract_end'), getVal(emp, 'contract_type'));
         const carne  = getVal(emp, 'cr_carne_vencimiento');
@@ -485,7 +487,7 @@ export default function Expirations() {
         'CARTA DE INGRESO': getVal(emp, 'cr_carta_ingreso'),
         'CARTA DE INDUCCIÓN': getVal(emp, 'cr_carta_induccion'),
         'FECHA DE INICIO DE CONTRATO': formatDate(getVal(emp, 'contract_start')),
-        'FIN PERÍODO DE PRUEBA': formatDate(probationEnd(getVal(emp, 'contract_start'))),
+        'FIN PERÍODO DE PRUEBA': formatDate(probationEnd(getVal(emp, 'contract_start'), CR_PROBATION_MONTHS)),
         'TÉRMINO DE CONTRATO': term === 'Indefinido' ? term : formatDate(term),
         'FECHA CCSS': formatDate(getVal(emp, 'cr_ccss_date')),
         'FECHA INS': formatDate(getVal(emp, 'cr_ins_date')),
@@ -692,7 +694,7 @@ export default function Expirations() {
                               <td className="px-2 py-2 border-r border-slate-200">{siNoCell(emp, 'cr_carta_induccion')}</td>
                               <td className="px-2 py-2 border-r border-slate-200">{dateCell(emp, 'contract_start')}</td>
                               {(() => {
-                                const end = probationEnd(getVal(emp, 'contract_start'));
+                                const end = probationEnd(getVal(emp, 'contract_start'), CR_PROBATION_MONTHS);
                                 const status = probationStatus(end);
                                 return (
                                   <td className={`px-4 py-3 border-r border-slate-200 ${status ? PROBATION_CLASS[status] : ''}`}>

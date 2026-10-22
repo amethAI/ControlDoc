@@ -3,7 +3,9 @@ import { apiFetch } from '../lib/api';
 import { useAuth, useLocale } from '../context/AuthContext';
 import { Download, Search, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { probationEnd, probationStatus, contractTerm, type ProbationStatus } from '../lib/checklistRules';
+import { probationEnd, probationStatus, contractTerm, probationMonths, type ProbationStatus } from '../lib/checklistRules';
+
+const CR_PROBATION_MONTHS = probationMonths('CR');
 
 const PROBATION_CLASS: Record<ProbationStatus, string> = {
   'cumplido': 'bg-slate-100 text-slate-500',
@@ -198,7 +200,7 @@ export default function ChecklistContratos() {
           'CARTA DE INGRESO': getVal(emp, 'cr_carta_ingreso'),
           'CARTA DE INDUCCIÓN': getVal(emp, 'cr_carta_induccion'),
           'FECHA DE INICIO DE CONTRATO': formatDateDisplay(getVal(emp, 'contract_start')),
-          'FIN PERÍODO DE PRUEBA': formatDateDisplay(probationEnd(getVal(emp, 'contract_start'))),
+          'FIN PERÍODO DE PRUEBA': formatDateDisplay(probationEnd(getVal(emp, 'contract_start'), CR_PROBATION_MONTHS)),
           'TÉRMINO DE CONTRATO': (() => {
             const term = contractTerm(getVal(emp, 'contract_end'), getVal(emp, 'contract_type'));
             return term === 'Indefinido' ? term : formatDateDisplay(term);
@@ -412,7 +414,7 @@ export default function ChecklistContratos() {
                           </td>
                           <td className="px-2 py-1 border-r border-slate-100">{dateInput(emp, 'contract_start')}</td>
                           {(() => {
-                            const end = probationEnd(contractStartStr);
+                            const end = probationEnd(contractStartStr, CR_PROBATION_MONTHS);
                             const status = probationStatus(end);
                             return (
                               <td className={`px-3 py-2 text-center whitespace-nowrap border-r border-slate-100 ${status ? PROBATION_CLASS[status] : ''}`}>

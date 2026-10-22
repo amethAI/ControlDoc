@@ -3,6 +3,8 @@ import { supabase } from '../db.ts';
 import { sendExpirationAlerts, sendLoginAlert } from '../services/alertService.ts';
 import { getClubConfig, invalidateClubConfig } from '../lib/clubConfig.ts';
 import { getPersonalCombinedIds, getDocTypeIdBySlug } from '../lib/docTypes.ts';
+import { probationEnd, probationMonths } from '../../src/lib/checklistRules.ts';
+import { normalizeCedula } from '../lib/cedula.ts';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -320,7 +322,7 @@ const dateOrEmpty = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha in
 
 const createEmployeeSchema = z.object({
   full_name:        z.string().min(2, 'Nombre requerido').max(120),
-  cedula:           z.string().min(3, 'Cédula requerida').max(20),
+  cedula:           z.string().min(3, 'Cédula requerida').max(20).transform(normalizeCedula),
   position:         z.string().max(100).optional(),
   contract_type:    z.string().max(50).optional(),
   contract_start:   dateOrEmpty,
@@ -1226,11 +1228,7 @@ router.get('/employees', canViewData, async (req, res) => {
 
     const { data: employees, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
-    const normalized = (employees || []).map((e: any) => ({
-      ...e,
-      cedula: e.cedula ? e.cedula.replace(/-/g, ' ') : e.cedula,
-    }));
-    res.json(normalized);
+    res.json(employees || []);
   } catch (error: any) {
     console.error('Error in /employees:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
@@ -1379,7 +1377,6 @@ router.get('/employees/:id', isAuthenticated, async (req, res) => {
 
     // Strip the joined clubs field before returning (not part of the employee schema)
     const { clubs, ...emp } = employee as any;
-    if (emp.cedula) emp.cedula = emp.cedula.replace(/-/g, ' ');
     res.json(emp);
   } catch (error: any) {
     console.error('Error in /employees/:id:', error);
@@ -1394,7 +1391,7 @@ router.patch('/employees/:id', canModifyData, async (req, res) => {
 
   const updateSchema = z.object({
     full_name:        z.string().min(2, 'Nombre requerido').max(120).optional(),
-    cedula:           z.string().min(3, 'Cédula requerida').max(20).optional(),
+    cedula:           z.string().min(3, 'Cédula requerida').max(20).transform(normalizeCedula).optional(),
     position:         z.string().max(100).optional(),
     contract_type:    z.string().max(50).optional(),
     contract_start:   dateOrEmpty,
@@ -2024,7 +2021,7 @@ router.patch('/employees/:id/checklist', canModifyData, async (req: any, res) =>
     // 1. Update employee basic info
     const updateData: any = { updated_at: new Date().toISOString() };
     if (full_name !== undefined) updateData.full_name = full_name;
-    if (cedula !== undefined) updateData.cedula = cedula;
+    if (typeof cedula === 'string' && cedula.trim()) updateData.cedula = normalizeCedula(cedula);
     if (contract_type !== undefined) updateData.contract_type = contract_type;
     if (contract_start !== undefined) updateData.contract_start = contract_start || null;
     if (contract_end !== undefined) updateData.contract_end = contract_end || null;
@@ -3792,17 +3789,15 @@ router.get('/reports/checklist', canViewData, async (req, res) => {
       
       const contratosCount = docs.filter(d => (d.document_types as any)?.name?.toLowerCase()?.includes('contrato')).length;
 
-      let probatorioEnd = null;
-      if (emp.contract_start) {
-        const start = new Date(emp.contract_start);
-        start.setMonth(start.getMonth() + 3);
-        probatorioEnd = start.toISOString().split('T')[0];
-      }
+      const probatorioEnd = emp.contract_start
+        ? probationEnd(emp.contract_start, probationMonths((emp.clubs as any)?.country))
+        : null;
 
       return {
         id: emp.id,
         full_name: emp.full_name,
-        cedula: emp.cedula ? emp.cedula.replace(/-/g, ' ') : emp.cedula,
+        // Se devuelve tal cual: la pantalla guarda este valor al salir del campo
+        cedula: emp.cedula,
         club_name: (emp.clubs as any)?.name || 'N/A',
         club_country: (emp.clubs as any)?.country || null,
         country_code: emp.country_code,
