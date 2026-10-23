@@ -45,10 +45,15 @@ const PageLoader = () => (
   </div>
 );
 
+// El celular de marcación del club no tiene sesión de usuario: siempre vuelve al kiosco
+const isKioskDevice = () => {
+  try { return !!window.localStorage.getItem('cdk.device'); } catch { return false; }
+};
+
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   if (loading) return <PageLoader />;
-  if (!user) return <Navigate to="/login" />;
+  if (!user) return <Navigate to={isKioskDevice() ? '/kiosco' : '/login'} />;
   if (user.role === 'Empleado') return <Navigate to="/mi-cuenta" replace />;
   return <>{children}</>;
 };
@@ -89,7 +94,7 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={isKioskDevice() ? <Navigate to="/kiosco" replace /> : <Login />} />
 
         {/* Dotación pública — sin auth */}
         <Route path="/d/:token" element={<PageErrorBoundary pageName="Dotación"><DotacionPublica /></PageErrorBoundary>} />
