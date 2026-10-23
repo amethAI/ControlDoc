@@ -46,7 +46,7 @@ const CONFIG_COLUMNS = [
   'id', 'name', 'country', 'country_code', 'timezone', 'locale',
   'currency', 'kronos_prefix', 'salary_mensual', 'salary_dia',
   'salary_dom', 'css_rate', 'default_position', 'sheet_name', 'sort_order',
-  'programacion_sheet_id', 'prog_header_row', 'prog_name_col', 'prog_data_start_row',
+  // programacion_sheet_id y prog_* no existen todavía en la tabla: pedirlas hace fallar toda la consulta
 ].join(', ');
 
 const cache    = new Map<string, ClubConfig>();
@@ -58,11 +58,12 @@ export async function getClubConfig(clubId: string): Promise<ClubConfig> {
   const hit = cache.get(clubId);
   if (hit && now - (cacheAt.get(clubId) ?? 0) < TTL_MS) return hit;
 
-  const { data: rawData } = await supabase
+  const { data: rawData, error } = await supabase
     .from('clubs')
     .select(CONFIG_COLUMNS)
     .eq('id', clubId)
     .maybeSingle();
+  if (error) console.error(`[CLUB CONFIG] ${clubId}: ${error.message} — usando valores por defecto`);
 
   const data = rawData as any;
   const cfg: ClubConfig = {
