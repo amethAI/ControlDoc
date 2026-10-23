@@ -33,6 +33,8 @@ const RolesInfo        = React.lazy(() => import('./pages/RolesInfo'));
 const Dotacion         = React.lazy(() => import('./pages/Dotacion'));
 const DotacionPublica  = React.lazy(() => import('./pages/DotacionPublica'));
 const Cumpleanos       = React.lazy(() => import('./pages/Cumpleanos'));
+const Kiosco           = React.lazy(() => import('./pages/Kiosco'));
+const Marcaciones      = React.lazy(() => import('./pages/Marcaciones'));
 const EmployeeHome      = React.lazy(() => import('./pages/employee/EmployeeHome'));
 const EmployeeDocuments = React.lazy(() => import('./pages/employee/EmployeeDocuments'));
 const MyProfile         = React.lazy(() => import('./pages/employee/EmployeeProfile'));
@@ -92,6 +94,9 @@ function AppRoutes() {
         {/* Dotación pública — sin auth */}
         <Route path="/d/:token" element={<PageErrorBoundary pageName="Dotación"><DotacionPublica /></PageErrorBoundary>} />
 
+        {/* Equipo de marcación del club — se autentica con la clave del equipo, no con un usuario */}
+        <Route path="/kiosco" element={<PageErrorBoundary pageName="Marcación"><Kiosco /></PageErrorBoundary>} />
+
         {/* Employee portal */}
         <Route
           path="/mi-cuenta"
@@ -116,6 +121,7 @@ function AppRoutes() {
           <Route path="clubes" element={<PageErrorBoundary pageName="Clubes"><Clubs /></PageErrorBoundary>} />
           <Route path="clubes/:id" element={<PageErrorBoundary pageName="Detalle del Club"><ClubDetail /></PageErrorBoundary>} />
           <Route path="asistencia" element={<PageErrorBoundary pageName="Asistencia"><Attendance /></PageErrorBoundary>} />
+          <Route path="marcaciones" element={<PageErrorBoundary pageName="Marcaciones"><Marcaciones /></PageErrorBoundary>} />
           <Route path="rendimiento" element={<PageErrorBoundary pageName="Rendimiento"><RendimientoVentas /></PageErrorBoundary>} />
           <Route path="vencimientos" element={<PageErrorBoundary pageName="Vencimientos"><Expirations /></PageErrorBoundary>} />
           <Route path="configuracion" element={<AdminRoute><PageErrorBoundary pageName="Configuración"><Configuracion /></PageErrorBoundary></AdminRoute>} />

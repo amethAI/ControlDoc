@@ -7,6 +7,8 @@ import { probationEnd, probationMonths } from '../../src/lib/checklistRules.ts';
 import { normalizeCedula } from '../lib/cedula.ts';
 import { carneStatus } from '../lib/expiryRules.ts';
 import { findIncompleteEmployees } from '../lib/compliance.ts';
+import { generateBadgeCode, generatePin, generatePinSalt, generatePairingCode, hashToken } from '../lib/kioskLogic.ts';
+import { hashBadgeCode, hashPin, PIN_ITERATIONS, formatBadgeQr, workDate } from '../../src/lib/attendanceRules.ts';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -5905,6 +5907,217 @@ router.get('/dotacion/tandas/:id/reporte', isAuthenticated, async (req: any, res
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Marcación con gafete QR + PIN — administración
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function clubForAdmin(req: any, res: any, clubId: string) {
+  const { data: club } = await supabase.from('clubs').select('id, name, country').eq('id', clubId).maybeSingle();
+  if (!club) { res.status(404).json({ error: 'Club no encontrado' }); return null; }
+  if (!canAccessResource(req.user, club.id, club.country)) { res.status(403).json({ error: 'Acceso denegado' }); return null; }
+  return club;
+}
+
+async function issuePairingCode(deviceId: string) {
+  const code = generatePairingCode();
+  const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const { error } = await supabase
+    .from('kiosk_devices')
+    .update({ pairing_code_hash: hashToken(code), pairing_expires_at: expires, token_hash: null })
+    .eq('id', deviceId);
+  if (error) throw error;
+  return { pairing_code: code, pairing_expires_at: expires };
+}
+
+router.get('/kiosk/devices', isAdmin, async (req: any, res) => {
+  try {
+    const { applyFilter } = await resolveClubScope(req.user, req.query.club_id as string | undefined);
+    let q = supabase
+      .from('kiosk_devices')
+      .select('id, club_id, name, created_at, paired_at, last_seen_at, last_pending, app_version, revoked_at, pairing_expires_at, clubs(name)')
+      .order('created_at', { ascending: false });
+    q = applyFilter(q);
+    const { data, error } = await q;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) {
+    console.error('[KIOSK] list devices:', err);
+    res.status(500).json({ error: 'Error al obtener los equipos' });
+  }
+});
+
+router.post('/kiosk/devices', isAdmin, async (req: any, res) => {
+  const name = String(req.body?.name || '').trim().slice(0, 60);
+  const clubId = String(req.body?.club_id || '');
+  if (!name || !clubId) return res.status(400).json({ error: 'Nombre y club son obligatorios' });
+  try {
+    const club = await clubForAdmin(req, res, clubId);
+    if (!club) return;
+    const { data: device, error } = await supabase
+      .from('kiosk_devices')
+      .insert({ club_id: club.id, name, created_by: req.user.id })
+      .select('id, name, club_id')
+      .single();
+    if (error) throw error;
+    const pairing = await issuePairingCode(device.id);
+    await logAudit(req, 'Equipo de marcación creado', `Equipo "${name}" para ${club.name}`, 'Equipo', device.id, name, club.id);
+    res.json({ ...device, ...pairing });
+  } catch (err) {
+    console.error('[KIOSK] create device:', err);
+    res.status(500).json({ error: 'Error al crear el equipo' });
+  }
+});
+
+router.post('/kiosk/devices/:id/pairing-code', isAdmin, async (req: any, res) => {
+  try {
+    const { data: device } = await supabase.from('kiosk_devices').select('id, name, club_id, revoked_at').eq('id', req.params.id).maybeSingle();
+    if (!device || device.revoked_at) return res.status(404).json({ error: 'Equipo no encontrado' });
+    const club = await clubForAdmin(req, res, device.club_id);
+    if (!club) return;
+    const pairing = await issuePairingCode(device.id);
+    await logAudit(req, 'Equipo de marcación re-vinculado', `Nuevo código para "${device.name}"; la clave anterior quedó anulada`, 'Equipo', device.id, device.name, club.id);
+    res.json(pairing);
+  } catch (err) {
+    console.error('[KIOSK] pairing code:', err);
+    res.status(500).json({ error: 'Error al generar el código' });
+  }
+});
+
+router.delete('/kiosk/devices/:id', isAdmin, async (req: any, res) => {
+  try {
+    const { data: device } = await supabase.from('kiosk_devices').select('id, name, club_id').eq('id', req.params.id).maybeSingle();
+    if (!device) return res.status(404).json({ error: 'Equipo no encontrado' });
+    const club = await clubForAdmin(req, res, device.club_id);
+    if (!club) return;
+    const { error } = await supabase
+      .from('kiosk_devices')
+      .update({ revoked_at: new Date().toISOString(), token_hash: null, pairing_code_hash: null, pairing_expires_at: null })
+      .eq('id', device.id);
+    if (error) throw error;
+    await logAudit(req, 'Equipo de marcación revocado', `Equipo "${device.name}" revocado`, 'Equipo', device.id, device.name, club.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[KIOSK] revoke device:', err);
+    res.status(500).json({ error: 'Error al revocar el equipo' });
+  }
+});
+
+router.get('/clubs/:id/badges', isAdmin, async (req: any, res) => {
+  try {
+    const club = await clubForAdmin(req, res, req.params.id);
+    if (!club) return;
+    const { data: emps, error } = await supabase
+      .from('employees').select('id, full_name, cedula').eq('club_id', club.id).eq('status', 'activo').order('full_name');
+    if (error) throw error;
+    const ids = (emps || []).map(e => e.id);
+    const { data: badges, error: bErr } = ids.length
+      ? await supabase.from('employee_badges').select('employee_id, issued_at').in('employee_id', ids).is('revoked_at', null)
+      : { data: [], error: null };
+    if (bErr) throw bErr;
+    const issued = new Map((badges || []).map((b: any) => [b.employee_id, b.issued_at]));
+    res.json((emps || []).map(e => ({ employee_id: e.id, full_name: e.full_name.trim(), cedula: e.cedula, badge_issued_at: issued.get(e.id) || null })));
+  } catch (err) {
+    console.error('[KIOSK] list badges:', err);
+    res.status(500).json({ error: 'Error al obtener los gafetes' });
+  }
+});
+
+// Emite gafetes: devuelve código QR y PIN UNA sola vez; en la base solo quedan los hashes
+router.post('/clubs/:id/badges', isAdmin, async (req: any, res) => {
+  const requested: string[] | undefined = Array.isArray(req.body?.employee_ids) ? req.body.employee_ids.map(String).slice(0, 500) : undefined;
+  try {
+    const club = await clubForAdmin(req, res, req.params.id);
+    if (!club) return;
+    let q = supabase.from('employees').select('id, full_name').eq('club_id', club.id).eq('status', 'activo').order('full_name');
+    if (requested) q = q.in('id', requested.length ? requested : ['__none__']);
+    const { data: emps, error } = await q;
+    if (error) throw error;
+    if (!emps || emps.length === 0) return res.status(400).json({ error: 'No hay empleados activos para emitir gafetes' });
+
+    const ids = emps.map(e => e.id);
+    const { error: revErr } = await supabase
+      .from('employee_badges').update({ revoked_at: new Date().toISOString() }).in('employee_id', ids).is('revoked_at', null);
+    if (revErr) throw revErr;
+
+    const issued: { employee_id: string; full_name: string; qr: string; pin: string }[] = [];
+    const rows: any[] = [];
+    for (const e of emps) {
+      const code = generateBadgeCode();
+      const pin = generatePin();
+      const salt = generatePinSalt();
+      rows.push({
+        employee_id: e.id,
+        code_hash: await hashBadgeCode(code),
+        pin_hash: await hashPin(pin, salt, PIN_ITERATIONS),
+        pin_salt: salt,
+        pin_iterations: PIN_ITERATIONS,
+        issued_by: req.user.id,
+      });
+      issued.push({ employee_id: e.id, full_name: e.full_name.trim(), qr: formatBadgeQr(code), pin });
+    }
+    const { error: insErr } = await supabase.from('employee_badges').insert(rows);
+    if (insErr) throw insErr;
+
+    await logAudit(req, 'Gafetes emitidos', `${rows.length} gafete(s) emitidos para ${club.name}; los anteriores quedaron anulados`, 'Club', club.id, club.name, club.id);
+    res.json({ club: club.name, badges: issued });
+  } catch (err) {
+    console.error('[KIOSK] issue badges:', err);
+    res.status(500).json({ error: 'Error al emitir los gafetes' });
+  }
+});
+
+router.post('/employees/:id/badge/pin', isAdmin, async (req: any, res) => {
+  try {
+    const { data: emp } = await supabase.from('employees').select('id, full_name, club_id').eq('id', req.params.id).maybeSingle();
+    if (!emp) return res.status(404).json({ error: 'Empleado no encontrado' });
+    const club = await clubForAdmin(req, res, emp.club_id);
+    if (!club) return;
+    const pin = generatePin();
+    const salt = generatePinSalt();
+    const { data: updated, error } = await supabase
+      .from('employee_badges')
+      .update({ pin_hash: await hashPin(pin, salt, PIN_ITERATIONS), pin_salt: salt, pin_iterations: PIN_ITERATIONS })
+      .eq('employee_id', emp.id)
+      .is('revoked_at', null)
+      .select('id');
+    if (error) throw error;
+    if (!updated || updated.length === 0) return res.status(400).json({ error: 'La persona no tiene un gafete vigente' });
+    await logAudit(req, 'PIN reseteado', `Nuevo PIN para ${emp.full_name.trim()}`, 'Empleado', emp.id, emp.full_name, club.id);
+    res.json({ full_name: emp.full_name.trim(), pin });
+  } catch (err) {
+    console.error('[KIOSK] reset pin:', err);
+    res.status(500).json({ error: 'Error al resetear el PIN' });
+  }
+});
+
+router.get('/attendance-marks', canViewData, async (req: any, res) => {
+  const clubId = String(req.query.club_id || '');
+  if (!clubId) return res.status(400).json({ error: 'club_id requerido' });
+  try {
+    const { data: club } = await supabase.from('clubs').select('id, name, country, timezone').eq('id', clubId).maybeSingle();
+    if (!club) return res.status(404).json({ error: 'Club no encontrado' });
+    const { club_id: scopedClub, allowedClubIds } = await resolveClubScope(req.user, clubId);
+    const allowed = (scopedClub ? scopedClub === club.id : true) && (allowedClubIds === null || allowedClubIds.includes(club.id));
+    if (!allowed || !canAccessResource(req.user, club.id, club.country)) return res.status(403).json({ error: 'Acceso denegado' });
+
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : workDate(Date.now(), club.timezone || 'America/Panama');
+    const [empRes, marksRes, devRes] = await Promise.all([
+      supabase.from('employees').select('id, full_name').eq('club_id', club.id).eq('status', 'activo').order('full_name'),
+      supabase.from('attendance_marks').select('id, employee_id, mark_type, marked_at, flags').eq('club_id', club.id).eq('work_date', date).order('marked_at'),
+      supabase.from('kiosk_devices').select('id, name, last_seen_at, last_pending, revoked_at, paired_at').eq('club_id', club.id).is('revoked_at', null),
+    ]);
+    for (const r of [empRes, marksRes, devRes]) if (r.error) throw r.error;
+    res.json({
+      club: { id: club.id, name: club.name, timezone: club.timezone },
+      date,
+      employees: (empRes.data || []).map(e => ({ id: e.id, full_name: e.full_name.trim() })),
+      marks: marksRes.data || [],
+      devices: devRes.data || [],
+    });
+  } catch (err) {
+    console.error('[KIOSK] marks view:', err);
+    res.status(500).json({ error: 'Error al obtener las marcaciones' });
+  }
+});
 
 export default router;
 

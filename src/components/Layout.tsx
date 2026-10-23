@@ -20,6 +20,7 @@ import {
   Menu,
   X,
   Shirt,
+  QrCode,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { usePushNotifications } from '../hooks/usePushNotifications';
@@ -60,6 +61,7 @@ export default function Layout() {
     ...(user?.role !== 'Supervisor Cliente' && user?.role !== 'Coordinadora'
       ? [{ name: 'Asistencia', href: '/asistencia', icon: CalendarCheck, group: 'Gestión' }]
       : []),
+    { name: 'Marcaciones', href: '/marcaciones', icon: QrCode, group: 'Gestión' },
     ...((isAdmin || isKAM || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente' || isRRHH || isAsistenteRRHH)
       ? [{ name: 'Clubes', href: '/clubes', icon: Building2, group: 'Gestión' }]
       : []),

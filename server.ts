@@ -13,6 +13,8 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
+import { createHash } from 'crypto';
+import kioskRouter from './server/routes/kiosk.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,9 +23,16 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+  // Detrás del proxy de Render: sin esto req.ip es la del proxy y todos los usuarios comparten el mismo rate limit
+  if (process.env.RENDER || process.env.TRUST_PROXY) app.set('trust proxy', 1);
+
   console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode...`);
 
   app.use(cookieParser());
+  app.use('/api/kiosk/device', (req, res, next) => {
+    if (Number(req.headers['content-length'] || 0) > 64 * 1024) return res.status(413).json({ error: 'Lote demasiado grande' });
+    next();
+  });
   app.use(express.json({ limit: '10mb' }));
 
   const allowedOrigins = process.env.ALLOWED_ORIGINS
@@ -66,12 +75,16 @@ async function startServer() {
   });
   app.use('/api/auth/login', loginLimiter);
 
+  // Los equipos de marcación tienen sus propios limitadores (abajo), contados por equipo y no por IP
+  const isKioskDevice = (req: any) => req.path.startsWith('/kiosk/device');
+
   // General API rate limiter (prevents data scraping / abuse)
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 500,
     standardHeaders: true,
     legacyHeaders: false,
+    skip: isKioskDevice,
     message: { error: 'Demasiadas solicitudes. Intente de nuevo en 15 minutos.' }
   });
   app.use('/api/', apiLimiter);
@@ -82,10 +95,31 @@ async function startServer() {
     max: 100,
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => req.method === 'GET' || req.method === 'OPTIONS',
+    skip: (req) => req.method === 'GET' || req.method === 'OPTIONS' || isKioskDevice(req),
     message: { error: 'Demasiadas operaciones de escritura. Intente de nuevo en 15 minutos.' }
   });
   app.use('/api/', writeLimiter);
+
+  // Vinculación de equipos: código de 6 dígitos, se limita fuerte por IP contra fuerza bruta
+  const kioskPairLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Demasiados intentos de vinculación. Intente de nuevo en 15 minutos.' }
+  });
+  app.use('/api/kiosk/device/pair', kioskPairLimiter);
+
+  const kioskLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 600,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.path === '/pair',
+    keyGenerator: (req) => 'dev:' + createHash('sha256').update(String(req.headers['authorization'] || '')).digest('hex'),
+    message: { error: 'Demasiadas solicitudes del equipo. Intente de nuevo en unos minutos.' }
+  });
+  app.use('/api/kiosk/device', kioskLimiter);
 
   // Security + cache headers
   app.use((req, res, next) => {
@@ -374,6 +408,7 @@ async function startServer() {
   });
 
   // API routes
+  app.use('/api/kiosk/device', kioskRouter);
   app.use('/api', apiRouter);
 
   // Serve mock uploads
