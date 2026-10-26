@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import { KIOSK_ENABLED } from '../lib/features';
 
 type NavItem = { name: string; href: string; icon: React.ElementType; group: string };
 
@@ -61,7 +62,7 @@ export default function Layout() {
     ...(user?.role !== 'Supervisor Cliente' && user?.role !== 'Coordinadora'
       ? [{ name: 'Asistencia', href: '/asistencia', icon: CalendarCheck, group: 'Gestión' }]
       : []),
-    { name: 'Marcaciones', href: '/marcaciones', icon: QrCode, group: 'Gestión' },
+    ...(KIOSK_ENABLED ? [{ name: 'Marcaciones', href: '/marcaciones', icon: QrCode, group: 'Gestión' }] : []),
     ...((isAdmin || isKAM || user?.role === 'Coordinadora' || user?.role === 'Supervisor Interno' || user?.role === 'Supervisor Cliente' || isRRHH || isAsistenteRRHH)
       ? [{ name: 'Clubes', href: '/clubes', icon: Building2, group: 'Gestión' }]
       : []),
