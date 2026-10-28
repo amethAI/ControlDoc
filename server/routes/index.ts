@@ -7,6 +7,7 @@ import { probationEnd, probationMonths } from '../../src/lib/checklistRules.ts';
 import { normalizeCedula } from '../lib/cedula.ts';
 import { carneStatus } from '../lib/expiryRules.ts';
 import { findMissingDocuments, type CurrentDoc } from '../lib/compliance.ts';
+import { resolveDocExpiry } from '../lib/contractDocs.ts';
 import { generateBadgeCode, generatePin, generatePinSalt, generatePairingCode, hashToken } from '../lib/kioskLogic.ts';
 import { hashBadgeCode, hashPin, PIN_ITERATIONS, formatBadgeQr, workDate } from '../../src/lib/attendanceRules.ts';
 import path from 'path';
@@ -1579,7 +1580,7 @@ router.post('/documents', canModifyData, (req, res, next) => {
     // Verify the requesting user has access to this employee's club
     const { data: targetEmp } = await supabase
       .from('employees')
-      .select('club_id, clubs(country)')
+      .select('club_id, contract_type, contract_end, clubs(country)')
       .eq('id', employee_id)
       .single();
     if (!targetEmp || !canAccessResource(req.user, targetEmp.club_id, (targetEmp.clubs as any)?.country ?? null)) {
@@ -1661,11 +1662,20 @@ router.post('/documents', canModifyData, (req, res, next) => {
       .eq('document_type_id', document_type_id);
     if (updateError) throw updateError;
 
+    // Un contrato firmado subido con otra fecha hacía que las alertas avisaran antes de tiempo
+    const { data: docType } = await supabase.from('document_types').select('name').eq('id', document_type_id).maybeSingle();
+    const resolvedExpiry = resolveDocExpiry({
+      docTypeName: docType?.name,
+      formExpiry: expiry_date,
+      contractType: (targetEmp as any).contract_type,
+      contractEnd: (targetEmp as any).contract_end,
+    });
+
     // Insert document record — is_current: 1 set explicitly, never rely on DB default
     const { data: newDoc, error } = await supabase
       .from('employee_documents')
       .insert([{
-        id, employee_id, document_type_id, file_url, file_name, file_size_kb, expiry_date: expiry_date || null, status, is_current: 1
+        id, employee_id, document_type_id, file_url, file_name, file_size_kb, expiry_date: resolvedExpiry, status, is_current: 1
       }])
       .select()
       .single();
