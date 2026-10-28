@@ -6,7 +6,7 @@ import { getPersonalCombinedIds, getDocTypeIdBySlug } from '../lib/docTypes.ts';
 import { probationEnd, probationMonths } from '../../src/lib/checklistRules.ts';
 import { normalizeCedula } from '../lib/cedula.ts';
 import { carneStatus } from '../lib/expiryRules.ts';
-import { findIncompleteEmployees } from '../lib/compliance.ts';
+import { findMissingDocuments, type CurrentDoc } from '../lib/compliance.ts';
 import { generateBadgeCode, generatePin, generatePinSalt, generatePairingCode, hashToken } from '../lib/kioskLogic.ts';
 import { hashBadgeCode, hashPin, PIN_ITERATIONS, formatBadgeQr, workDate } from '../../src/lib/attendanceRules.ts';
 import path from 'path';
@@ -3846,9 +3846,11 @@ router.get('/dashboard', canViewData, async (req, res) => {
 
   // Cache key: scoped by country + club filter (never mixes data between scopes)
   const cacheKey = `${user.country || 'global'}_${queryCountry || ''}_${club_id || 'all'}`;
+  // El cliente ve los números, no los nombres: la caché no distingue rol, así que se filtra al responder
+  const forViewer = (data: any) => user.role === 'Supervisor Cliente' ? { ...data, incompleteList: [] } : data;
   const cached = dashboardCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < DASHBOARD_CACHE_TTL && !force) {
-    return res.json(cached.data);
+    return res.json(forViewer(cached.data));
   }
 
   try {
@@ -4022,23 +4024,23 @@ router.get('/dashboard', canViewData, async (req, res) => {
     const expiringSoonDocuments = expiringList.length;
 
     // 4. Incomplete Employees: activos a los que les falta algún tipo obligatorio de su país
-    let scopedEmpQuery = supabase.from('employees').select('id, clubs(country_code)').eq('status', 'activo');
+    let scopedEmpQuery = supabase.from('employees').select('id, full_name, clubs(name, country_code)').eq('status', 'activo');
     scopedEmpQuery = applyFilter(scopedEmpQuery);
     const [{ data: scopedEmps, error: scopedErr }, { data: reqTypes, error: reqErr }] = await Promise.all([
       scopedEmpQuery,
-      supabase.from('document_types').select('id, country_code').eq('is_active', 1).eq('is_required', 1).eq('is_hidden', 0),
+      supabase.from('document_types').select('id, name, country_code').eq('is_active', 1).eq('is_required', 1).eq('is_hidden', 0),
     ]);
     if (scopedErr) throw scopedErr;
     if (reqErr) throw reqErr;
 
     const empIdSet = new Set((scopedEmps || []).map((e: any) => e.id));
-    const currentDocs: { employee_id: string; document_type_id: string }[] = [];
+    const currentDocs: CurrentDoc[] = [];
     const requiredIds = (reqTypes || []).map(t => t.id);
     // PostgREST corta en 1000 filas: sin paginar, faltarían documentos y saldrían incompletos falsos
     for (let from = 0; requiredIds.length > 0 && empIdSet.size > 0; from += 1000) {
       const { data: page, error: pageErr } = await supabase
         .from('employee_documents')
-        .select('employee_id, document_type_id')
+        .select('employee_id, document_type_id, file_url')
         .eq('is_current', 1)
         .in('document_type_id', requiredIds)
         .order('id')
@@ -4048,11 +4050,25 @@ router.get('/dashboard', canViewData, async (req, res) => {
       if (!page || page.length < 1000) break;
     }
 
-    const incompleteEmployees = findIncompleteEmployees(
+    const missingDocs = findMissingDocuments(
       (scopedEmps || []).map((e: any) => ({ id: e.id, country_code: e.clubs?.country_code ?? null })),
       reqTypes || [],
       currentDocs,
-    ).length;
+    );
+    const incompleteEmployees = missingDocs.length;
+    const typeName = new Map((reqTypes || []).map((t: any) => [t.id, t.name as string]));
+    const empById = new Map((scopedEmps || []).map((e: any) => [e.id, e]));
+    const incompleteList = missingDocs
+      .map(m => {
+        const e: any = empById.get(m.employee_id);
+        return {
+          employee_id: m.employee_id,
+          employee_name: e?.full_name || '',
+          club: e?.clubs?.name || 'Sin club',
+          missing: m.missing.map(id => ({ name: typeName.get(id) || id, manual: m.manualOnly.includes(id) })),
+        };
+      })
+      .sort((a, b) => a.club.localeCompare(b.club, 'es') || a.employee_name.localeCompare(b.employee_name, 'es'));
 
     // 5. Uploaded Today
     const needsFilter = !!club_id || allowedClubIds !== null;
@@ -4109,6 +4125,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
       expiredDocuments,
       expiringSoonDocuments,
       incompleteEmployees,
+      incompleteList,
       documentsUploadedToday,
       clubDistribution,
       performanceStats,
@@ -4117,7 +4134,7 @@ router.get('/dashboard', canViewData, async (req, res) => {
     };
 
     dashboardCache.set(cacheKey, { data: result, ts: Date.now() });
-    res.json(result);
+    res.json(forViewer(result));
   } catch (error: any) {
     console.error('Dashboard stats error:', error);
     res.status(500).json({ error: 'Error al obtener estadísticas' });
@@ -4136,7 +4153,7 @@ router.get('/analytics/projections', canViewData, async (req, res) => {
 
     let q = supabase
       .from('employees')
-      .select('contract_end, club_id')
+      .select('id, full_name, contract_end, club_id')
       .eq('status', 'activo')
       .not('contract_end', 'is', null)
       .neq('contract_type', 'Indefinido')
@@ -4158,9 +4175,12 @@ router.get('/analytics/projections', canViewData, async (req, res) => {
         label: d.toLocaleDateString(process.env.APP_DEFAULT_LOCALE || 'es-PA', { month: 'short', year: '2-digit' }),
         count: 0,
         clubs: [] as { name: string; count: number }[],
+        people: [] as { employee_id: string; name: string; club: string; contract_end: string }[],
       };
     });
 
+    // El cliente ve cuántos vencen por club, no los nombres
+    const showPeople = user.role !== 'Supervisor Cliente';
     (employees || []).forEach(emp => {
       const ym = (emp.contract_end as string).substring(0, 7);
       const bucket = months.find(m => m.month === ym);
@@ -4170,7 +4190,9 @@ router.get('/analytics/projections', canViewData, async (req, res) => {
       const existing = bucket.clubs.find(c => c.name === clubName);
       if (existing) existing.count++;
       else bucket.clubs.push({ name: clubName, count: 1 });
+      if (showPeople) bucket.people.push({ employee_id: emp.id, name: emp.full_name, club: clubName, contract_end: emp.contract_end as string });
     });
+    months.forEach(m => m.people.sort((a, b) => a.contract_end.localeCompare(b.contract_end) || a.club.localeCompare(b.club, 'es')));
 
     res.json(months);
   } catch (error: any) {

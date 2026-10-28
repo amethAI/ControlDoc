@@ -6,7 +6,7 @@ import {
   RefreshCw, X, ShieldCheck, TrendingUp, Calendar,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 const PIE_COLORS = ['#3B82F6', '#22C55E', '#FBBF24', '#EF4444', '#8B5CF6', '#EC4899'];
@@ -77,6 +77,7 @@ export default function Dashboard() {
     expiredDocuments: 0,
     expiringSoonDocuments: 0,
     incompleteEmployees: 0,
+    incompleteList: [] as { employee_id: string; employee_name: string; club: string; missing: { name: string; manual: boolean }[] }[],
     documentsUploadedToday: 0,
     clubDistribution: [] as { name: string; value: number }[],
     performanceStats: null as { totalMeta: number; totalVentas: number } | null,
@@ -84,7 +85,13 @@ export default function Dashboard() {
     expiringList: [] as { id: string; employee_id: string; employee_name: string; type: string; date: string; status: string }[],
   });
   const [loading, setLoading] = useState(true);
-  const [projections, setProjections] = useState<{ label: string; count: number; month: string; clubs: { name: string; count: number }[] }[]>([]);
+  const [projections, setProjections] = useState<{
+    label: string; count: number; month: string;
+    clubs: { name: string; count: number }[];
+    people?: { employee_id: string; name: string; club: string; contract_end: string }[];
+  }[]>([]);
+  const [openMonth, setOpenMonth] = useState<string | null>(null);
+  const [showIncomplete, setShowIncomplete] = useState(false);
   const [compliance, setCompliance] = useState<{ name: string; total: number; withExpired: number; compliance: number }[]>([]);
   const [renewModal, setRenewModal] = useState<{ show: boolean; employeeId: string; employeeName: string; newDate: string }>({
     show: false, employeeId: '', employeeName: '', newDate: '',
@@ -168,6 +175,8 @@ export default function Dashboard() {
       from: '#3D1400', to: '#1A0800',
       accent: '#F97316',
       glow: 'rgba(249,115,22,.2)',
+      // El detalle llega solo a los roles internos; el cliente recibe la lista vacía
+      onClick: (stats.incompleteList?.length ?? 0) > 0 ? () => setShowIncomplete(true) : undefined,
     },
     {
       label: 'Subidos Hoy',
@@ -308,12 +317,19 @@ export default function Dashboard() {
         {kpis.map(kpi => (
           <div
             key={kpi.label}
-            className="relative overflow-hidden rounded-[20px] p-5 transition-transform duration-200 hover:-translate-y-0.5"
+            className={`relative overflow-hidden rounded-[20px] p-5 transition-transform duration-200 hover:-translate-y-0.5 ${'onClick' in kpi && kpi.onClick ? 'cursor-pointer' : ''}`}
             style={{
               background: `linear-gradient(135deg, ${kpi.from} 0%, ${kpi.to} 100%)`,
               border: '1px solid rgba(255,255,255,.07)',
               boxShadow: `0 0 30px ${kpi.glow}`,
             }}
+            {...('onClick' in kpi && kpi.onClick ? {
+              role: 'button',
+              tabIndex: 0,
+              title: 'Ver quién y qué falta',
+              onClick: kpi.onClick,
+              onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); kpi.onClick!(); } },
+            } : {})}
           >
             <div
               className="mb-4 flex h-9 w-9 items-center justify-center rounded-xl"
@@ -330,6 +346,9 @@ export default function Dashboard() {
             <p className="mt-1.5 text-[11px] font-medium" style={{ color: 'rgba(255,255,255,.4)' }}>
               {kpi.label}
             </p>
+            {'onClick' in kpi && kpi.onClick && (
+              <p className="mt-1 text-[10px] font-semibold" style={{ color: kpi.accent }}>Ver detalle →</p>
+            )}
           </div>
         ))}
       </div>
@@ -340,7 +359,7 @@ export default function Dashboard() {
         <Card className="lg:col-span-2">
           <CardHeader
             title="Proyección de Vencimientos de Contratos"
-            subtitle="Contratos que vencen en los próximos 6 meses"
+            subtitle="Contratos que vencen en los próximos 12 meses · toca un mes para ver quiénes"
           />
           <div className="p-5">
             {projections.length === 0 ? (
@@ -349,9 +368,51 @@ export default function Dashboard() {
               </p>
             ) : (
               <div className="space-y-1">
-                {projections.map(p => (
-                  <ProjectionBar key={p.month} label={p.label} count={p.count} max={projMax} />
-                ))}
+                {projections.map(p => {
+                  const open = openMonth === p.month;
+                  const canOpen = p.count > 0;
+                  return (
+                    <div key={p.month}>
+                      <button
+                        type="button"
+                        disabled={!canOpen}
+                        onClick={() => setOpenMonth(open ? null : p.month)}
+                        aria-expanded={open}
+                        className="w-full text-left rounded-lg transition-colors enabled:hover:bg-white/[0.03] disabled:cursor-default"
+                      >
+                        <ProjectionBar label={p.label} count={p.count} max={projMax} />
+                      </button>
+                      {open && (
+                        <div className="mb-2 ml-11 rounded-xl p-3" style={{ background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.06)' }}>
+                          <div className="flex flex-wrap gap-1.5">
+                            {p.clubs.map(c => (
+                              <span key={c.name} className="rounded-md px-2 py-0.5 text-[10.5px] font-semibold" style={{ background: 'rgba(59,130,246,.12)', color: '#93C5FD' }}>
+                                {c.name} · {c.count}
+                              </span>
+                            ))}
+                          </div>
+                          {(p.people?.length ?? 0) > 0 && (
+                            <div className="mt-2 divide-y" style={{ borderColor: 'rgba(255,255,255,.05)' }}>
+                              {p.people!.map(person => (
+                                <Link
+                                  key={person.employee_id}
+                                  to={`/empleados/${person.employee_id}`}
+                                  className="flex items-center justify-between gap-3 py-1.5 text-[11.5px] hover:underline"
+                                  style={{ color: 'rgba(255,255,255,.75)' }}
+                                >
+                                  <span className="truncate">{person.name} <span style={{ color: 'rgba(255,255,255,.35)' }}>· {person.club}</span></span>
+                                  <span className="shrink-0" style={{ color: 'rgba(255,255,255,.45)' }}>
+                                    {new Date(`${person.contract_end.slice(0, 10)}T12:00:00`).toLocaleDateString(locale, { day: '2-digit', month: 'short' })}
+                                  </span>
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -489,6 +550,84 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+
+      {/* ── Documentos faltantes ── */}
+      {showIncomplete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,.7)', backdropFilter: 'blur(8px)' }}
+          onClick={() => setShowIncomplete(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Documentación incompleta"
+            className="flex w-full max-w-2xl flex-col rounded-2xl"
+            style={{ background: '#0D1528', border: '1px solid rgba(255,255,255,.1)', maxHeight: '85vh' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+              <div>
+                <h3 className="text-[15px] font-bold text-white" style={{ fontFamily: "'Outfit', sans-serif" }}>Documentación incompleta</h3>
+                <p className="text-[11px]" style={{ color: 'rgba(255,255,255,.4)' }}>
+                  {stats.incompleteList.length} personas · documentos obligatorios que faltan
+                </p>
+              </div>
+              <button
+                onClick={() => setShowIncomplete(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg"
+                style={{ color: 'rgba(255,255,255,.4)', background: 'rgba(255,255,255,.05)' }}
+                aria-label="Cerrar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-6 py-4">
+              {Array.from(
+                stats.incompleteList.reduce((acc, p) => {
+                  const list = acc.get(p.club) || [];
+                  list.push(p);
+                  acc.set(p.club, list);
+                  return acc;
+                }, new Map<string, typeof stats.incompleteList>()),
+              ).map(([club, people]) => (
+                <div key={club} className="mb-4 last:mb-0">
+                  <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider" style={{ color: '#FB923C' }}>
+                    {club} · {people.length}
+                  </p>
+                  <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,.05)' }}>
+                    {people.map(p => (
+                      <div key={p.employee_id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                        <Link
+                          to={`/empleados/${p.employee_id}`}
+                          className="text-[12.5px] font-medium hover:underline"
+                          style={{ color: 'rgba(255,255,255,.85)' }}
+                        >
+                          {p.employee_name}
+                        </Link>
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          {p.missing.map(m => (
+                            <span
+                              key={m.name}
+                              className="rounded-md px-2 py-0.5 text-[10.5px] font-semibold"
+                              style={m.manual
+                                ? { background: 'rgba(251,191,36,.12)', color: '#FCD34D' }
+                                : { background: 'rgba(239,68,68,.12)', color: '#FCA5A5' }}
+                              title={m.manual ? 'Tiene la fecha en el Check List, pero no se subió el archivo' : undefined}
+                            >
+                              {m.name}{m.manual ? ' · solo fecha, sin archivo' : ''}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Renew modal ── */}
       {renewModal.show && (
