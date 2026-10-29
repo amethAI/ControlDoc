@@ -4,6 +4,7 @@ import apiRouter from './server/routes/index.ts';
 import cron from 'node-cron';
 import { sendExpirationAlerts, sendMonthlyReport, sendDotacionQuincenaReport } from './server/services/alertService.ts';
 import { runCronJob, runIntegrityCheck } from './server/services/opsMonitor.ts';
+import { isQuincenaCutoff } from './server/lib/dotacionConciliacion.ts';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -512,10 +513,11 @@ async function startServer() {
     runCronJob('Reporte mensual', sendMonthlyReport, 120_000)
   );
 
-  // Reporte dotación quincena — días 15 y 30 de cada mes a las 8:00 AM
-  cron.schedule('0 8 15,30 * *', () =>
-    runCronJob('Reporte dotación quincena', sendDotacionQuincenaReport, 60_000)
-  );
+  // Reporte dotación quincena — el 15 y el 30 de cada mes; en febrero el 28
+  cron.schedule('0 8 15,28,30 * *', () => {
+    if (!isQuincenaCutoff(new Date())) return;
+    return runCronJob('Reporte dotación quincena', sendDotacionQuincenaReport, 60_000);
+  });
 
   // Global Express error handler — evita que errores no capturados en rutas devuelvan HTML
   app.use((err: any, _req: any, res: any, _next: any) => {

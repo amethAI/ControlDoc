@@ -75,7 +75,7 @@ export interface IntegrityReport {
 export async function collectIntegrityReport(): Promise<IntegrityReport> {
   const [asigRes, empRes, recRes] = await Promise.all([
     supabase.from('dotacion_asignaciones')
-      .select('id, cuotas, monto_total, estado, employees(full_name), dotacion_pagos(numero_cuota, monto)'),
+      .select('id, cuotas, monto_total, estado, employees(full_name), dotacion_pagos(numero_cuota, monto, anulado_at)'),
     supabase.from('employees')
       .select('full_name, country_code, clubs(country, country_code)')
       .eq('status', 'activo'),
@@ -89,7 +89,7 @@ export async function collectIntegrityReport(): Promise<IntegrityReport> {
     cuotas: a.cuotas,
     monto_total: a.monto_total,
     estado: a.estado,
-    pagos: a.dotacion_pagos || [],
+    pagos: (a.dotacion_pagos || []).filter((p: any) => !p.anulado_at),
   })));
 
   const activeByCountry: Record<string, number> = {};

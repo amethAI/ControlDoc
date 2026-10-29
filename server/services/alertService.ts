@@ -3,6 +3,8 @@ import { getClubConfig } from '../lib/clubConfig.ts';
 import { recipientIdsForCountry } from '../lib/integrityChecks.ts';
 import { isCarneAlertDue, countryRecipientId } from '../lib/expiryRules.ts';
 import { probationEnd, probationMonths } from '../../src/lib/checklistRules.ts';
+import { panamaDate } from '../lib/dotacionConciliacion.ts';
+import { loadPendientes, getOrCreateLote, excelForLote } from './dotacionLotes.ts';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import dns from 'dns';
@@ -973,64 +975,36 @@ export async function sendMonthlyReport() {
 
 export async function sendDotacionQuincenaReport(): Promise<{ success: boolean; error?: string }> {
   try {
-    const today = new Date();
-    const day = today.getDate();
-    const month = today.toLocaleString('es', { month: 'long' });
-    const year = today.getFullYear();
+    const { y, m, d } = panamaDate(new Date());
+    const fechaQuincena = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const month = new Date(Date.UTC(y, m - 1, 15)).toLocaleString('es', { month: 'long', timeZone: 'UTC' });
 
-    // Query all pending assignments across all tandas
-    const { data: asigs, error } = await supabase
-      .from('dotacion_asignaciones')
-      .select(`
-        id, cantidad, cuotas, monto_total, estado,
-        employees(full_name, cedula),
-        dotacion_tandas(descripcion, fecha, clubs(name))
-      `)
-      .neq('estado', 'pagado')
-      .order('dotacion_tandas(descripcion)', { ascending: true });
-
-    if (error) throw error;
-    if (!asigs || asigs.length === 0) {
+    const pendientes = await loadPendientes();
+    if (pendientes.length === 0) {
       console.log('[DOTACION] No hay descuentos pendientes — correo omitido');
       return { success: true };
     }
 
-    // Get pagos count per asignacion to determine next cuota
-    const asigIds = asigs.map((a: any) => a.id);
-    const { data: pagos } = await supabase
-      .from('dotacion_pagos')
-      .select('asignacion_id')
-      .in('asignacion_id', asigIds);
+    // El lote es lo que RRHH devuelve conciliado; el Excel lleva su id para que no se mezclen quincenas
+    const lote = await getOrCreateLote(fechaQuincena);
+    const { buffer, filas } = await excelForLote(lote, pendientes);
+    const cantidadPorId = new Map(pendientes.map(p => [p.asignacion_id, p.cantidad]));
 
-    const pagosCount: Record<string, number> = {};
-    (pagos || []).forEach((p: any) => {
-      pagosCount[p.asignacion_id] = (pagosCount[p.asignacion_id] || 0) + 1;
-    });
-
-    // Build HTML rows
-    const rows = asigs.map((a: any) => {
-      const emp = a.employees || {};
-      const tanda = a.dotacion_tandas || {};
-      const club = tanda.clubs?.name || '';
-      const aplicadas = pagosCount[a.id] || 0;
-      const nextCuota = aplicadas + 1;
-      const montoCuota = parseFloat((Number(a.monto_total) / a.cuotas).toFixed(2));
-      return `
+    const rows = filas.map(f => `
         <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${emp.full_name || ''}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${emp.cedula || ''}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${club}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center;">${a.cantidad}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center;">${nextCuota} de ${a.cuotas}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;">$${montoCuota.toFixed(2)}</td>
-        </tr>`;
-    }).join('');
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${f.nombre}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${f.cedula}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${f.club}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center;">${cantidadPorId.get(f.asignacion_id) ?? ''}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center;">${f.cuota}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;">$${f.esperado.toFixed(2)}</td>
+        </tr>`).join('');
 
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;">
         <div style="background:#1a1a1a;padding:24px 32px;border-radius:8px 8px 0 0;">
           <span style="color:#e02020;font-weight:bold;font-size:20px;">RED</span><span style="color:#9a9a9a;font-size:20px;">VOLUTION</span>
-          <p style="color:#cbd5e1;margin:4px 0 0;font-size:13px;">Descuentos de Dotación — Quincena del ${day} de ${month} ${year}</p>
+          <p style="color:#cbd5e1;margin:4px 0 0;font-size:13px;">Descuentos de Dotación — Quincena del ${d} de ${month} ${y}</p>
         </div>
         <div style="background:#f8fafc;padding:24px 32px;border:1px solid #e2e8f0;border-top:none;">
           <p style="color:#475569;font-size:14px;margin:0 0 16px;">A continuación el listado de colaboradores con descuentos a aplicar en planilla esta quincena:</p>
@@ -1047,35 +1021,54 @@ export async function sendDotacionQuincenaReport(): Promise<{ success: boolean; 
             </thead>
             <tbody>${rows}</tbody>
           </table>
-          <p style="color:#94a3b8;font-size:11px;margin:16px 0 0;">Total de colaboradores: ${asigs.length} · Generado automáticamente por ControlDoc</p>
+          <div style="background:#fff8d6;border:1px solid #f0d77a;border-radius:8px;padding:14px 16px;margin:20px 0 0;color:#5b4a0b;font-size:13px;">
+            <b>Conciliación:</b> adjunto va el Excel de esta quincena. Cuando la planilla esté lista, revisá la columna
+            "Monto descontado en planilla" (viene con lo esperado; cambiala si se descontó otro monto o nada) y subilo en
+            ControlDoc → Dotación → Conciliar quincena. Los pagos se registran recién cuando lo confirmás.
+          </div>
+          <p style="color:#94a3b8;font-size:11px;margin:16px 0 0;">Total de colaboradores: ${filas.length} · Generado automáticamente por ControlDoc</p>
         </div>
       </div>`;
 
     const toEmail = 'rrhhpanama@redvolutionlatam.com';
-    const subject = `Descuentos Dotación — Quincena ${day} de ${month} ${year}`;
+    const subject = `Descuentos Dotación — Quincena ${d} de ${month} ${y}`;
     const sender = { name: 'Sistema PSMT', email: process.env.EMAIL_USER || 'alertaspsmt@gmail.com' };
+    const filename = `Conciliacion_Dotacion_${fechaQuincena}.xlsx`;
 
     if (process.env.BREVO_API_KEY) {
-      await fetch('https://api.brevo.com/v3/smtp/email', {
+      const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: { 'accept': 'application/json', 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json' },
-        body: JSON.stringify({ sender, to: [{ email: toEmail }], subject, htmlContent: html }),
+        body: JSON.stringify({
+          sender, to: [{ email: toEmail }], subject, htmlContent: html,
+          attachment: [{ name: filename, content: buffer.toString('base64') }],
+        }),
       });
+      if (!resp.ok) throw new Error(`Brevo respondió ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
     } else if (process.env.RESEND_API_KEY) {
       const resend = new Resend(process.env.RESEND_API_KEY);
-      await resend.emails.send({ from: process.env.EMAIL_FROM || 'Sistema PSMT <onboarding@resend.dev>', to: [toEmail], subject, html });
+      const { error: rErr } = await resend.emails.send({
+        from: process.env.EMAIL_FROM || 'Sistema PSMT <onboarding@resend.dev>', to: [toEmail], subject, html,
+        attachments: [{ filename, content: buffer }],
+      });
+      if (rErr) throw new Error(`Resend: ${rErr.message}`);
     } else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
       const transporter = nodemailer.createTransport({
         service: 'gmail', host: 'smtp.gmail.com', port: 465, secure: true, family: 4,
         auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
       } as any);
-      await transporter.sendMail({ from: `"Sistema PSMT" <${process.env.EMAIL_USER}>`, to: toEmail, subject, html });
+      await transporter.sendMail({
+        from: `"Sistema PSMT" <${process.env.EMAIL_USER}>`, to: toEmail, subject, html,
+        attachments: [{ filename, content: buffer }],
+      });
+    } else {
+      return { success: false, error: 'Sin proveedor de correo configurado' };
     }
 
-    console.log(`[DOTACION] Reporte quincena enviado a: ${toEmail} (${asigs.length} empleados)`);
+    console.log(`[DOTACION] Reporte quincena enviado a: ${toEmail} (${filas.length} empleados, lote ${lote.id})`);
     return { success: true };
   } catch (err) {
     console.error('[DOTACION] Error al enviar reporte quincena:', err);
-    return { success: false, error: 'Error al generar reporte de dotación' };
+    return { success: false, error: err instanceof Error ? err.message : 'Error al generar reporte de dotación' };
   }
 }

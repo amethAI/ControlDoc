@@ -3,6 +3,7 @@ import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Link2, Plus, ChevronDown, ChevronUp, Check, Clock, AlertCircle, Copy, FileText, X, Download, Trash2, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
+import ConciliacionQuincena from '../components/ConciliacionQuincena';
 
 interface Tanda {
   id: string;
@@ -46,7 +47,27 @@ interface Asignacion {
   estado: 'pendiente' | 'parcial' | 'pagado';
   accepted_at: string;
   pagos_count: number;
+  pagos: Pago[];
 }
+
+interface Pago {
+  id: string;
+  numero_cuota: number;
+  monto: number;
+  fecha_aplicada: string;
+  origen: 'manual' | 'conciliacion';
+  registrado_por: string | null;
+}
+
+const PAGO_MANUAL_ROLES = ['Super Administrador', 'Administrador', 'Gerente Panama'];
+const CONCILIA_ROLES = ['Super Administrador', 'Recursos Humanos'];
+
+// La próxima cuota es la primera que falta, no "cantidad de pagos + 1": una anulada vuelve a quedar pendiente
+const nextCuotaOf = (cuotas: number, pagos: Pago[]) => {
+  const hechas = new Set(pagos.map(p => p.numero_cuota));
+  for (let n = 1; n <= cuotas; n++) if (!hechas.has(n)) return n;
+  return cuotas;
+};
 
 interface TandaDetail {
   tanda: { descripcion: string; fecha: string; precio_por_camisa: number; total_compra: number | null; club_name: string };
@@ -68,16 +89,16 @@ const ESTADO_CONFIG = {
   pagado:    { label: 'Pagado',    color: 'bg-green-100 text-green-700', icon: Check },
 };
 
-function EstadoBadge({ estado, cuotas, pagosCount, asignacionId, onPago }: {
+function EstadoBadge({ estado, cuotas, nextCuota, canMark, asignacionId, onPago }: {
   estado: 'pendiente' | 'parcial' | 'pagado';
   cuotas: number;
-  pagosCount: number;
+  nextCuota: number;
+  canMark: boolean;
   asignacionId: string;
   onPago: (id: string) => void;
 }) {
   const cfg = ESTADO_CONFIG[estado];
   const Icon = cfg.icon;
-  const nextCuota = pagosCount + 1;
   const cuotaLabel = estado === 'pagado' || cuotas <= 1 ? cfg.label : `Cuota ${nextCuota} de ${cuotas}`;
   const buttonLabel = cuotas <= 1 ? 'Marcar descontado' : `Marcar cuota ${nextCuota}`;
 
@@ -87,7 +108,7 @@ function EstadoBadge({ estado, cuotas, pagosCount, asignacionId, onPago }: {
         <Icon className="h-3 w-3" />
         {cuotaLabel}
       </span>
-      {estado !== 'pagado' && (
+      {estado !== 'pagado' && canMark && (
         <button
           onClick={() => onPago(asignacionId)}
           className="text-xs px-2 py-0.5 rounded border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors"
@@ -99,7 +120,68 @@ function EstadoBadge({ estado, cuotas, pagosCount, asignacionId, onPago }: {
   );
 }
 
+function AnularPagoModal({ pago, nombre, onClose, onAnulado }: {
+  pago: Pago;
+  nombre: string;
+  onClose: () => void;
+  onAnulado: () => void;
+}) {
+  const [motivo, setMotivo] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const anular = async () => {
+    setSaving(true);
+    try {
+      const res = await apiFetch(`/api/dotacion/pagos/${pago.id}/anular`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo: motivo.trim() }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error); }
+      toast.success(`Cuota ${pago.numero_cuota} anulada`);
+      onAnulado();
+      onClose();
+    } catch (err: any) { toast.error(err.message || 'No se pudo anular'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-semibold text-slate-800">Anular cuota {pago.numero_cuota}</h3>
+        <p className="text-sm text-slate-500 mt-1">
+          {nombre} · ${Number(pago.monto).toFixed(2)} del {pago.fecha_aplicada?.slice(0, 10).split('-').reverse().join('/')}.
+          La cuota vuelve a quedar pendiente y el pago queda en el historial como anulado.
+        </p>
+        <label className="block text-xs font-medium text-slate-500 mt-4 mb-1">Motivo</label>
+        <textarea
+          value={motivo}
+          onChange={e => setMotivo(e.target.value)}
+          rows={3}
+          autoFocus
+          placeholder="Ej.: no se descontó en planilla, se registró por error"
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200"
+        />
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={onClose} className="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Cancelar</button>
+          <button
+            onClick={anular}
+            disabled={saving || motivo.trim().length < 5}
+            className="text-sm px-3 py-1.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-40"
+          >
+            {saving ? 'Anulando…' : 'Anular cuota'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }) {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'Super Administrador';
+  const canMark = PAGO_MANUAL_ROLES.includes(user?.role ?? '');
+  const [anulando, setAnulando] = useState<{ pago: Pago; nombre: string } | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<TandaDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -265,6 +347,28 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-slate-700 truncate">{a.full_name}</p>
                         <p className="text-xs text-slate-400">{a.cedula} · {a.cantidad} camisa{a.cantidad !== 1 ? 's' : ''} · ${Number(a.monto_total).toFixed(2)}</p>
+                        {(a.pagos?.length ?? 0) > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {a.pagos.map(p => (
+                              <span
+                                key={p.id}
+                                title={`${p.origen === 'conciliacion' ? 'Conciliación' : 'Registrado a mano'}${p.registrado_por ? ` por ${p.registrado_por}` : ''}`}
+                                className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded px-1.5 py-0.5 tabular-nums"
+                              >
+                                C{p.numero_cuota} ${Number(p.monto).toFixed(2)} · {p.fecha_aplicada?.slice(5, 10).split('-').reverse().join('/')}
+                                {isSuperAdmin && (
+                                  <button
+                                    onClick={() => setAnulando({ pago: p, nombre: a.full_name })}
+                                    title="Anular esta cuota"
+                                    className="text-slate-300 hover:text-red-600"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="shrink-0 flex items-center gap-2">
                         <button
@@ -278,7 +382,8 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
                         <EstadoBadge
                           estado={a.estado}
                           cuotas={a.cuotas}
-                          pagosCount={a.pagos_count ?? 0}
+                          nextCuota={nextCuotaOf(a.cuotas, a.pagos || [])}
+                          canMark={canMark}
                           asignacionId={a.id}
                           onPago={applyingId ? () => {} : handlePago}
                         />
@@ -294,7 +399,7 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
                   Copiar link para empleadas
                 </button>
                 <div className="flex items-center gap-3">
-                  {pendientes > 0 && (
+                  {pendientes > 0 && isSuperAdmin && (
                     <button
                       onClick={handlePagoMasivo}
                       disabled={markingAll}
@@ -317,6 +422,15 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
             </>
           ) : null}
         </div>
+      )}
+
+      {anulando && (
+        <AnularPagoModal
+          pago={anulando.pago}
+          nombre={anulando.nombre}
+          onClose={() => setAnulando(null)}
+          onAnulado={() => { loadDetail(); onRefresh(); }}
+        />
       )}
     </div>
   );
@@ -679,6 +793,8 @@ export default function Dotacion() {
           </button>
         )}
       </div>
+
+      {CONCILIA_ROLES.includes(user?.role ?? '') && <ConciliacionQuincena onConciliada={fetchData} />}
 
       {hasContent && totalCompra > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">

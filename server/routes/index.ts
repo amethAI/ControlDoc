@@ -8,6 +8,9 @@ import { normalizeCedula } from '../lib/cedula.ts';
 import { carneStatus } from '../lib/expiryRules.ts';
 import { findMissingDocuments, type CurrentDoc } from '../lib/compliance.ts';
 import { resolveDocExpiry } from '../lib/contractDocs.ts';
+import { pendingCuotas, estadoAsignacion, conciliar, ultimoCorte, type ResultadoConciliacion } from '../lib/dotacionConciliacion.ts';
+import { parseConciliacionExcel } from '../lib/dotacionExcel.ts';
+import { loadPendientes, getOrCreateLote, excelForLote, recomputeEstados } from '../services/dotacionLotes.ts';
 import { generateBadgeCode, generatePin, generatePinSalt, generatePairingCode, hashToken } from '../lib/kioskLogic.ts';
 import { hashBadgeCode, hashPin, PIN_ITERATIONS, formatBadgeQr, workDate } from '../../src/lib/attendanceRules.ts';
 import path from 'path';
@@ -920,6 +923,7 @@ router.post('/dotacion/public/:token/validate', async (req: any, res: any) => {
         .from('dotacion_pagos')
         .select('id')
         .eq('asignacion_id', (existing as any).id)
+        .is('anulado_at', null)
         .limit(1);
       if (pagos && pagos.length > 0) {
         return res.status(409).json({ error: 'Ya se aplicaron descuentos a tu selección, no podés modificarla.' });
@@ -999,6 +1003,7 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
         .from('dotacion_pagos')
         .select('id')
         .eq('asignacion_id', (existing as any).id)
+        .is('anulado_at', null)
         .limit(1);
       if (pagos && pagos.length > 0) {
         return res.status(409).json({ error: 'Ya se aplicaron descuentos a tu selección, no podés modificarla.' });
@@ -5743,40 +5748,35 @@ router.post('/dotacion/asignaciones/:id/pago', isAuthenticated, async (req: any,
     }
     if (asig.estado === 'pagado') return res.status(400).json({ error: 'Ya está completamente pagado' });
 
-    // Count existing pagos
-    const { data: pagos } = await supabase
+    // La cuota que falta se busca por número: una anulada vuelve a quedar pendiente
+    const { data: pagos, error: pErr } = await supabase
       .from('dotacion_pagos')
-      .select('id, numero_cuota')
-      .eq('asignacion_id', id);
-    const numPagos = (pagos || []).length;
-    const nextCuota = numPagos + 1;
-
-    if (nextCuota > asig.cuotas) {
-      return res.status(400).json({ error: 'Todas las cuotas ya fueron aplicadas' });
-    }
-
-    const montoCuota = parseFloat((Number(asig.monto_total) / asig.cuotas).toFixed(2));
+      .select('numero_cuota')
+      .eq('asignacion_id', id)
+      .is('anulado_at', null);
+    if (pErr) throw pErr;
+    const pagadas = (pagos || []).map((p: any) => p.numero_cuota);
+    const next = pendingCuotas(asig.cuotas, Number(asig.monto_total), pagadas)[0];
+    if (!next) return res.status(400).json({ error: 'Todas las cuotas ya fueron aplicadas' });
 
     const { error: insErr } = await supabase.from('dotacion_pagos').insert({
       asignacion_id: id,
-      monto: montoCuota,
-      numero_cuota: nextCuota,
+      monto: next.monto,
+      numero_cuota: next.numero,
+      origen: 'manual',
+      registrado_por: user.name || user.email || 'Sistema',
     });
     if (insErr) {
       if (insErr.code === '23505') return res.status(409).json({ error: 'Esta cuota ya fue registrada. Recargá la página.' });
       throw insErr;
     }
 
-    const nuevoEstado = nextCuota === asig.cuotas ? 'pagado' : 'parcial';
-    const { data: updated, error: updErr } = await supabase
-      .from('dotacion_asignaciones')
-      .update({ estado: nuevoEstado })
-      .eq('id', id)
-      .select()
-      .single();
+    const nuevoEstado = estadoAsignacion(asig.cuotas, [...pagadas, next.numero]);
+    const { error: updErr } = await supabase.from('dotacion_asignaciones').update({ estado: nuevoEstado }).eq('id', id);
     if (updErr) throw updErr;
 
-    res.json({ success: true, estado: nuevoEstado, cuota_aplicada: nextCuota });
+    await logAudit(req, 'Pago de dotación', `Cuota ${next.numero} de ${asig.cuotas} ($${next.monto.toFixed(2)}) registrada a mano`, 'Dotación', id, null, asigEmp?.club_id ?? null);
+    res.json({ success: true, estado: nuevoEstado, cuota_aplicada: next.numero });
   } catch (err: any) {
     res.status(500).json({ error: 'Error al registrar pago' });
   }
@@ -5786,8 +5786,9 @@ router.post('/dotacion/asignaciones/:id/pago', isAuthenticated, async (req: any,
 router.post('/dotacion/tandas/:id/pago-masivo', isAuthenticated, async (req: any, res: any) => {
   try {
     const user = req.user;
-    if (!['Super Administrador', 'Administrador', 'Gerente Panama', 'Recursos Humanos'].includes(user.role)) {
-      return res.status(403).json({ error: 'Sin permiso' });
+    // Registra una cuota a toda la tanda de un golpe: solo Super Admin; lo normal es conciliar con la planilla
+    if (user.role !== 'Super Administrador') {
+      return res.status(403).json({ error: 'Solo el Super Administrador puede registrar pagos masivos. Usá Conciliar quincena.' });
     }
     const { id: tandaId } = req.params;
 
@@ -5814,30 +5815,26 @@ router.post('/dotacion/tandas/:id/pago-masivo', isAuthenticated, async (req: any
       return res.json({ success: true, procesadas: 0, message: 'No hay asignaciones pendientes' });
     }
 
-    // Get pagos counts for all these assignments in one query
     const asigIds = asignaciones.map((a: any) => a.id);
-    const { data: pagos } = await supabase
+    const { data: pagos, error: pErr } = await supabase
       .from('dotacion_pagos')
-      .select('asignacion_id')
-      .in('asignacion_id', asigIds);
-    const pagosCount: Record<string, number> = {};
-    for (const p of (pagos || [])) {
-      pagosCount[(p as any).asignacion_id] = (pagosCount[(p as any).asignacion_id] || 0) + 1;
-    }
+      .select('asignacion_id, numero_cuota')
+      .in('asignacion_id', asigIds)
+      .is('anulado_at', null);
+    if (pErr) throw pErr;
+    const pagadas: Record<string, number[]> = {};
+    for (const p of (pagos || []) as any[]) (pagadas[p.asignacion_id] ||= []).push(p.numero_cuota);
 
     const inserts: any[] = [];
     const updates: Array<{ id: string; estado: string }> = [];
+    const registradoPor = user.name || user.email || 'Sistema';
 
-    for (const asig of asignaciones) {
-      const numPagos = pagosCount[(asig as any).id] || 0;
-      const nextCuota = numPagos + 1;
-      if (nextCuota > (asig as any).cuotas) continue;
-      const montoCuota = parseFloat((Number((asig as any).monto_total) / (asig as any).cuotas).toFixed(2));
-      inserts.push({ asignacion_id: (asig as any).id, monto: montoCuota, numero_cuota: nextCuota });
-      updates.push({
-        id: (asig as any).id,
-        estado: nextCuota === (asig as any).cuotas ? 'pagado' : 'parcial',
-      });
+    for (const asig of asignaciones as any[]) {
+      const ya = pagadas[asig.id] || [];
+      const next = pendingCuotas(asig.cuotas, Number(asig.monto_total), ya)[0];
+      if (!next) continue;
+      inserts.push({ asignacion_id: asig.id, monto: next.monto, numero_cuota: next.numero, origen: 'manual', registrado_por: registradoPor });
+      updates.push({ id: asig.id, estado: estadoAsignacion(asig.cuotas, [...ya, next.numero]) });
     }
 
     if (inserts.length === 0) {
@@ -5862,6 +5859,7 @@ router.post('/dotacion/tandas/:id/pago-masivo', isAuthenticated, async (req: any
       return res.status(500).json({ error: `Se registraron los pagos pero ${fallidas.length} estado(s) no se actualizaron. Avisá a soporte.` });
     }
 
+    await logAudit(req, 'Pago masivo de dotación', `${inserts.length} cuota(s) registradas a mano en la tanda`, 'Dotación', tandaId, null, tandaClub.club_id ?? null);
     res.json({ success: true, procesadas: inserts.length });
   } catch (err: any) {
     res.status(500).json({ error: 'Error al procesar pago masivo' });
@@ -5898,15 +5896,17 @@ router.get('/dotacion/tandas/:id/reporte', isAuthenticated, async (req: any, res
       .filter((a: any) => a.estado !== 'pagado')
       .reduce((s: number, a: any) => s + Number(a.monto_total), 0);
 
-    // Count pagos per asignacion to know current cuota number
     const asigIds = asigs.map((a: any) => a.id);
     const { data: pagosData } = asigIds.length > 0
-      ? await supabase.from('dotacion_pagos').select('asignacion_id').in('asignacion_id', asigIds)
+      ? await supabase
+          .from('dotacion_pagos')
+          .select('id, asignacion_id, numero_cuota, monto, fecha_aplicada, origen, registrado_por')
+          .in('asignacion_id', asigIds)
+          .is('anulado_at', null)
+          .order('numero_cuota')
       : { data: [] as any[] };
-    const pagosCountMap: Record<string, number> = {};
-    for (const p of (pagosData || [])) {
-      pagosCountMap[(p as any).asignacion_id] = (pagosCountMap[(p as any).asignacion_id] || 0) + 1;
-    }
+    const pagosMap: Record<string, any[]> = {};
+    for (const p of (pagosData || []) as any[]) (pagosMap[p.asignacion_id] ||= []).push(p);
 
     res.json({
       tanda: {
@@ -5930,11 +5930,177 @@ router.get('/dotacion/tandas/:id/reporte', isAuthenticated, async (req: any, res
         monto_total: a.monto_total,
         estado: a.estado,
         accepted_at: a.accepted_at,
-        pagos_count: pagosCountMap[a.id] || 0,
+        pagos_count: (pagosMap[a.id] || []).length,
+        pagos: pagosMap[a.id] || [],
       })),
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Error al generar reporte' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Conciliación quincenal de dotación: RRHH sube el Excel con lo descontado en planilla
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CONCILIA_ROLES = ['Super Administrador', 'Recursos Humanos'];
+
+const uploadConciliacion = (req: any, res: any, next: any) => {
+  uploadExcel.single('file')(req, res, (err: any) => {
+    if (err instanceof multer.MulterError) return res.status(400).json({ error: `Error al subir archivo: ${err.message}` });
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+};
+
+const pendientesVisibles = async (user: any) =>
+  (await loadPendientes()).filter(p => canAccessResource(user, p.club_id, p.country));
+
+function resumirConciliacion(resultados: ResultadoConciliacion[]) {
+  const porEstado: Record<string, number> = {};
+  let cuotas = 0, totalRegistrar = 0, totalADevolver = 0;
+  for (const r of resultados) {
+    porEstado[r.estado] = (porEstado[r.estado] || 0) + 1;
+    cuotas += r.registrar.length;
+    totalRegistrar += r.registrar.reduce((s, c) => s + c.monto, 0);
+    totalADevolver += r.aDevolver;
+  }
+  return { porEstado, cuotas, totalRegistrar: +totalRegistrar.toFixed(2), totalADevolver: +totalADevolver.toFixed(2) };
+}
+
+// Lee el archivo y lo compara con lo que se debe hoy; no escribe nada
+async function evaluarConciliacion(req: any): Promise<{ status: number; error: string } | { lote: any; resultados: ResultadoConciliacion[] }> {
+  if (!req.file) return { status: 400, error: 'Subí el Excel de conciliación' };
+  let parsed;
+  try {
+    parsed = await parseConciliacionExcel(req.file.buffer);
+  } catch (e: any) {
+    return { status: 400, error: e.message || 'No se pudo leer el archivo' };
+  }
+  const { data: lote } = await supabase.from('dotacion_lotes').select('*').eq('id', parsed.loteId).maybeSingle();
+  if (!lote || lote.fecha_quincena !== parsed.fechaQuincena) {
+    return { status: 400, error: 'El archivo no corresponde a ninguna quincena de ControlDoc. Usá el Excel que llegó por correo.' };
+  }
+  if (lote.estado !== 'abierto') {
+    return { status: 409, error: `La quincena del ${lote.fecha_quincena} ya fue conciliada por ${lote.conciliado_por || 'otro usuario'}.` };
+  }
+  return { lote, resultados: conciliar(await pendientesVisibles(req.user), parsed.filas) };
+}
+
+router.get('/dotacion/lotes', isAuthenticated, async (req: any, res: any) => {
+  try {
+    if (!CONCILIA_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso' });
+    const { data, error } = await supabase
+      .from('dotacion_lotes')
+      .select('id, fecha_quincena, estado, conciliado_por, conciliado_at, archivo_nombre, resumen')
+      .order('fecha_quincena', { ascending: false })
+      .limit(24);
+    if (error) throw error;
+    res.json({ lotes: data || [], corte_actual: ultimoCorte(new Date()) });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al cargar las quincenas' });
+  }
+});
+
+// Excel de la quincena actual, por si el correo no llegó o se perdió
+router.get('/dotacion/lotes/actual/excel', isAuthenticated, async (req: any, res: any) => {
+  try {
+    if (!CONCILIA_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso' });
+    const lote = await getOrCreateLote(ultimoCorte(new Date()));
+    if (lote.estado !== 'abierto') return res.status(409).json({ error: `La quincena del ${lote.fecha_quincena} ya fue conciliada.` });
+    const { buffer } = await excelForLote(lote, await pendientesVisibles(req.user));
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Conciliacion_Dotacion_${lote.fecha_quincena}.xlsx"`);
+    res.send(buffer);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al generar el Excel de conciliación' });
+  }
+});
+
+router.post('/dotacion/conciliacion/preview', isAuthenticated, uploadConciliacion, async (req: any, res: any) => {
+  try {
+    if (!CONCILIA_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso' });
+    const ev = await evaluarConciliacion(req);
+    if ('error' in ev) return res.status(ev.status).json({ error: ev.error });
+    res.json({ lote: { id: ev.lote.id, fecha_quincena: ev.lote.fecha_quincena }, resultados: ev.resultados, resumen: resumirConciliacion(ev.resultados) });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al revisar el archivo' });
+  }
+});
+
+// El servidor vuelve a calcular todo desde el archivo: el navegador nunca manda montos
+router.post('/dotacion/conciliacion/confirmar', isAuthenticated, uploadConciliacion, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    if (!CONCILIA_ROLES.includes(user.role)) return res.status(403).json({ error: 'Sin permiso' });
+    if (req.body?.revisado !== 'true') return res.status(400).json({ error: 'Marcá que revisaste los montos contra la planilla' });
+    const ev = await evaluarConciliacion(req);
+    if ('error' in ev) return res.status(ev.status).json({ error: ev.error });
+
+    const quien = user.name || user.email || 'Sistema';
+    const resumen = resumirConciliacion(ev.resultados);
+    // Reclamar el lote primero: si dos personas confirman a la vez, solo una gana
+    const { data: claimed, error: claimErr } = await supabase
+      .from('dotacion_lotes')
+      .update({ estado: 'conciliado', conciliado_por: quien, conciliado_at: new Date().toISOString(), archivo_nombre: req.file.originalname?.slice(0, 200) || null, resumen })
+      .eq('id', ev.lote.id)
+      .eq('estado', 'abierto')
+      .select('id');
+    if (claimErr) throw claimErr;
+    if (!claimed?.length) return res.status(409).json({ error: 'Otro usuario acaba de conciliar esta quincena. Recargá la página.' });
+
+    const inserts = ev.resultados.flatMap(r => r.registrar.map(c => ({
+      asignacion_id: r.asignacion_id, monto: c.monto, numero_cuota: c.numero,
+      fecha_aplicada: ev.lote.fecha_quincena, origen: 'conciliacion', lote_id: ev.lote.id, registrado_por: quien,
+    })));
+    if (inserts.length > 0) {
+      // Un solo INSERT es atómico: si falla no queda ningún pago y el lote vuelve a abrirse
+      const { error: insErr } = await supabase.from('dotacion_pagos').insert(inserts);
+      if (insErr) {
+        await supabase.from('dotacion_lotes').update({ estado: 'abierto', conciliado_por: null, conciliado_at: null, archivo_nombre: null, resumen: null }).eq('id', ev.lote.id);
+        if (insErr.code === '23505') return res.status(409).json({ error: 'Alguna cuota ya se registró por otro lado mientras revisabas. Volvé a subir el archivo.' });
+        throw insErr;
+      }
+    }
+
+    const fallidas = await recomputeEstados([...new Set(inserts.map(i => i.asignacion_id))]);
+    await logAudit(req, 'Conciliación de dotación',
+      `Quincena ${ev.lote.fecha_quincena}: ${resumen.cuotas} cuota(s) por $${resumen.totalRegistrar.toFixed(2)}; a devolver $${resumen.totalADevolver.toFixed(2)}`,
+      'Dotación', ev.lote.id, ev.lote.fecha_quincena, null);
+    if (fallidas.length > 0) {
+      console.error('[DOTACION] conciliación: pagos insertados pero estado sin actualizar en', fallidas);
+      return res.status(500).json({ error: `Se registraron los pagos pero ${fallidas.length} estado(s) no se actualizaron. Avisá a soporte.` });
+    }
+    res.json({ success: true, registradas: inserts.length, resumen });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al confirmar la conciliación' });
+  }
+});
+
+// Anular en vez de borrar: queda el rastro de quién, cuándo y por qué
+router.post('/dotacion/pagos/:id/anular', isAuthenticated, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    if (user.role !== 'Super Administrador') return res.status(403).json({ error: 'Solo el Super Administrador puede anular pagos' });
+    const motivo = String(req.body?.motivo ?? '').trim();
+    if (motivo.length < 5) return res.status(400).json({ error: 'Escribí el motivo de la anulación' });
+
+    const { data: anulado, error } = await supabase
+      .from('dotacion_pagos')
+      .update({ anulado_at: new Date().toISOString(), anulado_por: user.name || user.email || 'Sistema', motivo_anulacion: motivo.slice(0, 500) })
+      .eq('id', req.params.id)
+      .is('anulado_at', null)
+      .select('asignacion_id, numero_cuota, monto');
+    if (error) throw error;
+    if (!anulado?.length) return res.status(404).json({ error: 'El pago no existe o ya estaba anulado' });
+
+    const p = anulado[0] as any;
+    const fallidas = await recomputeEstados([p.asignacion_id]);
+    await logAudit(req, 'Anulación de pago de dotación', `Cuota ${p.numero_cuota} ($${Number(p.monto).toFixed(2)}) anulada: ${motivo}`, 'Dotación', p.asignacion_id, null, null);
+    if (fallidas.length > 0) return res.status(500).json({ error: 'Se anuló el pago pero el estado no se actualizó. Avisá a soporte.' });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al anular el pago' });
   }
 });
 
