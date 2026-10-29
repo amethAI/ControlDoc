@@ -9,7 +9,7 @@ interface TandaInfo {
   club_name: string;
 }
 
-type Step = 'loading' | 'error' | 'cedula' | 'seleccion' | 'exito' | 'ya_respondido';
+type Step = 'loading' | 'error' | 'cedula' | 'pagada' | 'seleccion' | 'exito';
 
 export default function DotacionPublica() {
   const { token } = useParams<{ token: string }>();
@@ -29,6 +29,11 @@ export default function DotacionPublica() {
   const [accepted, setAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [isModifying, setIsModifying] = useState(false);
+
+  // Dotación anterior ya pagada: puede pedir más si quedan camisas
+  const [pagada, setPagada] = useState<{ cantidad: number; monto_total: number } | null>(null);
+  const [disponibles, setDisponibles] = useState<number | null>(null);
+  const [isAdicional, setIsAdicional] = useState(false);
 
   // Signature pad
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -119,6 +124,13 @@ export default function DotacionPublica() {
       if (!res.ok) { setCedulaError('Error al verificar. Intentá de nuevo.'); return; }
       const data = await res.json();
       if (data.full_name) setEmployeeName(data.full_name);
+      setIsAdicional(false);
+      if (data.pagada) {
+        setPagada(data.pagada);
+        setDisponibles(data.disponibles ?? null);
+        setStep('pagada');
+        return;
+      }
       if (data.existing) {
         setCantidad(data.existing.cantidad);
         setCuotas(data.existing.cuotas);
@@ -143,9 +155,8 @@ export default function DotacionPublica() {
       const res = await fetch(`/api/dotacion/public/${token}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cedula: cedula.trim(), cantidad, cuotas, firma_base64: getFirmaBase64() }),
+        body: JSON.stringify({ cedula: cedula.trim(), cantidad, cuotas, firma_base64: getFirmaBase64(), adicional: isAdicional }),
       });
-      if (res.status === 409) { setStep('ya_respondido'); return; }
       if (!res.ok) {
         const e = await res.json();
         setCedulaError(e.error || 'Error al enviar');
@@ -196,12 +207,41 @@ export default function DotacionPublica() {
             </div>
           )}
 
-          {/* Ya respondido */}
-          {step === 'ya_respondido' && (
-            <div className="text-center py-8">
-              <CheckCircle className="h-10 w-10 text-blue-400 mx-auto mb-3" />
-              <p className="text-slate-700 font-medium">Ya registraste tu selección</p>
-              <p className="text-slate-400 text-sm mt-1">Tu respuesta para esta tanda ya fue recibida.</p>
+          {/* Dotación anterior pagada */}
+          {step === 'pagada' && tanda && pagada && (
+            <div className="text-center py-2">
+              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <CheckCircle className="h-6 w-6 text-green-500" />
+              </div>
+              <p className="text-base font-semibold text-slate-800">Tu dotación ya está pagada</p>
+              <p className="text-xs text-slate-400 mt-0.5">{employeeName} · {tanda.descripcion}</p>
+
+              <div className="bg-slate-50 rounded-lg p-3 text-sm text-left mt-4">
+                <div className="flex justify-between text-slate-500 mb-1">
+                  <span>Camisas</span><span>{pagada.cantidad}</span>
+                </div>
+                <div className="flex justify-between font-semibold text-slate-800 pt-2 border-t border-slate-200 mt-1">
+                  <span>Total pagado</span><span>${pagada.monto_total.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {disponibles === 0 ? (
+                <p className="text-sm text-slate-500 mt-4">
+                  Ya no quedan camisas en esta tanda. Si necesitás más, avisale a tu supervisora.
+                </p>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setIsAdicional(true); setIsModifying(false); setCantidad(null); setCuotas(null); setAccepted(false); setHasFirma(false); setStep('seleccion'); }}
+                    className="w-full mt-4 bg-[#e02020] text-white rounded-lg py-2.5 text-sm font-medium hover:bg-[#c01818] transition-colors"
+                  >
+                    Pedir más camisas
+                  </button>
+                  {disponibles != null && (
+                    <p className="text-xs text-slate-400 mt-2">Quedan {disponibles} camisa{disponibles !== 1 ? 's' : ''} en esta tanda</p>
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -242,7 +282,7 @@ export default function DotacionPublica() {
                   <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-green-700">{employeeName}</p>
-                    <p className="text-xs text-green-500">{isModifying ? 'Modificando selección anterior' : 'Cédula verificada'}</p>
+                    <p className="text-xs text-green-500">{isAdicional ? 'Pedido adicional' : isModifying ? 'Modificando selección anterior' : 'Cédula verificada'}</p>
                   </div>
                 </div>
               )}
@@ -253,7 +293,8 @@ export default function DotacionPublica() {
                   <button
                     key={n}
                     onClick={() => setCantidad(n)}
-                    className={`border rounded-lg py-2.5 text-sm font-medium transition-colors ${
+                    disabled={isAdicional && disponibles != null && n > disponibles}
+                    className={`border rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
                       cantidad === n
                         ? 'border-[#e02020] bg-red-50 text-[#c01818]'
                         : 'border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -365,7 +406,7 @@ export default function DotacionPublica() {
                 disabled={!canConfirm || submitting}
                 className="w-full bg-[#e02020] text-white rounded-lg py-2.5 text-sm font-medium hover:bg-[#c01818] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {submitting ? 'Enviando...' : isModifying ? 'Guardar cambios' : 'Confirmar y aceptar'}
+                {submitting ? 'Enviando...' : isAdicional ? 'Confirmar pedido adicional' : isModifying ? 'Guardar cambios' : 'Confirmar y aceptar'}
               </button>
             </>
           )}

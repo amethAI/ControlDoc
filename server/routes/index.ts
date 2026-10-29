@@ -10,6 +10,7 @@ import { findMissingDocuments, type CurrentDoc } from '../lib/compliance.ts';
 import { resolveDocExpiry } from '../lib/contractDocs.ts';
 import { pendingCuotas, estadoAsignacion, conciliar, ultimoCorte, type ResultadoConciliacion } from '../lib/dotacionConciliacion.ts';
 import { parseConciliacionExcel } from '../lib/dotacionExcel.ts';
+import { modoSeleccion, camisasDisponibles, pdfPathFor, type AsigResumen } from '../lib/dotacionSeleccion.ts';
 import { loadPendientes, getOrCreateLote, excelForLote, recomputeEstados } from '../services/dotacionLotes.ts';
 import { generateBadgeCode, generatePin, generatePinSalt, generatePairingCode, hashToken } from '../lib/kioskLogic.ts';
 import { hashBadgeCode, hashPin, PIN_ITERATIONS, formatBadgeQr, workDate } from '../../src/lib/attendanceRules.ts';
@@ -874,6 +875,34 @@ router.get('/dotacion/public/:token', async (req: any, res: any) => {
   }
 });
 
+// Lo que la persona ya eligió en esta tanda, con los descuentos activos de cada pedido
+async function loadSeleccion(tandaId: string, employeeId: string): Promise<AsigResumen[]> {
+  const { data: asigs, error } = await supabase
+    .from('dotacion_asignaciones')
+    .select('id, cantidad, cuotas, monto_total, estado, secuencia')
+    .eq('tanda_id', tandaId)
+    .eq('employee_id', employeeId);
+  if (error) throw error;
+  if (!asigs?.length) return [];
+  const { data: pagos, error: pErr } = await supabase
+    .from('dotacion_pagos')
+    .select('asignacion_id')
+    .in('asignacion_id', asigs.map((a: any) => a.id))
+    .is('anulado_at', null);
+  if (pErr) throw pErr;
+  return asigs.map((a: any) => ({
+    id: a.id, cantidad: a.cantidad, cuotas: a.cuotas, monto_total: Number(a.monto_total), estado: a.estado,
+    secuencia: a.secuencia ?? 1,
+    pagosActivos: (pagos || []).filter((p: any) => p.asignacion_id === a.id).length,
+  }));
+}
+
+async function camisasAsignadas(tandaId: string): Promise<number> {
+  const { data, error } = await supabase.from('dotacion_asignaciones').select('cantidad').eq('tanda_id', tandaId);
+  if (error) throw error;
+  return (data || []).reduce((s: number, a: any) => s + Number(a.cantidad), 0);
+}
+
 router.post('/dotacion/public/:token/validate', async (req: any, res: any) => {
   try {
     const { token } = req.params;
@@ -882,7 +911,7 @@ router.post('/dotacion/public/:token/validate', async (req: any, res: any) => {
 
     const { data: tanda, error: tandaErr } = await supabase
       .from('dotacion_tandas')
-      .select('id, club_id, activa')
+      .select('id, club_id, activa, cantidad_total')
       .eq('token', token)
       .single();
     if (tandaErr || !tanda) return res.status(404).json({ error: 'Enlace no válido' });
@@ -911,30 +940,28 @@ router.post('/dotacion/public/:token/validate', async (req: any, res: any) => {
     }
     if (!employee) return res.status(404).json({ error: 'Cédula no encontrada en este club. Verificá el número.' });
 
-    const { data: existing } = await supabase
-      .from('dotacion_asignaciones')
-      .select('id, cantidad, cuotas, monto_total')
-      .eq('tanda_id', tanda.id)
-      .eq('employee_id', (employee as any).id)
-      .maybeSingle();
-
-    if (existing) {
-      const { data: pagos } = await supabase
-        .from('dotacion_pagos')
-        .select('id')
-        .eq('asignacion_id', (existing as any).id)
-        .is('anulado_at', null)
-        .limit(1);
-      if (pagos && pagos.length > 0) {
-        return res.status(409).json({ error: 'Ya se aplicaron descuentos a tu selección, no podés modificarla.' });
-      }
-      return res.json({
-        full_name: (employee as any).full_name,
-        existing: { cantidad: (existing as any).cantidad, cuotas: (existing as any).cuotas },
+    const sel = modoSeleccion(await loadSeleccion(tanda.id, (employee as any).id));
+    const full_name = (employee as any).full_name;
+    if (sel.modo === 'en_curso') {
+      const a = sel.asignacion;
+      return res.status(409).json({
+        error: `Todavía estás pagando tu dotación (${a.pagosActivos} de ${a.cuotas} cuotas descontadas). Cuando termines de pagarla vas a poder pedir más camisas.`,
       });
     }
-
-    res.json({ full_name: (employee as any).full_name });
+    if (sel.modo === 'modificar') {
+      return res.json({ full_name, existing: { cantidad: sel.asignacion.cantidad, cuotas: sel.asignacion.cuotas } });
+    }
+    if (sel.modo === 'adicional') {
+      return res.json({
+        full_name,
+        pagada: {
+          cantidad: sel.pagadas.reduce((s, a) => s + a.cantidad, 0),
+          monto_total: +sel.pagadas.reduce((s, a) => s + a.monto_total, 0).toFixed(2),
+        },
+        disponibles: camisasDisponibles((tanda as any).cantidad_total ?? null, await camisasAsignadas(tanda.id)),
+      });
+    }
+    res.json({ full_name });
   } catch (err: any) {
     res.status(500).json({ error: 'Error al validar cédula' });
   }
@@ -957,7 +984,7 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
 
     const { data: tanda, error: tandaErr } = await supabase
       .from('dotacion_tandas')
-      .select('id, club_id, precio_por_camisa, activa')
+      .select('id, club_id, precio_por_camisa, activa, cantidad_total')
       .eq('token', token)
       .single();
     if (tandaErr || !tanda) return res.status(404).json({ error: 'Enlace no válido' });
@@ -986,33 +1013,39 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
     }
     if (!employee) return res.status(404).json({ error: 'Cédula no encontrada en este club' });
 
-    const { data: existing } = await supabase
-      .from('dotacion_asignaciones')
-      .select('id')
-      .eq('tanda_id', tanda.id)
-      .eq('employee_id', (employee as any).id)
-      .maybeSingle();
+    // El servidor decide de nuevo qué corresponde; no confía en lo que mostró la pantalla
+    const sel = modoSeleccion(await loadSeleccion(tanda.id, (employee as any).id));
+    if (sel.modo === 'en_curso') {
+      return res.status(409).json({ error: 'Todavía estás pagando tu dotación. Cuando termines vas a poder pedir más camisas.' });
+    }
+    if (sel.modo === 'adicional') {
+      // Pedir más tiene que ser explícito: así nadie crea un pedido nuevo creyendo que modifica el anterior
+      if (req.body.adicional !== true) {
+        return res.status(409).json({ error: 'Tu dotación anterior ya está pagada. Volvé a ingresar tu cédula para pedir más camisas.' });
+      }
+      const disponibles = camisasDisponibles((tanda as any).cantidad_total ?? null, await camisasAsignadas(tanda.id));
+      if (disponibles != null && Number(cantidad) > disponibles) {
+        return res.status(409).json({
+          error: disponibles === 0 ? 'Ya no quedan camisas en esta tanda.' : `Solo quedan ${disponibles} camisa${disponibles !== 1 ? 's' : ''} en esta tanda.`,
+        });
+      }
+    }
 
     const monto_total = parseFloat((Number(cantidad) * Number(tanda.precio_por_camisa)).toFixed(2));
     const accepted_at = new Date().toISOString();
 
     let asignacionId: string;
+    let secuencia: number;
 
-    if (existing) {
-      const { data: pagos } = await supabase
-        .from('dotacion_pagos')
-        .select('id')
-        .eq('asignacion_id', (existing as any).id)
-        .is('anulado_at', null)
-        .limit(1);
-      if (pagos && pagos.length > 0) {
-        return res.status(409).json({ error: 'Ya se aplicaron descuentos a tu selección, no podés modificarla.' });
-      }
-      await supabase.from('dotacion_asignaciones')
+    if (sel.modo === 'modificar') {
+      const { error: updErr } = await supabase.from('dotacion_asignaciones')
         .update({ cantidad: Number(cantidad), cuotas: Number(cuotas), monto_total, accepted_at })
-        .eq('id', (existing as any).id);
-      asignacionId = (existing as any).id;
+        .eq('id', sel.asignacion.id);
+      if (updErr) throw updErr;
+      asignacionId = sel.asignacion.id;
+      secuencia = sel.asignacion.secuencia;
     } else {
+      secuencia = sel.secuencia;
       const { data: asignacion, error: insertErr } = await supabase
         .from('dotacion_asignaciones')
         .insert({
@@ -1023,10 +1056,14 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
           monto_total,
           estado: 'pendiente',
           accepted_at,
+          secuencia,
         })
         .select('id')
         .single();
-      if (insertErr) throw insertErr;
+      if (insertErr) {
+        if (insertErr.code === '23505') return res.status(409).json({ error: 'Tu selección ya se registró. Si querés cambiarla, volvé a ingresar tu cédula.' });
+        throw insertErr;
+      }
       asignacionId = (asignacion as any).id;
     }
 
@@ -1054,7 +1091,7 @@ router.post('/dotacion/public/:token/submit', async (req: any, res: any) => {
         locale: (tandaInfo?.clubs as any)?.locale || 'es-PA',
       });
 
-      const pdfPath = `${tanda.id}/${employee.id}.pdf`;
+      const pdfPath = pdfPathFor(tanda.id, employee.id, secuencia);
       await supabase.storage.from('dotacion-auth').upload(pdfPath, pdfBuffer, {
         contentType: 'application/pdf',
         upsert: true,
@@ -5876,7 +5913,7 @@ router.get('/dotacion/tandas/:id/reporte', isAuthenticated, async (req: any, res
         id, club_id, descripcion, fecha, precio_por_camisa, total_compra,
         clubs(name, country),
         dotacion_asignaciones(
-          id, cantidad, cuotas, monto_total, estado, accepted_at,
+          id, cantidad, cuotas, monto_total, estado, accepted_at, secuencia,
           employees(full_name, cedula)
         )
       `)
@@ -5930,6 +5967,7 @@ router.get('/dotacion/tandas/:id/reporte', isAuthenticated, async (req: any, res
         monto_total: a.monto_total,
         estado: a.estado,
         accepted_at: a.accepted_at,
+        secuencia: a.secuencia ?? 1,
         pagos_count: (pagosMap[a.id] || []).length,
         pagos: pagosMap[a.id] || [],
       })),

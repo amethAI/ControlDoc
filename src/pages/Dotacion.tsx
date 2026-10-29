@@ -48,6 +48,7 @@ interface Asignacion {
   accepted_at: string;
   pagos_count: number;
   pagos: Pago[];
+  secuencia: number;
 }
 
 interface Pago {
@@ -345,7 +346,14 @@ function TandaCard({ tanda, onRefresh }: { tanda: Tanda; onRefresh: () => void }
                   {detail.asignaciones.map(a => (
                     <div key={a.id} className="flex items-center justify-between px-4 py-3 gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-700 truncate">{a.full_name}</p>
+                        <p className="text-sm font-medium text-slate-700 truncate">
+                          {a.full_name}
+                          {(a.secuencia ?? 1) > 1 && (
+                            <span className="ml-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-violet-50 text-violet-600 align-middle">
+                              Pedido adicional {a.secuencia}
+                            </span>
+                          )}
+                        </p>
                         <p className="text-xs text-slate-400">{a.cedula} · {a.cantidad} camisa{a.cantidad !== 1 ? 's' : ''} · ${Number(a.monto_total).toFixed(2)}</p>
                         {(a.pagos?.length ?? 0) > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
