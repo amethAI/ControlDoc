@@ -8,6 +8,7 @@ import { normalizeCedula } from '../lib/cedula.ts';
 import { carneStatus } from '../lib/expiryRules.ts';
 import { findMissingDocuments, type CurrentDoc } from '../lib/compliance.ts';
 import { resolveDocExpiry } from '../lib/contractDocs.ts';
+import { dateOrEmpty } from '../lib/validation.ts';
 import { pendingCuotas, estadoAsignacion, conciliar, ultimoCorte, type ResultadoConciliacion } from '../lib/dotacionConciliacion.ts';
 import { parseConciliacionExcel } from '../lib/dotacionExcel.ts';
 import { modoSeleccion, camisasDisponibles, pdfPathFor, type AsigResumen } from '../lib/dotacionSeleccion.ts';
@@ -327,7 +328,6 @@ async function buildReportePDF(data: {
 }
 
 // ─── Zod validation schemas ───────────────────────────────────────────────────
-const dateOrEmpty = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').or(z.literal('').transform(() => undefined)).optional();
 
 const createEmployeeSchema = z.object({
   full_name:        z.string().min(2, 'Nombre requerido').max(120),
