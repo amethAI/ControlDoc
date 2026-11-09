@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Actualización de datos · Redvolution</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --ink: #1a1a1a; --red: #e02020; --red-dark: #b81818; --gray: #9a9a9a;
+    --bg: #f4f4f2; --card: #ffffff; --line: #e2e2de; --muted: #6b6b66; --ok: #157a3c; --ok-bg: #e7f5ec; --err: #b42323;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 0 16px 48px; }
+  header.brand { background: var(--ink); padding: 26px 20px 22px; text-align: center; }
+  .logo { font-size: 30px; letter-spacing: .14em; line-height: 1; }
+  .logo b { color: var(--red); font-weight: 700; }
+  .logo span { color: var(--gray); font-weight: 400; }
+  .tag { color: #6f6f6a; font-size: 11px; letter-spacing: .28em; text-transform: uppercase; margin-top: 8px; }
+  .intro { background: var(--card); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 16px 16px; padding: 20px; margin-bottom: 18px; }
+  .intro h1 { font-size: 21px; margin: 0 0 6px; text-wrap: balance; }
+  .intro p { margin: 0; color: var(--muted); font-size: 15px; }
+  fieldset { border: 1px solid var(--line); background: var(--card); border-radius: 16px; padding: 18px 18px 6px; margin: 0 0 14px; }
+  legend { font-weight: 700; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--red); padding: 0 6px; }
+  .field { margin-bottom: 16px; }
+  label.lbl { display: block; font-weight: 600; font-size: 15px; margin-bottom: 6px; }
+  .req { color: var(--red); }
+  .hint { display: block; font-weight: 400; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  input[type=text], input[type=tel], input[type=number], input[type=date], select {
+    width: 100%; font: inherit; padding: 12px 14px; border: 1px solid #cfcfca; border-radius: 12px; background: #fff; color: var(--ink);
+  }
+  input:focus, select:focus { outline: 3px solid color-mix(in srgb, var(--red) 25%, transparent); border-color: var(--red); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 420px) { .row2 { grid-template-columns: 1fr; } }
+  .pills { display: flex; gap: 10px; }
+  .pills label { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border: 1px solid #cfcfca; border-radius: 12px; cursor: pointer; font-weight: 600; }
+  .pills input { accent-color: var(--red); }
+  .pills label:has(input:checked) { border-color: var(--red); background: #fff1f1; }
+  .spouse[hidden] { display: none; }
+  .consent { display: flex; gap: 10px; align-items: flex-start; background: #fafaf8; border: 1px solid var(--line); border-radius: 12px; padding: 14px; font-size: 14px; color: #3d3d39; margin: 4px 0 18px; }
+  .consent input { accent-color: var(--red); width: 18px; height: 18px; margin-top: 2px; flex: none; }
+  button[type=submit] { width: 100%; font: inherit; font-weight: 700; color: #fff; background: var(--red); border: 0; border-radius: 12px; padding: 15px; cursor: pointer; }
+  button[type=submit]:hover { background: var(--red-dark); }
+  button[disabled] { opacity: .6; cursor: wait; }
+  .msg { border-radius: 12px; padding: 14px 16px; margin-top: 14px; font-size: 15px; }
+  .msg.err { background: #fde9e9; color: var(--err); }
+  .done { text-align: center; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 32px 20px; }
+  .done .check { width: 56px; height: 56px; border-radius: 50%; background: var(--ok-bg); color: var(--ok); display: grid; place-items: center; margin: 0 auto 12px; font-size: 28px; font-weight: 700; }
+  .done h2 { margin: 0 0 6px; font-size: 20px; }
+  .done p { margin: 0; color: var(--muted); }
+  .hp { position: absolute; left: -9999px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<header class="brand" aria-label="Redvolution">
+  <div class="logo"><b>RED</b><span>VOLUTION</span></div>
+  <div class="tag">Recursos Humanos</div>
+</header>
+
+<main class="wrap">
+  <div class="intro">
+    <h1>Actualización de datos del colaborador</h1>
+    <p>Necesitamos completar tu expediente. Te toma menos de 3 minutos. Los campos con <span class="req">*</span> son obligatorios.</p>
+  </div>
+
+  <form id="encuesta" action="https://formspree.io/f/xeaayokn" method="POST" novalidate>
+    <input type="hidden" name="_subject" value="Actualización de datos de colaborador">
+    <input type="text" name="_gotcha" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+
+    <fieldset>
+      <legend>Tus datos</legend>
+      <div class="field">
+        <label class="lbl" for="nombre">Nombre completo <span class="req">*</span><span class="hint">Nombres y los dos apellidos, como aparece en tu cédula</span></label>
+        <input type="text" id="nombre" name="Nombre completo" required autocomplete="name" placeholder="Ej.: María José Pérez González">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label class="lbl" for="cedula">Cédula <span class="req">*</span></label>
+          <input type="text" id="cedula" name="Cédula" required placeholder="8-123-4567" inputmode="text">
+        </div>
+        <div class="field">
+          <label class="lbl" for="cliente">Dónde trabajas <span class="req">*</span></label>
+          <select id="cliente" name="Cliente / club" required>
+            <option value="">Selecciona…</option>
+            <option>PriceSmart David</option>
+            <option>PriceSmart Costa Verde</option>
+            <option>PriceSmart Metropark</option>
+            <option>Oficina Redvolution</option>
+            <option>P&amp;G</option>
+            <option>Haleon</option>
+            <option>Schneider</option>
+            <option>Lenovo</option>
+          </select>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Datos físicos</legend>
+      <div class="row2">
+        <div class="field">
+          <label class="lbl" for="estatura">Estatura <span class="req">*</span><span class="hint">En metros, por ejemplo 1.65</span></label>
+          <input type="number" id="estatura" name="Estatura (m)" required min="1.00" max="2.30" step="0.01" inputmode="decimal" placeholder="1.65">
+        </div>
+        <div class="field">
+          <label class="lbl" for="peso">Peso <span class="req">*</span><span class="hint">En libras, por ejemplo 140</span></label>
+          <input type="number" id="peso" name="Peso (lb)" required min="60" max="500" step="1" inputmode="numeric" placeholder="140">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Tu cédula</legend>
+      <div class="field">
+        <label class="lbl" for="fecha_cedula">Fecha de emisión <span class="req">*</span><span class="hint">Está al frente de tu cédula</span></label>
+        <input type="date" id="fecha_cedula" name="Fecha de emisión de la cédula" required max="">
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Tu familia</legend>
+      <div class="field">
+        <span class="lbl" id="pareja-lbl">¿Tienes esposo/a o pareja? <span class="req">*</span></span>
+        <div class="pills" role="radiogroup" aria-labelledby="pareja-lbl">
+          <label><input type="radio" name="Tiene cónyuge" value="Sí" required> Sí</label>
+          <label><input type="radio" name="Tiene cónyuge" value="No"> No</label>
+        </div>
+      </div>
+      <div class="spouse" id="spouse" hidden>
+        <div class="field">
+          <label class="lbl" for="trabajo_conyuge">Lugar de trabajo del cónyuge<span class="hint">Si no trabaja, escribe "No trabaja"</span></label>
+          <input type="text" id="trabajo_conyuge" name="Lugar de trabajo del cónyuge">
+        </div>
+        <div class="field">
+          <label class="lbl" for="tel_conyuge">Teléfono del cónyuge</label>
+          <input type="tel" id="tel_conyuge" name="Teléfono del cónyuge" placeholder="6000-0000" inputmode="tel">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label class="lbl" for="hijos">Número de hijos <span class="req">*</span></label>
+          <input type="number" id="hijos" name="Número de hijos" required min="0" max="20" inputmode="numeric" placeholder="0">
+        </div>
+        <div class="field">
+          <label class="lbl" for="dependientes">Dependientes económicos <span class="req">*</span><span class="hint">Personas que dependen de tu ingreso</span></label>
+          <input type="number" id="dependientes" name="Dependientes económicos" required min="0" max="20" inputmode="numeric" placeholder="0">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Contacto de emergencia</legend>
+      <div class="field">
+        <label class="lbl" for="emerg_nombre">En caso de emergencia, avisar a <span class="req">*</span></label>
+        <input type="text" id="emerg_nombre" name="Contacto de emergencia (nombre)" required placeholder="Nombre y apellido">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label class="lbl" for="emerg_parentesco">Parentesco <span class="req">*</span></label>
+          <select id="emerg_parentesco" name="Parentesco del contacto de emergencia" required>
+            <option value="">Selecciona…</option>
+            <option>Madre</option><option>Padre</option><option>Esposo/a</option><option>Pareja</option>
+            <option>Hijo/a</option><option>Hermano/a</option><option>Abuelo/a</option><option>Tío/a</option><option>Otro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="lbl" for="emerg_tel">Teléfono de emergencia <span class="req">*</span></label>
+          <input type="tel" id="emerg_tel" name="Teléfono de emergencia" required placeholder="6000-0000" inputmode="tel">
+        </div>
+      </div>
+    </fieldset>
+
+    <label class="consent">
+      <input type="checkbox" name="Autoriza uso de datos" value="Sí" required>
+      <span>Autorizo a Redvolution a guardar estos datos en mi expediente laboral y a usarlos solo para fines de Recursos Humanos.</span>
+    </label>
+
+    <button type="submit" id="enviar">Enviar mis datos</button>
+    <div id="msg" class="msg err" role="alert" hidden></div>
+  </form>
+
+  <div class="done" id="done" hidden>
+    <div class="check" aria-hidden="true">✓</div>
+    <h2>¡Gracias! Recibimos tus datos</h2>
+    <p>Recursos Humanos los va a cargar en tu expediente.</p>
+  </div>
+
+  <footer>Redvolution International S.A. · Recursos Humanos</footer>
+</main>
+
+<script>
+  const form = document.getElementById('encuesta');
+  const msg = document.getElementById('msg');
+  const spouse = document.getElementById('spouse');
+
+  // La fecha de emisión no puede ser futura
+  document.getElementById('fecha_cedula').max = new Date().toISOString().slice(0, 10);
+
+  // Los datos del cónyuge solo aparecen si tiene pareja
+  form.querySelectorAll('input[name="Tiene cónyuge"]').forEach(r => r.addEventListener('change', () => {
+    spouse.hidden = r.value !== 'Sí' || !r.checked;
+    if (spouse.hidden) spouse.querySelectorAll('input').forEach(i => { i.value = ''; });
+  }));
+
+  const showError = text => { msg.textContent = text; msg.hidden = false; msg.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    msg.hidden = true;
+    if (!form.checkValidity()) {
+      const first = form.querySelector('input:invalid, select:invalid');
+      showError('Revisa los campos obligatorios: falta completar "' + (first.closest('.field')?.querySelector('.lbl')?.firstChild?.textContent.trim() || 'un dato') + '".');
+      first.focus();
+      return;
+    }
+    const btn = document.getElementById('enviar');
+    btn.disabled = true; btn.textContent = 'Enviando…';
+    try {
+      const res = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error();
+      form.hidden = true;
+      document.getElementById('done').hidden = false;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      showError('No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Enviar mis datos';
+    }
+  });
+</script>
+</body>
+</html>

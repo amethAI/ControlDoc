@@ -52,7 +52,7 @@ export default defineConfig(({mode}) => {
           navigateFallback: '/index.html',
           /* Exclude API routes AND all static assets — SW must never serve
              index.html for missing JS/CSS/image files (MIME type mismatch) */
-          navigateFallbackDenylist: [/^\/api\//, /^\/assets\//, /\.(js|css|png|svg|ico|woff2?)$/i],
+          navigateFallbackDenylist: [/^\/api\//, /^\/assets\//, /^\/encuesta/, /\.(js|css|png|svg|ico|woff2?)$/i],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           runtimeCaching: [
             {

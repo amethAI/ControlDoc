@@ -16,6 +16,7 @@ import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
 import { createHash } from 'crypto';
 import kioskRouter from './server/routes/kiosk.ts';
+import { ENCUESTA_CSP } from './server/lib/encuestaCsp.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -143,6 +144,15 @@ async function startServer() {
     } catch {
       res.status(503).json({ status: 'error', db: 'unreachable' });
     }
+  });
+
+  // Encuesta de datos de colaboradores: página pública que envía directo a Formspree (no pasa por ControlDoc).
+  // Lleva sus propias reglas de seguridad para que solo esta página pueda conectarse con Formspree.
+  app.get(['/encuesta', '/encuesta.html'], (_req, res) => {
+    const dir = process.env.NODE_ENV === 'production' ? 'dist' : 'public';
+    res.setHeader('Content-Security-Policy', ENCUESTA_CSP);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(path.join(process.cwd(), dir, 'encuesta.html'));
   });
 
   // Generate and download PowerPoint presentation
