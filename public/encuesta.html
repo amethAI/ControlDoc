@@ -131,6 +131,10 @@
       </div>
       <div class="spouse" id="spouse" hidden>
         <div class="field">
+          <label class="lbl" for="nombre_conyuge">Nombre del cónyuge <span class="req">*</span><span class="hint">Nombre y apellido</span></label>
+          <input type="text" id="nombre_conyuge" name="Nombre del cónyuge">
+        </div>
+        <div class="field">
           <label class="lbl" for="trabajo_conyuge">Lugar de trabajo del cónyuge<span class="hint">Si no trabaja, escribe "No trabaja"</span></label>
           <input type="text" id="trabajo_conyuge" name="Lugar de trabajo del cónyuge">
         </div>
@@ -202,6 +206,8 @@
   // Los datos del cónyuge solo aparecen si tiene pareja
   form.querySelectorAll('input[name="Tiene cónyuge"]').forEach(r => r.addEventListener('change', () => {
     spouse.hidden = r.value !== 'Sí' || !r.checked;
+    // El nombre del cónyuge es obligatorio solo si dijo que tiene pareja
+    document.getElementById('nombre_conyuge').required = !spouse.hidden;
     if (spouse.hidden) spouse.querySelectorAll('input').forEach(i => { i.value = ''; });
   }));
 
