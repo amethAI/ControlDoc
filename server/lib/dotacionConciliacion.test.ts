@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pendingCuotas, conciliar, isQuincenaCutoff, estadoAsignacion, ultimoCorte, type Asignacion } from './dotacionConciliacion.ts';
+import { pendingCuotas, conciliar, isQuincenaCutoff, estadoAsignacion, ultimoCorte, proximoCorte, corteAEnviarHoy, type Asignacion } from './dotacionConciliacion.ts';
 
 const asig = (id: string, cuotas: number, total: number, pagadas: number[] = [], cedula = `8-000-${id}`): Asignacion =>
   ({ asignacion_id: id, cedula, nombre: `Demo ${id}`, cuotas, monto_total: total, pagadas });
@@ -115,6 +115,38 @@ test('último corte de quincena a la fecha', () => {
   assert.equal(ultimoCorte(d('2027-01-10')), '2026-12-30');
   assert.equal(ultimoCorte(d('2027-03-01')), '2027-02-28');
   assert.equal(ultimoCorte(d('2028-02-29')), '2028-02-28');
+});
+
+test('próximo corte de quincena, hoy incluido', () => {
+  const d = (s: string) => new Date(`${s}T13:00:00Z`);
+  assert.equal(proximoCorte(d('2026-11-13')), '2026-11-15');
+  assert.equal(proximoCorte(d('2026-11-15')), '2026-11-15');
+  assert.equal(proximoCorte(d('2026-11-16')), '2026-11-30');
+  assert.equal(proximoCorte(d('2026-11-30')), '2026-11-30');
+  assert.equal(proximoCorte(d('2026-10-31')), '2026-11-15');
+  assert.equal(proximoCorte(d('2026-12-31')), '2027-01-15');
+  assert.equal(proximoCorte(d('2027-02-20')), '2027-02-28');
+  assert.equal(proximoCorte(d('2028-02-29')), '2028-03-15');
+});
+
+test('el correo del corte sale ese día, o el viernes anterior si cae en fin de semana', () => {
+  const d = (s: string) => new Date(`${s}T13:00:00Z`);
+  // 15/11/2026 es domingo: sale el viernes 13 y el domingo ya no
+  assert.equal(corteAEnviarHoy(d('2026-11-13')), '2026-11-15');
+  assert.equal(corteAEnviarHoy(d('2026-11-14')), null);
+  assert.equal(corteAEnviarHoy(d('2026-11-15')), null);
+  // 30/05/2026 es sábado: sale el viernes 29
+  assert.equal(corteAEnviarHoy(d('2026-05-29')), '2026-05-30');
+  assert.equal(corteAEnviarHoy(d('2026-05-30')), null);
+  // Día hábil: sale el mismo día
+  assert.equal(corteAEnviarHoy(d('2026-10-15')), '2026-10-15');
+  assert.equal(corteAEnviarHoy(d('2026-10-30')), '2026-10-30');
+  assert.equal(corteAEnviarHoy(d('2026-10-14')), null);
+  // Febrero corta el 28: 28/02/2027 es domingo → viernes 26
+  assert.equal(corteAEnviarHoy(d('2027-02-26')), '2027-02-28');
+  assert.equal(corteAEnviarHoy(d('2027-02-28')), null);
+  // Hora de Panamá: 13/11 a las 23:00 en Panamá (04:00 UTC del 14) sigue siendo viernes
+  assert.equal(corteAEnviarHoy(new Date('2026-11-14T04:00:00Z')), '2026-11-15');
 });
 
 test('estado de la asignación según cuotas activas', () => {

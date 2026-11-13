@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../db.ts';
-import { sendExpirationAlerts, sendLoginAlert } from '../services/alertService.ts';
+import { sendExpirationAlerts, sendLoginAlert, sendDotacionQuincenaReport } from '../services/alertService.ts';
 import { getClubConfig, invalidateClubConfig } from '../lib/clubConfig.ts';
 import { getPersonalCombinedIds, getDocTypeIdBySlug } from '../lib/docTypes.ts';
 import { probationEnd, probationMonths } from '../../src/lib/checklistRules.ts';
@@ -9,7 +9,7 @@ import { carneStatus } from '../lib/expiryRules.ts';
 import { findMissingDocuments, type CurrentDoc } from '../lib/compliance.ts';
 import { resolveDocExpiry } from '../lib/contractDocs.ts';
 import { dateOrEmpty } from '../lib/validation.ts';
-import { pendingCuotas, estadoAsignacion, conciliar, ultimoCorte, type ResultadoConciliacion } from '../lib/dotacionConciliacion.ts';
+import { pendingCuotas, estadoAsignacion, conciliar, ultimoCorte, proximoCorte, type ResultadoConciliacion } from '../lib/dotacionConciliacion.ts';
 import { parseConciliacionExcel } from '../lib/dotacionExcel.ts';
 import { modoSeleccion, camisasDisponibles, pdfPathFor, type AsigResumen } from '../lib/dotacionSeleccion.ts';
 import { loadPendientes, getOrCreateLote, excelForLote, recomputeEstados } from '../services/dotacionLotes.ts';
@@ -6052,6 +6052,20 @@ router.get('/dotacion/lotes/actual/excel', isAuthenticated, async (req: any, res
     res.send(buffer);
   } catch (err: any) {
     res.status(500).json({ error: 'Error al generar el Excel de conciliación' });
+  }
+});
+
+// Manda ya el correo de descuentos del próximo corte (p. ej. cuando el 15 cae domingo y la planilla se cierra antes)
+router.post('/dotacion/lotes/enviar-correo', isAuthenticated, async (req: any, res: any) => {
+  try {
+    if (!CONCILIA_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso' });
+    const corte = proximoCorte(new Date());
+    const result = await sendDotacionQuincenaReport(corte);
+    if (!result.success) return res.status(500).json({ error: result.error || 'No se pudo enviar el correo' });
+    await logAudit(req, 'Correo de dotación enviado a mano', `Descuentos de la quincena del ${corte.split('-').reverse().join('/')}`, 'Dotación', null, null, null);
+    res.json({ success: true, corte });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Error al enviar el correo de dotación' });
   }
 });
 

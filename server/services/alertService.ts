@@ -3,7 +3,6 @@ import { getClubConfig } from '../lib/clubConfig.ts';
 import { recipientIdsForCountry } from '../lib/integrityChecks.ts';
 import { isCarneAlertDue, countryRecipientId } from '../lib/expiryRules.ts';
 import { probationEnd, probationMonths } from '../../src/lib/checklistRules.ts';
-import { panamaDate } from '../lib/dotacionConciliacion.ts';
 import { loadPendientes, getOrCreateLote, excelForLote } from './dotacionLotes.ts';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
@@ -973,10 +972,11 @@ export async function sendMonthlyReport() {
   }
 }
 
-export async function sendDotacionQuincenaReport(): Promise<{ success: boolean; error?: string }> {
+/** fechaQuincena es el corte (15 o 30/28), aunque el correo salga antes porque el corte cae en fin de semana. */
+export async function sendDotacionQuincenaReport(fechaQuincena: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const { y, m, d } = panamaDate(new Date());
-    const fechaQuincena = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaQuincena)) return { success: false, error: 'Fecha de corte inválida' };
+    const [y, m, d] = fechaQuincena.split('-').map(Number);
     const month = new Date(Date.UTC(y, m - 1, 15)).toLocaleString('es', { month: 'long', timeZone: 'UTC' });
 
     const pendientes = await loadPendientes();

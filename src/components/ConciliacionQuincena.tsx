@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../lib/api';
-import { Download, Upload, Check, X, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { Download, Upload, Check, X, FileSpreadsheet, AlertTriangle, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Estado =
@@ -60,7 +60,7 @@ export default function ConciliacionQuincena({ onConciliada }: { onConciliada: (
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [revisado, setRevisado] = useState(false);
-  const [busy, setBusy] = useState<'preview' | 'confirm' | 'excel' | null>(null);
+  const [busy, setBusy] = useState<'preview' | 'confirm' | 'excel' | 'correo' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const loadLotes = useCallback(async () => {
@@ -95,6 +95,20 @@ export default function ConciliacionQuincena({ onConciliada }: { onConciliada: (
       URL.revokeObjectURL(url);
       loadLotes();
     } catch { toast.error('No se pudo descargar el Excel'); }
+    finally { setBusy(null); }
+  };
+
+  // Para cuando el corte cae en fin de semana y la planilla se cierra antes de que salga el correo automático
+  const enviarCorreo = async () => {
+    if (!window.confirm('¿Enviar ya a RRHH el correo de descuentos del próximo corte, con el Excel de conciliación?')) return;
+    setBusy('correo');
+    try {
+      const res = await apiFetch('/api/dotacion/lotes/enviar-correo', { method: 'POST' });
+      if (!res.ok) { toast.error(await errorOf(res, 'No se pudo enviar el correo')); return; }
+      const { corte } = await res.json();
+      toast.success(`Correo de la quincena del ${fecha(corte)} enviado`);
+      loadLotes();
+    } catch { toast.error('No se pudo enviar el correo'); }
     finally { setBusy(null); }
   };
 
@@ -163,6 +177,14 @@ export default function ConciliacionQuincena({ onConciliada }: { onConciliada: (
               {busy === 'excel' ? 'Generando…' : `Excel del ${fecha(corteActual)}`}
             </button>
           )}
+          <button
+            onClick={enviarCorreo}
+            disabled={busy !== null}
+            className="inline-flex items-center gap-1.5 text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            {busy === 'correo' ? 'Enviando…' : 'Enviar correo del próximo corte'}
+          </button>
           <label className={`inline-flex items-center gap-1.5 text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-medium ${busy ? 'opacity-50 pointer-events-none' : 'cursor-pointer hover:bg-emerald-700'}`}>
             <Upload className="h-3.5 w-3.5" />
             {busy === 'preview' ? 'Revisando…' : 'Subir Excel'}

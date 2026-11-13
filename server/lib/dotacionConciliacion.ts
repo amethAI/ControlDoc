@@ -136,3 +136,26 @@ export function ultimoCorte(now: Date): string {
   const [py, pm] = m === 1 ? [y - 1, 12] : [y, m - 1];
   return iso(py, pm, segundoCorte(pm));
 }
+
+/** Fecha (YYYY-MM-DD) del próximo corte de quincena, hoy incluido. */
+export function proximoCorte(now: Date): string {
+  const { y, m, d } = panamaDate(now);
+  if (d <= 15) return iso(y, m, 15);
+  if (d <= segundoCorte(m)) return iso(y, m, segundoCorte(m));
+  const [ny, nm] = m === 12 ? [y + 1, 1] : [y, m + 1];
+  return iso(ny, nm, 15);
+}
+
+/** Día en que sale el correo de un corte: ese mismo día, o el viernes anterior si cae sábado o domingo. */
+function diaDeEnvio(corte: string): string {
+  const fecha = new Date(`${corte}T12:00:00Z`);
+  const atras = ({ 6: 1, 0: 2 } as Record<number, number>)[fecha.getUTCDay()] ?? 0;
+  return new Date(fecha.getTime() - atras * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** Corte cuyo correo de descuentos corresponde mandar hoy (hora de Panamá), o null si hoy no toca. */
+export function corteAEnviarHoy(now: Date): string | null {
+  const { y, m, d } = panamaDate(now);
+  const corte = proximoCorte(now);
+  return diaDeEnvio(corte) === iso(y, m, d) ? corte : null;
+}
